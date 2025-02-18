@@ -105,13 +105,13 @@
     "url": "https://github.com/strongloop/loopback"
   },
   "browser": {
-    "express": "./lib/browser-express.js",
     "./lib/server-app.js": "./lib/browser-express.js",
+    "bcrypt": false,
     "connect": false,
-    "nodemailer": false,
-    "supertest": false,
     "depd": "loopback-datasource-juggler/lib/browser.depd.js",
-    "bcrypt": false
+    "express": "./lib/browser-express.js",
+    "nodemailer": false,
+    "supertest": false
   },
   "config": {
     "ci": {
@@ -127,5 +127,6 @@
       "gateway-director-bluemix",
       "plan-manager"
     ]
-  }
+  },
+  "packageManager": "yarn@4.6.0"
 }
