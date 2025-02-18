@@ -6498,7 +6498,6 @@ __metadata:
     chai: "npm:4.5.0"
     cookie-parser: "npm:^1.4.7"
     coveralls: "npm:^3.0.2"
-    debug: "npm:^4.4.0"
     depd: "npm:^1.0.0"
     dirty-chai: "npm:^2.0.1"
     ejs: "npm:^2.3.1"
