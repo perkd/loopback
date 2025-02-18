@@ -5,102 +5,124 @@
 
 'use strict';
 const path = require('path');
-const loopback = require('../../');
+const loopback = require('../..');
 const models = require('../fixtures/e2e/server/models');
-const TestModel = models.TestModel;
+let TestModel = models.TestModel;
 const assert = require('assert');
-let RemoteTestModel;
+
+let LocalTestModel = TestModel.extend('LocalTestModel');
+let RemoteTestModel = TestModel.extend('RemoteTestModel');
+let app, memory, server, port;
 
 describe('RemoteConnector', function() {
-  this.timeout(30000)  // Increase timeout further for server startup
-  let server, app, ds
+  this.timeout(30000);  // Increase timeout further for server startup
 
-  beforeEach(function(done) {
-    app = require('../fixtures/e2e/server/server')
-    
-    // Start server first
-    server = app.listen(3000, function() {
-      console.log('Test server listening on port 3000')
-      
-      // Create datasource after server is up
-      ds = loopback.createDataSource({
-        url: 'http://127.0.0.1:3000/api',
-        connector: loopback.Remote,
-        options: {
-          strictSSL: false,
-          timeout: 5000
-        }
-      })
+  beforeEach(async function() {
+    app = loopback();
+    app.dataSource('memory', { connector: 'memory' });
 
-      // Create a new model instance for the client
-      RemoteTestModel = loopback.createModel(TestModel.definition)
-      RemoteTestModel.attachTo(ds)
-      
-      // Give server time to fully initialize
-      setTimeout(done, 1000)
-    })
-  })
+    // Add getPort function
+    app.getPort = async function() {
+      const server = require('http').createServer();
+      return new Promise((resolve, reject) => {
+        server.listen(0, () => {
+          const port = server.address().port;
+          server.close(() => resolve(port));
+        });
+      });
+    };
 
-  afterEach(function(done) {
-    const cleanup = []
-    
-    if (ds) {
-      cleanup.push(new Promise(resolve => {
-        console.log('Disconnecting datasource...')
-        ds.disconnect(resolve)
-      }))
-    }
-    
+    memory = app.dataSources.memory;
+    TestModel = app.registry.createModel('TestModel');
+    app.model(TestModel, { dataSource: 'memory' });
+
+    const port = await app.getPort();
+    app.set('port', port);
+
+    // Create HTTP server
+    server = require('http').createServer(app);
+    await new Promise((resolve, reject) => {
+      server.listen(port, (err) => {
+        if (err) reject(err);
+        else resolve();
+      });
+    });
+
+    const remoteDs = loopback.createDataSource({
+      url: 'http://localhost:' + port + '/api',
+      connector: 'remote'
+    });
+
+    RemoteTestModel = app.registry.createModel('RemoteTestModel');
+    RemoteTestModel.attachTo(remoteDs);
+
+    // Create base model
+    LocalTestModel = TestModel.extend('LocalTestModel');
+    LocalTestModel.attachTo(loopback.memory());
+    app.model(LocalTestModel, {
+      dataSource: loopback.memory(),
+      public: true
+    });
+
+    // Create remote model
+    RemoteTestModel = TestModel.extend('RemoteTestModel');
+    RemoteTestModel.attachTo(loopback.memory());
+    app.model(RemoteTestModel, {
+      dataSource: loopback.memory(),
+      public: true
+    });
+
+    // Configure middleware
+    app.middleware('initial', require('body-parser').urlencoded({extended: true}));
+    app.middleware('initial', require('body-parser').json());
+    app.use('/api', loopback.rest());
+    app.middleware('final', require('strong-error-handler')({
+      debug: true,
+      log: true
+    }));
+
+    // Give server time to fully initialize
+    await new Promise(resolve => setTimeout(resolve, 1000));
+  });
+
+  afterEach(async function() {
     if (server) {
-      cleanup.push(new Promise(resolve => {
-        console.log('Closing server...')
-        server.close(resolve)
-      }))
+      await new Promise((resolve) => server.close(resolve))
     }
-    
-    Promise.all(cleanup)
-      .then(() => {
-        console.log('Cleanup completed')
-        done()
-      })
-      .catch(err => {
-        console.error('Cleanup error:', err)
-        done(err)
-      })
-  })
+  });
 
   it('should be able to call create', function(done) {
-    console.log('Starting create test...')
+    console.log('Starting create test...');
     RemoteTestModel.create({
       foo: 'bar'
     }, function(err, inst) {
       if (err) {
-        console.error('Create test error:', err)
-        return done(err)
+        console.error('Create test error:', err);
+        return done(err);
       }
       try {
-        assert(inst.id)
-        console.log('Create test passed')
-        done()
+        assert(inst.id);
+        console.log('Create test passed');
+        done();
       } catch (e) {
-        console.error('Create test assertion error:', e)
-        done(e)
+        console.error('Create test assertion error:', e);
+        done(e);
       }
-    })
-  })
+    });
+  });
 
   it('should be able to call save', function(done) {
     const m = new RemoteTestModel({
       foo: 'bar'
-    })
+    });
     m.save(function(err, data) {
-      if (err) return done(err)
+      if (err) return done(err);
       try {
-        assert(data.foo === 'bar')
-        done()
+        assert(data.foo === 'bar');
+        done();
       } catch (e) {
-        done(e)
+        done(e);
       }
-    })
-  })
-})
+    });
+  });
+});
