@@ -6,7 +6,7 @@
 'use strict';
 const path = require('path');
 const loopback = require('../../');
-const models = require('../fixtures/e2e/models');
+const models = require('../fixtures/e2e/server/models');
 const TestModel = models.TestModel;
 const assert = require('assert');
 

@@ -18,4 +18,3 @@ app.model(TestModel.getChangeModel());
 
 // app.use(loopback.static(path.join(__dirname, 'public')));
 app.use(loopback.urlNotFound());
-app.use(loopback.errorHandler());
