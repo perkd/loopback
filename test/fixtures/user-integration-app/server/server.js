@@ -11,11 +11,18 @@ const app = module.exports = loopback({
   loadBuiltinModels: true,
 });
 const errorHandler = require('strong-error-handler');
+const bodyParser = require('body-parser');
 
 app.enableAuth();
 boot(app, __dirname);
+app.use(bodyParser.json());
 app.use(loopback.token({model: app.models.AccessToken}));
 const apiPath = '/api';
 app.use(apiPath, loopback.rest());
 app.use(loopback.urlNotFound());
-app.use(errorHandler());
+app.use(errorHandler({
+  debug: true,
+  log: true
+}));
+
+module.exports = app;

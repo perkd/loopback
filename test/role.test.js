@@ -999,15 +999,15 @@ describe('role model', function() {
   });
 
   describe('listByPrincipalType', function() {
-    let sandbox;
+    let sandbox
 
     beforeEach(function() {
-      sandbox = sinon.sandbox.create();
-    });
+      sandbox = sinon.createSandbox()
+    })
 
     afterEach(function() {
-      sandbox.restore();
-    });
+      sandbox.restore()
+    })
 
     it('should fetch all models assigned to the role', function(done) {
       const principalTypesToModels = {};

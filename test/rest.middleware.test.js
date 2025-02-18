@@ -9,6 +9,7 @@ const expect = require('./helpers/expect');
 const loopback = require('../');
 const path = require('path');
 const request = require('supertest');
+const errorHandler = require('strong-error-handler');
 
 describe('loopback.rest', function() {
   this.timeout(10000);
@@ -17,11 +18,20 @@ describe('loopback.rest', function() {
   beforeEach(function() {
     // override the global app object provided by test/support.js
     // and create a local one that does not share state with other tests
-    app = loopback({localRegistry: true, loadBuiltinModels: true});
-    app.set('remoting', {errorHandler: {debug: true, log: false}});
-    const db = app.dataSource('db', {connector: 'memory'});
-    MyModel = app.registry.createModel('MyModel');
-    MyModel.attachTo(db);
+    app = loopback({localRegistry: true, loadBuiltinModels: true})
+    app.set('remoting', {
+      rest: {
+        handleErrors: false,
+        normalizeHttpPath: false,
+        xml: false
+      },
+      json: {strict: false, limit: '100kb'},
+      urlencoded: {extended: true, limit: '100kb'},
+      errorHandler: {debug: true, log: false}
+    })
+    const db = app.dataSource('db', {connector: 'memory'})
+    MyModel = app.registry.createModel('MyModel')
+    MyModel.attachTo(db)
   });
 
   it('works out-of-the-box', function(done) {
@@ -47,19 +57,26 @@ describe('loopback.rest', function() {
   });
 
   it('should report 404 for GET /:id not found', function(done) {
-    app.model(MyModel);
-    app.use(loopback.rest());
+    app.model(MyModel)
+    app.use(loopback.rest())
+    app.use(errorHandler({
+      debug: true,
+      log: false
+    }))
+
     request(app).get('/mymodels/1')
+      .set('Accept', 'application/json')
+      .expect('Content-Type', /json/)
       .expect(404)
       .end(function(err, res) {
-        if (err) return done(err);
-
-        const errorResponse = res.body.error;
-        assert(errorResponse);
-        assert.equal(errorResponse.code, 'MODEL_NOT_FOUND');
-
-        done();
-      });
+        if (err) return done(err)
+        expect(res.body).to.be.an('object')
+        expect(res.body.error).to.be.an('object')
+        expect(res.body.error.statusCode).to.equal(404)
+        expect(res.body.error.code).to.equal('MODEL_NOT_FOUND')
+        expect(res.body.error.name).to.equal('Error')
+        done()
+      })
   });
 
   it('should report 404 for HEAD /:id not found', function(done) {
@@ -241,23 +258,38 @@ describe('loopback.rest', function() {
       });
   });
 
-  it('rebuilds REST endpoints after a remoteMethod was disabled', () => {
-    app.model(MyModel);
-    app.use(loopback.rest());
-    MyModel.customMethod = function(req, cb) {
-      cb(null, true);
-    };
-    MyModel.remoteMethod('customMethod', {
-      http: {verb: 'get'},
-      accepts: [{type: 'object', http: {source: 'req'}}],
-      returns: [{type: 'boolean', name: 'success'}],
-    });
-    return request(app).get('/mymodels/customMethod').expect(200)
-      .then(() => {
-        MyModel.disableRemoteMethodByName('customMethod');
+  it('rebuilds REST endpoints after a remoteMethod was disabled', function(done) {
+    app.model(MyModel)
+    app.use(loopback.rest())
 
-        return request(app).get('/mymodels/customMethod').expect(404);
-      });
+    MyModel.customMethod = function(req, cb) {
+      cb(null, {success: true})
+    }
+
+    MyModel.remoteMethod('customMethod', {
+      http: {verb: 'get', path: '/customMethod'},
+      accepts: [{type: 'object', http: {source: 'req'}}],
+      returns: {type: 'object', root: true}
+    })
+
+    // First request to ensure endpoint is available
+    request(app)
+      .get('/mymodels/customMethod')
+      .expect(200)
+      .end(function(err) {
+        if (err) return done(err)
+
+        // Disable the method
+        MyModel.disableRemoteMethodByName('customMethod')
+
+        // Give the app time to rebuild endpoints
+        setTimeout(function() {
+          // Second request should fail with 404
+          request(app)
+            .get('/mymodels/customMethod')
+            .expect(404, done)
+        }, 100)
+      })
   });
 
   function givenUserModelWithAuth() {

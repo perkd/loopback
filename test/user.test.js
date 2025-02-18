@@ -933,9 +933,9 @@ describe('User', function() {
 
     it('allows login with password too long but created in old LB version',
       function(done) {
-        const bcrypt = require('bcryptjs');
-        const longPassword = new Array(80).join('a');
-        const oldHash = bcrypt.hashSync(longPassword, bcrypt.genSaltSync(1));
+        const bcrypt = require('bcryptjs')
+        const longPassword = new Array(80).join('a')
+        const oldHash = bcrypt.hashSync(longPassword, bcrypt.genSaltSync(4))  // minimum valid rounds is 4
 
         User.create({email: 'b@c.com', password: oldHash}, function(err) {
           if (err) return done(err);
@@ -1397,17 +1397,23 @@ describe('User', function() {
     });
 
     it('should match a password when saved', function(done) {
-      const u = new User({username: 'a', password: 'b', email: 'z@z.net'});
+      const u = new User({username: 'a', password: 'b', email: 'z@z.net'})
 
       u.save(function(err, user) {
+        if (err) return done(err)
         User.findById(user.pk, function(err, uu) {
+          if (err) return done(err)
           uu.hasPassword('b', function(err, isMatch) {
-            assert(isMatch);
-
-            done();
-          });
-        });
-      });
+            if (err) return done(err)
+            try {
+              assert(isMatch)
+              done()
+            } catch (e) {
+              done(e)
+            }
+          })
+        })
+      })
     });
 
     it('should match a password after it is changed', function(done) {
