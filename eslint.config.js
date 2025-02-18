@@ -1,12 +1,12 @@
 // JavaScript
 
-const js = require('@eslint/js'),
-    babelParser = require('@babel/eslint-parser'),
-    nodePlugin = require('eslint-plugin-n'),
-    stylisticJs = require('@stylistic/eslint-plugin-js'),
-    eslintPluginJsonc = require('eslint-plugin-jsonc'),
-    jsonParser = require('jsonc-eslint-parser'),
-    security = require('eslint-plugin-security')
+const js = require('@eslint/js');
+const babelParser = require('@babel/eslint-parser');
+const nodePlugin = require('eslint-plugin-n');
+const stylisticJs = require('@stylistic/eslint-plugin-js');
+const eslintPluginJsonc = require('eslint-plugin-jsonc');
+const jsonParser = require('jsonc-eslint-parser');
+const security = require('eslint-plugin-security');
 
 module.exports = [
     js.configs.recommended,
@@ -29,12 +29,12 @@ module.exports = [
             security,
         },
         rules: {
-            indent: ['error', 'tab'],
+            indent: ['error', 2],
             'max-len': [
                 'error',
                 {
-                    code: 160,
-                    tabWidth: 4,
+                    code: 80,
+                    tabWidth: 2,
                     ignoreTrailingComments: true,
                     ignoreStrings: true,
                     ignoreComments: true,
@@ -63,7 +63,7 @@ module.exports = [
             'no-mixed-spaces-and-tabs': 'error',
             'no-shadow': 'warn',
             'no-invalid-this': 'warn',
-            'no-tabs': 'off',
+            'no-tabs': 'error',
             'no-unused-vars': 'off',
             'one-var': 'off',
             'require-jsdoc': 'off',
@@ -81,14 +81,14 @@ module.exports = [
             'key-spacing': ['error', { beforeColon: false, afterColon: true }],
             'no-multiple-empty-lines': ['error', { max: 1, maxEOF: 1, maxBOF: 0 }],
             'no-trailing-spaces': ['error'],
-            'jsonc/indent': ['error', 'tab'],
+            'jsonc/indent': ['error', 2],
             '@stylistic/js/quotes': ['error', 'single', { avoidEscape: true }],
             'no-restricted-globals': ['error', {
                 name: 'Event',
                 message: 'Event must be explicitly defined',
             },
             ],
-        }
+        },
     },
     {
         ignores: ['node_modules/**', 'dist/**', 'coverage/**'],
@@ -101,7 +101,7 @@ module.exports = [
         },
         rules: {
             semi: ['error', 'never'],
-            'jsonc/indent': ['error', 2]
-        }
-    }
-]
+            'jsonc/indent': ['error', 2],
+        },
+    },
+];

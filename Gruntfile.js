@@ -219,7 +219,7 @@ module.exports = function(grunt) {
 
   grunt.registerTask('e2e-server', function() {
     const done = this.async();
-    const app = require('./test/fixtures/e2e/app');
+    const app = require('./test/fixtures/e2e/server/server.js');
     app.listen(0, function() {
       process.env.PORT = this.address().port;
       done();
