@@ -28,35 +28,36 @@
     "mobile",
     "mBaaS"
   ],
+  "engines": {
+    "node": ">=18"
+  },
   "scripts": {
     "lint": "grunt eslint",
     "coverage": "nyc report --reporter=text-lcov | coveralls",
     "test": "nyc grunt mocha-and-karma"
   },
-  "engines": {
-    "node": ">=8"
-  },
   "dependencies": {
-    "async": "^2.0.1",
+    "@perkd/strong-remoting": "github:perkd/strong-remoting#semver:^3.20.0",
+    "async": "^3.2.6",
     "bcryptjs": "^2.1.0",
-    "bluebird": "^3.1.1",
-    "body-parser": "^1.12.0",
+    "bluebird": "^3.7.2",
+    "body-parser": "^1.20.3",
     "canonical-json": "0.0.4",
-    "debug": "^2.1.2",
+    "debug": "^4.4.0",
     "depd": "^1.0.0",
     "ejs": "^2.3.1",
-    "express": "^4.14.0",
-    "inflection": "^1.6.0",
+    "express": "^4.21.2",
+    "inflection": "2.0.1",
     "isemail": "^3.2.0",
-    "loopback-connector-remote": "^3.0.0",
+    "loopback-connector-remote": "^3.4.1",
     "loopback-datasource-juggler": "^3.28.0",
     "loopback-filters": "^1.0.0",
-    "loopback-phase": "^3.0.0",
-    "nodemailer": "^6.4.16",
+    "loopback-phase": "^3.4.0",
+    "nodemailer": "^6.10.0",
     "nodemailer-direct-transport": "^3.3.2",
     "nodemailer-stub-transport": "^1.1.0",
-    "serve-favicon": "^2.2.0",
-    "stable": "^0.1.5",
+    "serve-favicon": "^2.5.0",
+    "stable": "^0.1.8",
     "strong-globalize": "^4.1.1",
     "strong-remoting": "^3.11.0",
     "uid2": "0.0.3",
@@ -64,16 +65,16 @@
   },
   "devDependencies": {
     "browserify": "^16.5.0",
-    "chai": "^4.2.0",
-    "cookie-parser": "^1.3.4",
+    "chai": "4.5.0",
+    "cookie-parser": "^1.4.7",
     "coveralls": "^3.0.2",
     "dirty-chai": "^2.0.1",
-    "eslint": "^6.5.1",
+    "eslint": "^9.20.1",
     "eslint-config-loopback": "^13.1.0",
-    "express-session": "^1.14.0",
-    "grunt": "^1.0.1",
+    "express-session": "^1.18.1",
+    "grunt": "^1.6.1",
     "grunt-browserify": "^5.0.0",
-    "grunt-cli": "^1.2.0",
+    "grunt-cli": "^1.5.0",
     "grunt-contrib-uglify": "^4.0.1",
     "grunt-contrib-watch": "^1.0.0",
     "grunt-eslint": "^22.0.0",
@@ -89,10 +90,10 @@
     "karma-junit-reporter": "^1.2.0",
     "karma-mocha": "^1.1.1",
     "karma-script-launcher": "^1.0.0",
-    "loopback-boot": "^2.7.0",
-    "loopback-context": "^1.0.0",
+    "loopback-boot": "^3.3.1",
+    "loopback-context": "^3.5.2",
     "mocha": "^6.2.1",
-    "nyc": "^14.1.1",
+    "nyc": "^17.1.0",
     "sinon": "^7.5.0",
     "sinon-chai": "^3.2.0",
     "strong-error-handler": "^3.0.0",
@@ -105,13 +106,13 @@
     "url": "https://github.com/strongloop/loopback"
   },
   "browser": {
-    "express": "./lib/browser-express.js",
     "./lib/server-app.js": "./lib/browser-express.js",
+    "bcrypt": false,
     "connect": false,
-    "nodemailer": false,
-    "supertest": false,
     "depd": "loopback-datasource-juggler/lib/browser.depd.js",
-    "bcrypt": false
+    "express": "./lib/browser-express.js",
+    "nodemailer": false,
+    "supertest": false
   },
   "config": {
     "ci": {
@@ -127,5 +128,6 @@
       "gateway-director-bluemix",
       "plan-manager"
     ]
-  }
+  },
+  "packageManager": "yarn@4.6.0"
 }
