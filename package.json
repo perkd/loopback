@@ -51,7 +51,7 @@
     "loopback-connector-remote": "^3.4.1",
     "loopback-datasource-juggler": "^3.28.0",
     "loopback-filters": "^1.1.1",
-    "loopback-phase": "3.0.0",
+    "loopback-phase": "3.4.0",
     "nodemailer": "^6.10.0",
     "nodemailer-direct-transport": "^3.3.2",
     "nodemailer-stub-transport": "^1.1.0",
@@ -101,7 +101,7 @@
     "nyc": "^17.1.0",
     "sinon": "^19.0.2",
     "sinon-chai": "3.7.0",
-    "strong-error-handler": "^3.0.0",
+    "strong-error-handler": "4.0.8",
     "strong-task-emitter": "^0.0.8",
     "supertest": "^7.0.0",
     "which": "^5.0.0"
