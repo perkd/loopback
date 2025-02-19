@@ -753,16 +753,13 @@ describe('role model', function() {
       });
 
     // helpers
-    function givenUsers(count) {
-      return Promise.all(Array.from({length: count}, (_, i) => {
-        return User.create({
-          email: `user${i}@example.com`,
-          password: 'password'
-        });
-      })).then(users => {
-        sender = users[0];
-        receiver = users[1];
-      });
+    function givenUsers(count = 2) {
+      return Promise.all(users.slice(0, count).map(userData => {
+        return User.create(userData)
+      })).then(createdUsers => {
+        sender = createdUsers[0]
+        receiver = createdUsers[1]
+      })
     }
 
     function isOwnerForMessage(user, msg) {

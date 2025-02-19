@@ -215,28 +215,30 @@ describe('Multiple users with custom principalType', function() {
         function() {
           return new Promise((resolve, reject) => {
             const ctx = new AccessContext({
+              registry: OneUser.registry,
               principalType: 'USER',
               principalId: userFromOneModel.id,
-            });
+            })
             ctx.getUser((err, user) => {
-              if (err) return reject(err);
-              resolve(user);
-            });
-          });
+              if (err) return reject(err)
+              resolve(user)
+            })
+          })
         });
 
       it('returns user although principals contain invalid principals',
         function() {
           return new Promise((resolve, reject) => {
             const ctx = new AccessContext({
+              registry: OneUser.registry,
               principalType: 'invalidType',
               principalId: userFromOneModel.id,
-            });
+            })
             ctx.getUser((err, user) => {
-              if (err) return reject(err);
-              resolve(user);
-            });
-          });
+              if (err) return reject(err)
+              resolve(user)
+            })
+          })
         });
 
       it('supports any level of built-in User model inheritance',
