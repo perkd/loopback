@@ -96,9 +96,9 @@ describe('User', function() {
     return Promise.map(
       [validCredentials, validCredentialsEmailVerified],
       credentials => User.create(credentials),
-    ).then(users => {
-      validCredentialsUser = user = users[0];
-      validCredentialsEmailVerifiedUser = users[1];
+    ).then(([user1, user2]) => {
+      validCredentialsUser = user = user1;
+      validCredentialsEmailVerifiedUser = user2;
     });
   });
 
@@ -3197,6 +3197,6 @@ describe('User', function() {
       User.resetPassword({email: email}),
       waitForEvent(User, 'resetPasswordRequest'),
     ])
-      .spread((reset, info) => info);
+      .then(([reset, info]) => info);
   }
 });

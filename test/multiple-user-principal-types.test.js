@@ -66,7 +66,7 @@ describe('Multiple users with custom principalType', function() {
       AnotherUser.create(commonCredentials),
       Role.create({name: 'userRole'}),
     ])
-      .spread(function(u1, u2, r) {
+      .then(function([u1, u2, r]) {
         userFromOneModel = u1;
         userFromAnotherModel = u2;
         userRole = r;
@@ -122,7 +122,7 @@ describe('Multiple users with custom principalType', function() {
           OneUser.login(commonCredentials),
           AnotherUser.login(commonCredentials),
         ])
-          .spread(function(t1, t2) {
+          .then(function([t1, t2]) {
             tokenOfOneUser = t1;
             return OneUser.logout(tokenOfOneUser.id);
           })
@@ -667,7 +667,7 @@ describe('Multiple users with custom principalType', function() {
         OneUser.resetPassword({email: commonCredentials.email}),
         waitForEvent(OneUser, 'resetPasswordRequest'),
       ])
-        .spread((reset, info) => resetToken = info.accessToken);
+        .then(([reset, info]) => resetToken = info.accessToken);
     }
   });
 

@@ -643,13 +643,13 @@ describe('authorized roles propagation in RemotingContext', function() {
       models.User.create({username: 'myUser', email: 'myuser@example.com', password: 'pass'}),
       models.Role.create({name: 'myRole'}),
     ])
-      .spread(function(myUser, myRole) {
+      .then(function([myUser, myRole]) {
         return Promise.all([
           myRole.principals.create({principalType: 'USER', principalId: myUser.id}),
           models.User.login({username: 'myUser', password: 'pass'}),
         ]);
       })
-      .spread(function(role, token) {
+      .then(function([role, token]) {
         accessToken = token;
       });
   }

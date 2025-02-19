@@ -30,7 +30,7 @@ describe('role-mapping model', function() {
       models.Application.create({name: 'anApp'}),
       models.Role.create({name: 'aRole'}),
     ])
-      .spread(function(u, a, r) {
+      .then(([u, a, r]) => {
         oneUser = u;
         anApp = a;
         aRole = r;

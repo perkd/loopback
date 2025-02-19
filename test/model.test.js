@@ -1057,9 +1057,7 @@ describe.onServer('Remote Methods', function() {
       const CREDENTIALS = {email: 'context@example.com', password: 'pass'};
       const User = app.registry.getModel('User');
       return User.create(CREDENTIALS)
-        .then(function(u) {
-          return User.login(CREDENTIALS);
-        }).then(function(token) {
+        .then(function([user, token]) {
           accessToken = token;
         });
     }
