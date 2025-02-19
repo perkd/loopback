@@ -8,7 +8,79 @@ This file tracks our enhancement plans for the project
 
 ### 2. Bluebird to Native Promise Migration
 
-**Phase 3 - Error Handling & Breaking Changes**  
+**Migration Guide Update**:
+```markdown
+### Promise Handling Changes
+1. All async methods now return native promises
+2. Error messages use native rejection format
+3. Callback/promise dual API maintained
+4. Test patterns updated for unhandled rejections
+```
+
+**Final Checks**:
+1. Verified all relation hooks in `lib/persisted-model.js`  
+2. Memory connector tests passing in `test/relations.integration.js`  
+3. REST adapter responses validated in `test/replication.rest.test.js`  
+
+**Key Findings**:  
+- 200+ instances of Bluebird-dependent `createPromiseCallback` utility  
+- Critical Bluebird features in use:  
+  - `Promise.spread()` (test/role-mapping.test.js:25-38)  
+  - Custom promise constructor override (lib/utils.js:13-26)  
+  - Promise cancellation patterns
+
+**Migration Requirements**:  
+- Update promise callback factory pattern  
+- Convert test assertions from Bluebird-specific error handling  
+- Verify async hook execution order in model operations
+
+## Workplan
+
+**Current Status**
+🟢 Phase 1 - Preparation (Completed)
+🟢 Phase 2 - Core Changes (Completed)
+🟢 Phase 3 - All model methods using native promises (Completed)
+🟡 Phase 4 - Error Handling & Breaking Changes (In Progress)
+
+**Risks**:  
+- Bluebird's cancellation semantics (3 potential conflict points)  
+- Error stack trace differences (affects 12 test files)  
+- Memory connector timing in replication tests  
+
+✅ **Phase 1 - Preparation (Completed)**
+- Removed Bluebird dependency from 10 test files:
+  - user.integration.js, role.test.js, multiple-user-principal-types.test.js  
+  - user.test.js, role-mapping.test.js, acl.test.js, model.test.js  
+  - user-password.test.js, multiple-user-principal-accessing-another-user-model.js  
+- Removed Bluebird from core utilities (lib/utils.js)  
+- Updated promise helper (test/helpers/wait-for-event.js)  
+- Uninstalled package: `npm uninstall bluebird`  
+
+
+**Phase 2 - Core Changes (Completed)**
+✅ **17 instances** across **15 test files** converted:  
+  - user-password.test.js (2)  
+  - user.integration.js (1)  
+  - multiple-user-principal-types.test.js (3)  
+  - change.test.js (2)  
+  - relations.integration.js (3)  
+  - replication.test.js (4)  
+  - rest-adapter.test.js (1)  
+  - role-mapping.test.js (1)  
+  - user.test.js (1) 
+✅ **Custom Promise Overrides**  
+- Updated `createPromiseCallback` in `lib/utils.js`  
+- Replaced Bluebird's `Promise.pending()` with native constructor  
+- Maintained callback/promise dual API support  
+
+**Verification**
+- Full codebase scan completed  
+- No remaining `.spread()` references  
+- 200+ instances of `createPromiseCallback` now use native promises  
+- All model CRUD operations validated
+
+
+**Phase 3 - All model methods using native promises (Completed)**
 ✅ **Completed**:  
 - Core promise pattern migration completed (lib/utils.js)  
 - All 23 model methods updated to native promises  
@@ -46,84 +118,7 @@ grep -r '\.promise' common/models/ # Only test/quick-verification.js
 | Promise.map          | 31     | 0      |
 ```
 
-**Migration Guide Update**:
-```markdown
-### Promise Handling Changes
-1. All async methods now return native promises
-2. Error messages use native rejection format
-3. Callback/promise dual API maintained
-4. Test patterns updated for unhandled rejections
-```
-
-**Final Checks**:
-1. Verified all relation hooks in `lib/persisted-model.js`  
-2. Memory connector tests passing in `test/relations.integration.js`  
-3. REST adapter responses validated in `test/replication.rest.test.js`  
-
-**Next Steps**:
-1. Remove Bluebird from package.json  
-2. Update CI configuration for Node 12+  
-3. Publish migration post-mortem
-
-**Key Findings**:  
-- 200+ instances of Bluebird-dependent `createPromiseCallback` utility  
-- Critical Bluebird features in use:  
-  - `Promise.spread()` (test/role-mapping.test.js:25-38)  
-  - Custom promise constructor override (lib/utils.js:13-26)  
-  - Promise cancellation patterns
-
-**Migration Requirements**:  
-- Update promise callback factory pattern  
-- Convert test assertions from Bluebird-specific error handling  
-- Verify async hook execution order in model operations
-
-**Workplan**:  
-✅ **Phase 1 - Preparation (Completed)**
-- Removed Bluebird dependency from 10 test files:
-  - user.integration.js, role.test.js, multiple-user-principal-types.test.js  
-  - user.test.js, role-mapping.test.js, acl.test.js, model.test.js  
-  - user-password.test.js, multiple-user-principal-accessing-another-user-model.js  
-- Removed Bluebird from core utilities (lib/utils.js)  
-- Updated promise helper (test/helpers/wait-for-event.js)  
-- Uninstalled package: `npm uninstall bluebird`  
-
-**Phase 2 - Core Changes (Completed)**
-✅ **17 instances** across **15 test files** converted:  
-  - user-password.test.js (2)  
-  - user.integration.js (1)  
-  - multiple-user-principal-types.test.js (3)  
-  - change.test.js (2)  
-  - relations.integration.js (3)  
-  - replication.test.js (4)  
-  - rest-adapter.test.js (1)  
-  - role-mapping.test.js (1)  
-  - user.test.js (1) 
-✅ **Custom Promise Overrides**  
-- Updated `createPromiseCallback` in `lib/utils.js`  
-- Replaced Bluebird's `Promise.pending()` with native constructor  
-- Maintained callback/promise dual API support  
-
-**Verification**
-- Full codebase scan completed  
-- No remaining `.spread()` references  
-- 200+ instances of `createPromiseCallback` now use native promises  
-- All model CRUD operations validated  
-
-**Current Status**
-🟢 Phase 1 - Preparation (Completed)
-🟢 Phase 2 - Core Changes (Completed)
-🟡 Phase 3 - Error Handling & Breaking Changes (In Progress)
-
-**Risks**:  
-- Bluebird's cancellation semantics (3 potential conflict points)  
-- Error stack trace differences (affects 12 test files)  
-- Memory connector timing in replication tests  
-
-## Phase 3 - Error Handling & Breaking Changes (In Progress)
-
-### Model-Specific Updates
-
-**Updated Models**:
+✅ **Updated Models**:
 - `User` (common/models/user.js)
   - Methods: verify(), resetPassword(), confirm(), changePassword()
   - Changes: 
@@ -161,7 +156,7 @@ grep -r '\.promise' common/models/ # Only test/quick-verification.js
     - Implemented consistent principal resolution
     - Removed 9 callback.promise references
 
-**Summary of Changes**:
+✅ **Summary of Changes**:
 1. **Promise Initialization**:
    ```javascript
    // Before
@@ -195,6 +190,10 @@ User.prototype.verify = function(options, cb) {
   // ... same logic ...
 }
 ```
+
+## Phase 4 - Error Handling & Breaking Changes (In Progress)
+
+
 
 ### Strategic Approach
 1. **Cancellation Pattern Migration**  
