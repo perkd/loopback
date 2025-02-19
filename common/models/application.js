@@ -106,19 +106,19 @@ module.exports = function(Application) {
    * @promise
    */
   Application.register = function(owner, name, options, callback) {
+    // Compute props immediately so it is available in both promise and callback branches
+    const props = { owner: owner, name: name }
+    for (const p in options) {
+      if (!(p in props)) {
+        props[p] = options[p]
+      }
+    }
     if (!callback) {
       return new Promise((resolve, reject) => {
         this.create(props, (err, result) => err ? reject(err) : resolve(result))
       })
     }
-
-    const props = {owner: owner, name: name};
-    for (const p in options) {
-      if (!(p in props)) {
-        props[p] = options[p];
-      }
-    }
-    this.create(props, callback);
+    this.create(props, callback)
   };
 
   /**

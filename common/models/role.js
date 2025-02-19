@@ -35,31 +35,8 @@ module.exports = function(Role) {
   Role.once('dataSourceAttached', function(roleModel) {
     ['users', 'applications', 'roles'].forEach(function(rel) {
       /**
-       * Fetch all users assigned to this role
-       * @function Role.prototype#users
-       * @param {object} [query] query object passed to model find call
-       * @callback {Function} [callback] The callback function
-       * @param {String|Error} err The error string or object
-       * @param {Array} list The list of users.
-       * @promise
-       */
-      /**
-       * Fetch all applications assigned to this role
-       * @function Role.prototype#applications
-       * @param {object} [query] query object passed to model find call
-       * @callback {Function} [callback] The callback function
-       * @param {String|Error} err The error string or object
-       * @param {Array} list The list of applications.
-       * @promise
-       */
-      /**
-       * Fetch all roles assigned to this role
-       * @function Role.prototype#roles
-       * @param {object} [query] query object passed to model find call
-       * @callback {Function} [callback] The callback function
-       * @param {String|Error} err The error string or object
-       * @param {Array} list The list of roles.
-       * @promise
+       * Fetch all users/applications/roles assigned to this role
+       * Dual API: returns a native Promise if no callback is provided
        */
       Role.prototype[rel] = function(query, callback) {
         if (!callback) {
@@ -68,8 +45,8 @@ module.exports = function(Role) {
             query = {};
           } else {
             return new Promise((resolve, reject) => {
-              this[rel](query, (err, result) => err ? reject(err) : resolve(result))
-            })
+              this[rel](query, (err, result) => err ? reject(err) : resolve(result));
+            });
           }
         }
         query = query || {};
@@ -92,7 +69,7 @@ module.exports = function(Role) {
         let principalModel = relsToModels[rel];
         let principalType = relsToTypes[rel];
 
-        // redefine user model and user type if user principalType is custom (available and not "USER")
+        // redefine user model and user type if custom
         const isCustomUserPrincipalType = rel === 'users' &&
           query.where.principalType &&
           query.where.principalType !== RoleMapping.USER;
@@ -102,7 +79,7 @@ module.exports = function(Role) {
           principalModel = registry.findModel(query.where.principalType);
           principalType = query.where.principalType;
         }
-        // make sure we don't keep principalType in userModel query
+        // remove principalType from query
         delete query.where.principalType;
 
         if (principalModel) {
@@ -153,7 +130,7 @@ module.exports = function(Role) {
   Role.OWNER = '$owner'; // owner of the object
   Role.RELATED = '$related'; // any User with a relationship to the object
   Role.AUTHENTICATED = '$authenticated'; // authenticated user
-  Role.UNAUTHENTICATED = '$unauthenticated'; // authenticated user
+  Role.UNAUTHENTICATED = '$unauthenticated'; // unauthenticated user
   Role.EVERYONE = '$everyone'; // everyone
 
   /**
@@ -171,19 +148,35 @@ module.exports = function(Role) {
   };
 
   Role.registerResolver(Role.OWNER, function(role, context, callback) {
-    if (!context || !context.model || !context.modelId) {
+    try {
+      if (!context || !context.model || !context.modelId) {
+        process.nextTick(function() {
+          if (callback) callback(null, false)
+        })
+        return
+      }
+      const modelClass = context.model
+      const modelId = context.modelId
+      let user = null
+      if (typeof context.getUser === 'function') {
+        user = context.getUser()
+      } else {
+        // Handle the case where context is a plain object
+        user = {
+          id: context.principalId,
+          principalType: context.principalType
+        }
+      }
+      const userId = user?.id
+      const principalType = user?.principalType
+      const opts = {accessToken: context.accessToken}
+      return Role.isOwner(modelClass, modelId, userId, principalType, opts, callback)
+    } catch (e) {
+      debug('Error in Role.registerResolver(OWNER): %s', e.message)
       process.nextTick(function() {
-        if (callback) callback(null, false);
-      });
-      return;
+        if (callback) callback(null, false)
+      })
     }
-    const modelClass = context.model;
-    const modelId = context.modelId;
-    const user = context.getUser();
-    const userId = user && user.id;
-    const principalType = user && user.principalType;
-    const opts = {accessToken: context.accessToken};
-    Role.isOwner(modelClass, modelId, userId, principalType, opts, callback);
   });
 
   function isUserClass(modelClass) {
@@ -200,12 +193,16 @@ module.exports = function(Role) {
    * @returns {boolean}
    */
   function matches(id1, id2) {
-    if (id1 === undefined || id1 === null || id1 === '' ||
-      id2 === undefined || id2 === null || id2 === '') {
-      return false;
+    try {
+      if (id1 === undefined || id1 === null || id1 === '' ||
+          id2 === undefined || id2 === null || id2 === '') {
+        return false
+      }
+      return id1 === id2 || id1.toString() === id2.toString()
+    } catch (e) {
+      debug('Error in matches: %s', e.message)
+      return false
     }
-    // The id can be a MongoDB ObjectID
-    return id1 === id2 || id1.toString() === id2.toString();
   }
 
   /**
@@ -237,26 +234,22 @@ module.exports = function(Role) {
     assert(modelClass, 'Model class is required');
     if (!callback) {
       return new Promise((resolve, reject) => {
-        this.isOwner(modelClass, modelId, userId, principalType, options, (err, result) => err ? reject(err) : resolve(result))
-      })
+        this.isOwner(modelClass, modelId, userId, principalType, options, (err, result) => {
+          if (err) return reject(err);
+          resolve(result);
+        });
+      });
     }
 
     debug('isOwner(): %s %s userId: %s principalType: %s',
       modelClass && modelClass.modelName, modelId, userId, principalType);
 
-    // Resolve isOwner false if userId is missing
     if (!userId) {
       debug('isOwner(): no user id was set, returning false');
-      process.nextTick(function() {
-        callback(null, false);
-      });
-      return callback.promise;
+      process.nextTick(() => callback(null, false));
+      return;
     }
 
-    // At this stage, principalType is valid in one of 2 following condition:
-    // 1. the app has a single user model and principalType is 'USER'
-    // 2. the app has multiple user models and principalType is not 'USER'
-    // multiple user models
     const isMultipleUsers = _isMultipleUsers();
     const isPrincipalTypeValid =
       (!isMultipleUsers && principalType === Principal.USER) ||
@@ -265,25 +258,17 @@ module.exports = function(Role) {
     debug('isOwner(): isMultipleUsers?', isMultipleUsers,
       'isPrincipalTypeValid?', isPrincipalTypeValid);
 
-    // Resolve isOwner false if principalType is invalid
     if (!isPrincipalTypeValid) {
-      process.nextTick(function() {
-        callback(null, false);
-      });
-      return callback.promise;
+      process.nextTick(() => callback(null, false));
+      return;
     }
 
-    // Is the modelClass User or a subclass of User?
     if (isUserClass(modelClass)) {
       const userModelName = modelClass.modelName;
-      // matching ids is enough if principalType is USER or matches given user model name
       if (principalType === Principal.USER || principalType === userModelName) {
-        process.nextTick(function() {
-          callback(null, matches(modelId, userId));
-        });
-        return callback.promise;
+        process.nextTick(() => callback(null, matches(modelId, userId)));
+        return;
       }
-      // otherwise continue with the regular owner resolution
     }
 
     modelClass.findById(modelId, options, function(err, inst) {
@@ -300,78 +285,68 @@ module.exports = function(Role) {
         return checkOwnership(inst);
       }
     });
-    return callback.promise;
 
-    // NOTE Historically, for principalType USER, we were resolving isOwner()
-    // as true if the model has "userId" or "owner" property matching
-    // id of the current user (principalId), even though there was no
-    // belongsTo relation set up.
-    // Additionaly, the original implementation did not support the
-    // possibility for a model to have multiple related users: when
-    // testing belongsTo relations, the first related user failing the
-    // ownership check induced the whole isOwner() to resolve as false.
-    // This behaviour will be pruned at next LoopBack major release.
     function legacyOwnershipCheck(inst) {
       const ownerId = inst.userId || inst.owner;
-      if (principalType === Principal.USER && ownerId && 'function' !== typeof ownerId) {
+      if (principalType === Principal.USER && ownerId && typeof ownerId !== 'function') {
         return callback(null, matches(ownerId, userId));
       }
 
-      // Try to follow belongsTo
       for (const r in modelClass.relations) {
         const rel = modelClass.relations[r];
-        // relation should be belongsTo and target a User based class
         const belongsToUser = rel.type === 'belongsTo' && isUserClass(rel.modelTo);
         if (!belongsToUser) {
           continue;
         }
 
-        // checking related user
         const relatedUser = rel.modelTo;
         const userModelName = relatedUser.modelName;
         const isMultipleUsers = _isMultipleUsers(relatedUser);
-        // a relation can be considered for isOwner resolution if:
-        // 1. the app has a single user model and principalType is 'USER'
-        // 2. the app has multiple user models and principalType is the related user model name
         if ((!isMultipleUsers && principalType === Principal.USER) ||
             (isMultipleUsers && principalType === userModelName)) {
           debug('Checking relation %s to %s: %j', r, userModelName, rel);
-          inst[r](processRelatedUser);
-          return;
+          if (typeof inst[r] === 'function') {
+            try {
+              inst[r](function processRelatedUser(err, user) {
+                if (err) return callback(err, false);
+                if (!user) return callback(null, false);
+                if (Array.isArray(user)) {
+                  if (user.length === 0) return callback(null, false);
+                  user = user[0];
+                }
+                if (!user || typeof user !== 'object') return callback(null, false);
+                if (!('id' in user)) return callback(null, false);
+                debug('User found: %j', user.id);
+                callback(null, matches(user.id, userId));
+              });
+              return;
+            } catch (e) {
+              debug('Error calling relation %s: %s', r, e.message);
+              return callback(null, false);
+            }
+          } else {
+            debug('Relation %s is not a function', r);
+            continue;
+          }
         }
       }
       debug('No matching belongsTo relation found for model %j - user %j principalType %j',
         modelId, userId, principalType);
       callback(null, false);
-
-      function processRelatedUser(err, user) {
-        if (err || !user) return callback(err, false);
-
-        debug('User found: %j', user.id);
-        callback(null, matches(user.id, userId));
-      }
     }
 
     function checkOwnership(inst) {
       const ownerRelations = inst.constructor.settings.ownerRelations;
-      // collecting related users
       const relWithUsers = [];
       for (const r in modelClass.relations) {
         const rel = modelClass.relations[r];
-        // relation should be belongsTo and target a User based class
         if (rel.type !== 'belongsTo' || !isUserClass(rel.modelTo)) {
           continue;
         }
 
-        // checking related user
         const relatedUser = rel.modelTo;
         const userModelName = relatedUser.modelName;
         const isMultipleUsers = _isMultipleUsers(relatedUser);
-        // a relation can be considered for isOwner resolution if:
-        // 1. the app has a single user model and principalType is 'USER'
-        // 2. the app has multiple user models and principalType is the related user model name
-        // In addition, if an array of relations if provided with the ownerRelations option,
-        // then the given relation name is further checked against this array
         if ((!isMultipleUsers && principalType === Principal.USER) ||
             (isMultipleUsers && principalType === userModelName)) {
           debug('Checking relation %s to %s: %j', r, userModelName, rel);
@@ -383,29 +358,39 @@ module.exports = function(Role) {
         }
       }
       if (relWithUsers.length === 0) {
-        debug('No matching belongsTo relation found for model %j and user: %j principalType: %j',
+        debug('No matching belongsTo relation found for model %j and user: %j principalType %j',
           modelId, userId, principalType);
         return callback(null, false);
       }
 
-      // check related users: someSeries is used to avoid spamming the db
       async.someSeries(relWithUsers, processRelation, callback);
 
       function processRelation(r, cb) {
-        inst[r](function processRelatedUser(err, user) {
-          if (err || !user) return cb(err, false);
-
-          debug('User found: %j (through %j)', user.id, r);
-          cb(null, matches(user.id, userId));
-        });
+        if (typeof inst[r] === 'function') {
+          try {
+            inst[r](function processRelatedUser(err, user) {
+              if (err) return cb(err, false);
+              if (!user) return cb(null, false);
+              if (Array.isArray(user)) {
+                if (user.length === 0) return cb(null, false);
+                user = user[0];
+              }
+              if (!user || typeof user !== 'object') return cb(null, false);
+              if (!('id' in user)) return cb(null, false);
+              debug('User found: %j (through %j)', user.id, r);
+              cb(null, matches(user.id, userId));
+            });
+          } catch (e) {
+            debug('Error calling relation %s: %s', r, e.message);
+            return cb(null, false);
+          }
+        } else {
+          debug('Relation %s is not a function', r);
+          cb(null, false);
+        }
       }
     }
 
-    // A helper function to check if the app user config is multiple users or
-    // single user. It can be used with or without a reference user model.
-    // In case no user model is provided, we use the registry to get any of the
-    // user model by type. The relation with AccessToken is used to check
-    // if polymorphism is used, and thus if multiple users.
     function _isMultipleUsers(userModel) {
       const oneOfUserModels = userModel || _this.registry.getModelByType('User');
       const accessTokensRel = oneOfUserModels.relations.accessTokens;
@@ -435,13 +420,14 @@ module.exports = function(Role) {
   Role.isAuthenticated = function isAuthenticated(context, callback) {
     if (!callback) {
       return new Promise((resolve, reject) => {
-        this.isAuthenticated(context, (err, result) => err ? reject(err) : resolve(result))
-      })
+        process.nextTick(() => {
+          resolve(context.isAuthenticated());
+        });
+      });
     }
     process.nextTick(function() {
       if (callback) callback(null, context.isAuthenticated());
     });
-    return callback.promise;
   };
 
   Role.registerResolver(Role.UNAUTHENTICATED, function(role, context, callback) {
@@ -468,15 +454,18 @@ module.exports = function(Role) {
    * @promise
    */
   Role.isInRole = function(role, context, callback) {
-    if (!callback) {
-      return new Promise((resolve, reject) => {
-        this.isInRole(role, context, (err, result) => err ? reject(err) : resolve(result))
-      })
-    }
     context.registry = this.registry;
     if (!(context instanceof AccessContext)) {
       context = new AccessContext(context);
     }
+
+    if (!callback) {
+      return new Promise((resolve, reject) => {
+        this.isInRole(role, context, (err, result) => err ? reject(err) : resolve(!!result));
+      });
+    }
+
+    this.resolveRelatedModels();
 
     debug('isInRole(): %s', role);
     context.debug();
@@ -488,11 +477,11 @@ module.exports = function(Role) {
       const promise = resolver(role, context, callback);
       if (promise && typeof promise.then === 'function') {
         promise.then(
-          function(result) { callback(null, result); },
-          callback,
+          function(result) { callback(null, !!result); },
+          callback
         );
       }
-      return callback.promise;
+      return;
     }
 
     if (context.principals.length === 0) {
@@ -500,7 +489,7 @@ module.exports = function(Role) {
       process.nextTick(function() {
         if (callback) callback(null, false);
       });
-      return callback.promise;
+      return;
     }
 
     const inRole = context.principals.some(function(p) {
@@ -516,7 +505,7 @@ module.exports = function(Role) {
       process.nextTick(function() {
         if (callback) callback(null, true);
       });
-      return callback.promise;
+      return;
     }
 
     const roleMappingModel = this.roleMappingModel;
@@ -531,7 +520,6 @@ module.exports = function(Role) {
       }
       debug('Role found: %j', result);
 
-      // Iterate through the list of principals
       async.some(context.principals, function(p, done) {
         const principalType = p.type || undefined;
         let principalId = p.id || undefined;
@@ -547,7 +535,7 @@ module.exports = function(Role) {
             principalType: principalType, principalId: principalId}},
           function(err, result) {
             debug('Role mapping found: %j', result);
-            done(!err && result); // The only arg is the result
+            done(!err && result);
           });
         } else {
           process.nextTick(function() {
@@ -559,7 +547,6 @@ module.exports = function(Role) {
         if (callback) callback(null, inRole);
       });
     });
-    return callback.promise;
   };
 
   /**
@@ -573,9 +560,14 @@ module.exports = function(Role) {
    */
   Role.getRoles = function(context, options, callback) {
     if (!callback) {
-      return new Promise((resolve, reject) => {
-        this.getRoles(context, options, (err, result) => err ? reject(err) : resolve(result))
-      })
+      if (typeof options === 'function') {
+        callback = options;
+        options = {};
+      } else {
+        return new Promise((resolve, reject) => {
+          this.getRoles(context, options, (err, result) => err ? reject(err) : resolve(result));
+        });
+      }
     }
     if (!options) options = {};
 
@@ -593,7 +585,6 @@ module.exports = function(Role) {
     };
 
     const self = this;
-    // Check against the smart roles
     const inRoleTasks = [];
     Object.keys(Role.resolvers).forEach(function(role) {
       inRoleTasks.push(function(done) {
@@ -613,7 +604,6 @@ module.exports = function(Role) {
 
     const roleMappingModel = this.roleMappingModel;
     context.principals.forEach(function(p) {
-      // Check against the role mappings
       const principalType = p.type || undefined;
       let principalId = p.id == null ? undefined : p.id;
 
@@ -621,13 +611,11 @@ module.exports = function(Role) {
         principalId = principalId.toString();
       }
 
-      // Add the role itself
       if (principalType === RoleMapping.ROLE && principalId) {
         addRole(principalId);
       }
 
       if (principalType && principalId) {
-        // Please find() treat undefined matches all values
         inRoleTasks.push(function(done) {
           const filter = {where: {principalType: principalType, principalId: principalId}};
           if (options.returnOnlyRoleNames === true) {
@@ -665,14 +653,22 @@ module.exports = function(Role) {
   Role.prototype.users = function(cb) {
     if (!cb) {
       return new Promise((resolve, reject) => {
-        this.users((err, result) => err ? reject(err) : resolve(result))
-      })
+        this.constructor.resolveRelatedModels();
+        const userModel = this.constructor.userModel;
+        const roleMappingModel = this.constructor.roleMappingModel;
+        roleMappingModel.find({
+          where: {roleId: this.id, principalType: RoleMapping.USER}
+        }, function(err, mappings) {
+          if (err) return reject(err);
+          const userIds = mappings.map(m => m.principalId);
+          userModel.find({where: {id: {inq: userIds}}}, (err, result) => err ? reject(err) : resolve(result));
+        });
+      });
     }
 
     this.constructor.resolveRelatedModels();
     const userModel = this.constructor.userModel;
     const roleMappingModel = this.constructor.roleMappingModel;
-    
     roleMappingModel.find({
       where: {roleId: this.id, principalType: RoleMapping.USER}
     }, function(err, mappings) {

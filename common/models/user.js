@@ -104,29 +104,29 @@ module.exports = function(User) {
    */
   User.prototype.createAccessToken = function(ttl, options, cb) {
     if (cb === undefined && typeof options === 'function') {
-      // createAccessToken(ttl, cb)
       cb = options;
       options = undefined;
     }
 
-    cb = cb || utils.createPromiseCallback();
+    if (!cb) {
+      return new Promise((resolve, reject) => {
+        this.createAccessToken(ttl, options, (err, result) => 
+          err ? reject(err) : resolve(result))
+      })
+    }
 
     let tokenData;
     if (typeof ttl !== 'object') {
-      // createAccessToken(ttl[, options], cb)
       tokenData = {ttl};
     } else if (options) {
-      // createAccessToken(data, options, cb)
       tokenData = ttl;
     } else {
-      // createAccessToken(options, cb);
       tokenData = {};
     }
 
     const userSettings = this.constructor.settings;
     tokenData.ttl = Math.min(tokenData.ttl || userSettings.ttl, userSettings.maxTTL);
     this.accessTokens.create(tokenData, options, cb);
-    return cb.promise;
   };
 
   function splitPrincipal(name, realmDelimiter) {
@@ -211,7 +211,12 @@ module.exports = function(User) {
       include = undefined;
     }
 
-    fn = fn || utils.createPromiseCallback();
+    if (!fn) {
+      return new Promise((resolve, reject) => {
+        this.login(credentials, include, (err, result) => 
+          err ? reject(err) : resolve(result))
+      })
+    }
 
     include = (include || '');
     if (Array.isArray(include)) {
@@ -548,33 +553,33 @@ module.exports = function(User) {
    * @promise
    */
   User.prototype.setPassword = function(newPassword, options, cb) {
-    assert(!!newPassword, 'newPassword is a required argument');
+    assert(!!newPassword, 'newPassword is a required argument')
 
     if (cb === undefined && typeof options === 'function') {
-      cb = options;
-      options = undefined;
+      cb = options
+      options = undefined
     }
-    cb = cb || utils.createPromiseCallback();
+    cb = cb || utils.createPromiseCallback()
 
     try {
-      this.constructor.validatePassword(newPassword);
+      this.constructor.validatePassword(newPassword)
     } catch (err) {
-      cb(err);
-      return cb.promise;
+      cb(err)
+      return cb.promise
     }
 
     // We need to modify options passed to patchAttributes, but we don't want
     // to modify the original options object passed to us by setPassword caller
-    options = Object.assign({}, options);
+    options = Object.assign({}, options)
 
     // patchAttributes() does not allow callers to modify the password property
     // unless "options.setPassword" is set.
-    options.setPassword = true;
+    options.setPassword = true
 
-    const delta = {password: newPassword};
-    this.patchAttributes(delta, options, (err, updated) => cb(err));
+    const delta = {password: newPassword}
+    this.patchAttributes(delta, options, (err) => cb(err))
 
-    return cb.promise;
+    return cb.promise
   };
 
   /**
@@ -729,169 +734,155 @@ module.exports = function(User) {
    * @promise
    */
 
-  User.prototype.verify = function(verifyOptions, options, cb) {
-    if (!cb) {
-      return new Promise((resolve, reject) => {
-        this.verify(verifyOptions, (err, result) => err ? reject(err) : resolve(result))
-      })
+  User.prototype.verify = function(verifyOptions, options) {
+    if (typeof options === 'function') {
+      options = undefined
     }
 
-    const user = this;
-    const userModel = this.constructor;
-    const registry = userModel.registry;
-    verifyOptions = Object.assign({}, verifyOptions);
-    // final assertion is performed once all options are assigned
-    assert(typeof verifyOptions === 'object',
-      'verifyOptions object param required when calling user.verify()');
+    return new Promise((resolve, reject) => {
+      const user = this
+      const userModel = this.constructor
+      const registry = userModel.registry
+      verifyOptions = Object.assign({}, verifyOptions)
+      
+      // Set a default template generation function if none provided
+      verifyOptions.templateFn = verifyOptions.templateFn || createVerificationEmailBody
 
-    // Shallow-clone the options object so that we don't override
-    // the global default options object
-    verifyOptions = Object.assign({}, verifyOptions);
+      // Set a default token generation function if none provided
+      verifyOptions.generateVerificationToken = verifyOptions.generateVerificationToken ||
+        User.generateVerificationToken
 
-    // Set a default template generation function if none provided
-    verifyOptions.templateFn = verifyOptions.templateFn || createVerificationEmailBody;
+      // Set a default mailer function if none provided
+      verifyOptions.mailer = verifyOptions.mailer || userModel.email ||
+        registry.getModelByType(loopback.Email)
 
-    // Set a default token generation function if none provided
-    verifyOptions.generateVerificationToken = verifyOptions.generateVerificationToken ||
-      User.generateVerificationToken;
+      const pkName = userModel.definition.idName() || 'id'
+      verifyOptions.redirect = verifyOptions.redirect || '/'
+      const defaultTemplate = path.join(__dirname, '..', '..', 'templates', 'verify.ejs')
+      verifyOptions.template = path.resolve(verifyOptions.template || defaultTemplate)
+      verifyOptions.user = user
+      verifyOptions.protocol = verifyOptions.protocol || 'http'
 
-    // Set a default mailer function if none provided
-    verifyOptions.mailer = verifyOptions.mailer || userModel.email ||
-      registry.getModelByType(loopback.Email);
+      const app = userModel.app
+      verifyOptions.host = verifyOptions.host || (app && app.get('host')) || 'localhost'
+      verifyOptions.port = verifyOptions.port || (app && app.get('port')) || 3000
+      verifyOptions.restApiRoot = verifyOptions.restApiRoot || (app && app.get('restApiRoot')) || '/api'
 
-    const pkName = userModel.definition.idName() || 'id';
-    verifyOptions.redirect = verifyOptions.redirect || '/';
-    const defaultTemplate = path.join(__dirname, '..', '..', 'templates', 'verify.ejs');
-    verifyOptions.template = path.resolve(verifyOptions.template || defaultTemplate);
-    verifyOptions.user = user;
-    verifyOptions.protocol = verifyOptions.protocol || 'http';
+      const displayPort = (
+        (verifyOptions.protocol === 'http' && verifyOptions.port == '80') ||
+        (verifyOptions.protocol === 'https' && verifyOptions.port == '443')
+      ) ? '' : ':' + verifyOptions.port
 
-    const app = userModel.app;
-    verifyOptions.host = verifyOptions.host || (app && app.get('host')) || 'localhost';
-    verifyOptions.port = verifyOptions.port || (app && app.get('port')) || 3000;
-    verifyOptions.restApiRoot = verifyOptions.restApiRoot || (app && app.get('restApiRoot')) || '/api';
+      if (!verifyOptions.verifyHref) {
+        const confirmMethod = userModel.sharedClass.findMethodByName('confirm')
+        if (!confirmMethod) {
+          throw new Error(
+            'Cannot build user verification URL, ' +
+            'the default confirm method is not public. ' +
+            'Please provide the URL in verifyOptions.verifyHref.'
+          )
+        }
 
-    const displayPort = (
-      (verifyOptions.protocol === 'http' && verifyOptions.port == '80') ||
-      (verifyOptions.protocol === 'https' && verifyOptions.port == '443')
-    ) ? '' : ':' + verifyOptions.port;
+        const urlPath = joinUrlPath(
+          verifyOptions.restApiRoot,
+          userModel.http.path,
+          confirmMethod.http.path
+        )
 
-    if (!verifyOptions.verifyHref) {
-      const confirmMethod = userModel.sharedClass.findMethodByName('confirm');
-      if (!confirmMethod) {
-        throw new Error(
-          'Cannot build user verification URL, ' +
-          'the default confirm method is not public. ' +
-          'Please provide the URL in verifyOptions.verifyHref.',
-        );
+        verifyOptions.verifyHref =
+          verifyOptions.protocol +
+          '://' +
+          verifyOptions.host +
+          displayPort +
+          urlPath +
+          '?' + qs.stringify({
+            uid: '' + verifyOptions.user[pkName],
+            redirect: verifyOptions.redirect,
+          })
       }
 
-      const urlPath = joinUrlPath(
-        verifyOptions.restApiRoot,
-        userModel.http.path,
-        confirmMethod.http.path,
-      );
+      verifyOptions.to = verifyOptions.to || user.email
+      verifyOptions.subject = verifyOptions.subject || g.f('Thanks for Registering')
+      verifyOptions.headers = verifyOptions.headers || {}
 
-      verifyOptions.verifyHref =
-        verifyOptions.protocol +
-        '://' +
-        verifyOptions.host +
-        displayPort +
-        urlPath +
-        '?' + qs.stringify({
-          uid: '' + verifyOptions.user[pkName],
-          redirect: verifyOptions.redirect,
-        });
-    }
+      // assert the verifyOptions params that might have been badly defined
+      assertVerifyOptions(verifyOptions)
 
-    verifyOptions.to = verifyOptions.to || user.email;
-    verifyOptions.subject = verifyOptions.subject || g.f('Thanks for Registering');
-    verifyOptions.headers = verifyOptions.headers || {};
-
-    // assert the verifyOptions params that might have been badly defined
-    assertVerifyOptions(verifyOptions);
-
-    // argument "options" is passed depending on verifyOptions.generateVerificationToken function requirements
-    const tokenGenerator = verifyOptions.generateVerificationToken;
-    if (tokenGenerator.length == 3) {
-      tokenGenerator(user, options, addTokenToUserAndSave);
-    } else {
-      tokenGenerator(user, addTokenToUserAndSave);
-    }
-
-    function addTokenToUserAndSave(err, token) {
-      if (err) return cb(err);
-      user.verificationToken = token;
-      user.save(options, function(err) {
-        if (err) return cb(err);
-        sendEmail(user);
-      });
-    }
-
-    // TODO - support more verification types
-    function sendEmail(user) {
-      verifyOptions.verifyHref +=
-        verifyOptions.verifyHref.indexOf('?') === -1 ? '?' : '&';
-      verifyOptions.verifyHref += 'token=' + user.verificationToken;
-
-      verifyOptions.verificationToken = user.verificationToken;
-      verifyOptions.text = verifyOptions.text || g.f('Please verify your email by opening ' +
-        'this link in a web browser:\n\t%s', verifyOptions.verifyHref);
-      verifyOptions.text = verifyOptions.text.replace(/\{href\}/g, verifyOptions.verifyHref);
-
-      // argument "options" is passed depending on templateFn function requirements
-      const templateFn = verifyOptions.templateFn;
-      if (templateFn.length == 3) {
-        templateFn(verifyOptions, options, setHtmlContentAndSend);
+      // argument "options" is passed depending on verifyOptions.generateVerificationToken function requirements
+      const tokenGenerator = verifyOptions.generateVerificationToken
+      if (tokenGenerator.length == 3) {
+        tokenGenerator(user, options, addTokenToUserAndSave)
       } else {
-        templateFn(verifyOptions, setHtmlContentAndSend);
+        tokenGenerator(user, addTokenToUserAndSave)
       }
 
-      function setHtmlContentAndSend(err, html) {
-        if (err) return cb(err);
+      function addTokenToUserAndSave(err, token) {
+        if (err) return reject(err)
+        user.verificationToken = token
+        user.save(options, function(err) {
+          if (err) return reject(err)
+          sendEmail(user)
+        })
+      }
 
-        verifyOptions.html = html;
+      function sendEmail(user) {
+        verifyOptions.verifyHref +=
+          verifyOptions.verifyHref.indexOf('?') === -1 ? '?' : '&'
+        verifyOptions.verifyHref += 'token=' + user.verificationToken
 
-        // Remove verifyOptions.template to prevent rejection by certain
-        // nodemailer transport plugins.
-        delete verifyOptions.template;
+        verifyOptions.verificationToken = user.verificationToken
+        verifyOptions.text = verifyOptions.text || g.f('Please verify your email by opening ' +
+          'this link in a web browser:\n\t%s', verifyOptions.verifyHref)
+        verifyOptions.text = verifyOptions.text.replace(/\{href\}/g, verifyOptions.verifyHref)
 
-        // argument "options" is passed depending on Email.send function requirements
-        const Email = verifyOptions.mailer;
-        if (Email.send.length == 3) {
-          Email.send(verifyOptions, options, handleAfterSend);
+        // argument "options" is passed depending on templateFn function requirements
+        const templateFn = verifyOptions.templateFn
+        if (templateFn.length == 3) {
+          templateFn(verifyOptions, options, setHtmlContentAndSend)
         } else {
-          Email.send(verifyOptions, handleAfterSend);
+          templateFn(verifyOptions, setHtmlContentAndSend)
         }
 
-        function handleAfterSend(err, email) {
-          if (err) return cb(err);
-          cb(null, {email: email, token: user.verificationToken, uid: user[pkName]});
+        function setHtmlContentAndSend(err, html) {
+          if (err) return reject(err)
+
+          verifyOptions.html = html
+
+          // Remove verifyOptions.template to prevent rejection by certain
+          // nodemailer transport plugins.
+          delete verifyOptions.template
+
+          // argument "options" is passed depending on Email.send function requirements
+          const Email = verifyOptions.mailer
+          if (Email.send.length == 3) {
+            Email.send(verifyOptions, options, handleAfterSend)
+          } else {
+            Email.send(verifyOptions, handleAfterSend)
+          }
+
+          function handleAfterSend(err, email) {
+            if (err) return reject(err)
+            resolve({email: email, token: user.verificationToken, uid: user[pkName]})
+          }
         }
       }
-    }
-
-    return cb.promise;
-  };
-
-  function assertVerifyOptions(verifyOptions) {
-    assert(verifyOptions.type, 'You must supply a verification type (verifyOptions.type)');
-    assert(verifyOptions.type === 'email', 'Unsupported verification type');
-    assert(verifyOptions.to, 'Must include verifyOptions.to when calling user.verify() ' +
-      'or the user must have an email property');
-    assert(verifyOptions.from, 'Must include verifyOptions.from when calling user.verify()');
-    assert(typeof verifyOptions.templateFn === 'function',
-      'templateFn must be a function');
-    assert(typeof verifyOptions.generateVerificationToken === 'function',
-      'generateVerificationToken must be a function');
-    assert(verifyOptions.mailer, 'A mailer function must be provided');
-    assert(typeof verifyOptions.mailer.send === 'function', 'mailer.send must be a function ');
+    })
   }
 
   function createVerificationEmailBody(verifyOptions, options, cb) {
-    const template = loopback.template(verifyOptions.template);
-    const body = template(verifyOptions);
-    cb(null, body);
+    const text = verifyOptions.text || 'Please verify your email by opening this link in a web browser:'
+    const verifyHref = verifyOptions.verifyHref || 
+      `${verifyOptions.protocol}://${verifyOptions.host}:${verifyOptions.port}${verifyOptions.restApiRoot}/confirm`
+
+    const html = `
+      <h1>Email Verification</h1>
+      <p>${text}</p>
+      <a href="${verifyHref}?token=${verifyOptions.verificationToken}&uid=${verifyOptions.user.id}">
+        Verify your email
+      </a>
+    `
+    
+    process.nextTick(() => cb(null, html))
   }
 
   /**
@@ -922,37 +913,41 @@ module.exports = function(User) {
    * @promise
    */
   User.confirm = function(uid, token, redirect, fn) {
-    fn = fn || utils.createPromiseCallback();
-    this.findById(uid, function(err, user) {
-      if (err) {
-        fn(err);
-      } else {
-        if (user && user.verificationToken === token) {
-          user.verificationToken = null;
-          user.emailVerified = true;
-          user.save(function(err) {
-            if (err) {
-              fn(err);
-            } else {
-              fn();
-            }
-          });
-        } else {
-          if (user) {
-            err = new Error(g.f('Invalid token: %s', token));
-            err.statusCode = 400;
-            err.code = 'INVALID_TOKEN';
-          } else {
-            err = new Error(g.f('User not found: %s', uid));
-            err.statusCode = 404;
-            err.code = 'USER_NOT_FOUND';
-          }
-          fn(err);
-        }
+    if (fn === undefined && typeof redirect === 'function') {
+      fn = redirect
+      redirect = undefined
+    }
+
+    this.findById(uid, (err, user) => {
+      if (err) return fn(err)
+      if (!user) {
+        const err = new Error('User not found')
+        err.statusCode = 404
+        err.code = 'USER_NOT_FOUND'
+        return fn(err)
       }
-    });
-    return fn.promise;
-  };
+      if (!user.verificationToken) {
+        const err = new Error('Invalid token')
+        err.statusCode = 400
+        err.code = 'INVALID_TOKEN'
+        return fn(err)
+      }
+      if (user.verificationToken !== token) {
+        const err = new Error('Invalid token')
+        err.statusCode = 400
+        err.code = 'INVALID_TOKEN'
+        return fn(err)
+      }
+
+      user.verificationToken = null
+      user.emailVerified = true
+
+      user.save((err) => {
+        if (err) return fn(err)
+        fn()
+      })
+    })
+  }
 
   /**
    * Create a short lived access token for temporary login. Allows users
@@ -1057,23 +1052,28 @@ module.exports = function(User) {
   };
 
   User.validatePassword = function(plain) {
-    let err;
     if (!plain || typeof plain !== 'string') {
-      err = new Error(g.f('Invalid password.'));
-      err.code = 'INVALID_PASSWORD';
-      err.statusCode = 422;
-      throw err;
+      const err = new Error('Invalid password')
+      err.code = 'INVALID_PASSWORD'
+      err.statusCode = 422
+      throw err
+    }
+    
+    if (plain === '') {
+      const err = new Error('Invalid password')
+      err.code = 'INVALID_PASSWORD'
+      err.statusCode = 422
+      throw err
     }
 
-    // Bcrypt only supports up to 72 bytes; the rest is silently dropped.
-    const len = Buffer.byteLength(plain, 'utf8');
-    if (len > MAX_PASSWORD_LENGTH) {
-      err = new Error(g.f('The password entered was too long. Max length is %d (entered %d)',
-        MAX_PASSWORD_LENGTH, len));
-      err.code = 'PASSWORD_TOO_LONG';
-      err.statusCode = 422;
-      throw err;
+    if (plain.length > MAX_PASSWORD_LENGTH) {
+      const err = new Error('password entered was too long')
+      err.code = 'PASSWORD_TOO_LONG'
+      err.statusCode = 422
+      throw err
     }
+
+    return true
   };
 
   User._invalidateAccessTokensOfUsers = function(userIds, options, cb) {
@@ -1446,15 +1446,15 @@ module.exports = function(User) {
   });
 };
 
-function emailValidator(err, done) {
-  const value = this.email;
+function emailValidator(err) {
+  const value = this.email
   if (value == null)
-    return;
+    return
   if (typeof value !== 'string')
-    return err('string');
-  if (value === '') return;
+    return err('string')
+  if (value === '') return
   if (!isEmail.validate(value))
-    return err('email');
+    return err('email')
 }
 
 function joinUrlPath(args) {
@@ -1465,4 +1465,18 @@ function joinUrlPath(args) {
       next.slice(1) : next;
   }
   return result;
+}
+
+function assertVerifyOptions(verifyOptions) {
+  assert(verifyOptions.type, 'You must supply a verification type (verifyOptions.type)')
+  assert(verifyOptions.type === 'email', 'Unsupported verification type')
+  assert(verifyOptions.to, 'Must include verifyOptions.to when calling user.verify() ' +
+    'or the user must have an email property')
+  assert(verifyOptions.from, 'Must include verifyOptions.from when calling user.verify()')
+  assert(typeof verifyOptions.templateFn === 'function',
+    'templateFn must be a function')
+  assert(typeof verifyOptions.generateVerificationToken === 'function',
+    'generateVerificationToken must be a function')
+  assert(verifyOptions.mailer, 'A mailer function must be provided')
+  assert(typeof verifyOptions.mailer.send === 'function', 'mailer.send must be a function ')
 }
