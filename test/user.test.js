@@ -99,7 +99,7 @@ describe('User', function() {
     ]).then(([user1, user2]) => {
       validCredentialsUser = user = user1
       validCredentialsEmailVerifiedUser = user2
-    });
+    }).then(() => User.destroyAll().then(() => app.destroyAll()));
 
     return Promise.all([User.destroyAll(), app.destroyAll()])
       .then(() => createApp())

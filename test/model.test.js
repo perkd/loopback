@@ -1056,10 +1056,13 @@ describe.onServer('Remote Methods', function() {
     function createUserAndAccessToken() {
       const CREDENTIALS = {email: 'context@example.com', password: 'pass'};
       const User = app.registry.getModel('User');
-      return User.create(CREDENTIALS)
-        .then(function([user, token]) {
-          accessToken = token;
-        });
+      const AccessToken = app.registry.getModel('AccessToken');
+      return Promise.all([
+        User.create(CREDENTIALS),
+        AccessToken.create({userId: 1}),
+      ]).then(([user, token]) => {
+        accessToken = token;
+      });
     }
   });
 

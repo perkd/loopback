@@ -759,7 +759,10 @@ describe('role model', function() {
           email: `user${i}@example.com`,
           password: 'password'
         });
-      }));
+      })).then(users => {
+        sender = users[0];
+        receiver = users[1];
+      });
     }
 
     function isOwnerForMessage(user, msg) {

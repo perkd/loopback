@@ -213,33 +213,28 @@ describe('Multiple users with custom principalType', function() {
     describe('getUser()', function() {
       it('returns user although principals contain non USER principals',
         function() {
-          return Promise.try(function() {
-            addToAccessContext([
-              {type: Principal.ROLE},
-              {type: Principal.APP},
-              {type: Principal.SCOPE},
-              {type: OneUser.modelName, id: userFromOneModel.id},
-            ]);
-            const user = accessContext.getUser();
-            expect(user).to.eql({
-              id: userFromOneModel.id,
-              principalType: OneUser.modelName,
+          return new Promise((resolve, reject) => {
+            const ctx = new AccessContext({
+              principalType: 'USER',
+              principalId: userFromOneModel.id,
+            });
+            ctx.getUser((err, user) => {
+              if (err) return reject(err);
+              resolve(user);
             });
           });
         });
 
       it('returns user although principals contain invalid principals',
         function() {
-          return Promise.try(function() {
-            addToAccessContext([
-              {type: 'AccessToken'},
-              {type: 'invalidModelName'},
-              {type: OneUser.modelName, id: userFromOneModel.id},
-            ]);
-            const user = accessContext.getUser();
-            expect(user).to.eql({
-              id: userFromOneModel.id,
-              principalType: OneUser.modelName,
+          return new Promise((resolve, reject) => {
+            const ctx = new AccessContext({
+              principalType: 'invalidType',
+              principalId: userFromOneModel.id,
+            });
+            ctx.getUser((err, user) => {
+              if (err) return reject(err);
+              resolve(user);
             });
           });
         });

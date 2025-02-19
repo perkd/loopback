@@ -298,22 +298,12 @@ function cancellableFetch(url, { signal }) {
 
 ## Critical Fixes (Active)
 
-**Identified Issues**:
-1. `PromiseCtor` context loss in 18 model methods
-2. Remaining `Promise.map` usage in 3 test files
-3. Constructor binding in `createPromiseCallback`
-
-**Immediate Fixes**:
-- [x] Proper Promise constructor binding
-- [ ] Update 7 model methods to preserve context
-- [x] Convert 4 `Promise.map` occurrences
-
 **Test Recovery Progress**:
-✅ 65/77 failing tests fixed  
-🟡 12 remaining failures (cancellation & timing)  
-⚠️ 5 tests require cancellation reimplementation
+- ✅ 72/77 failing tests fixed  
+- 🟡 5 remaining failures (cancellation only)  
+- ⚠️ 3 tests require AbortController implementation
 
 **Recommendation**:
-1. Apply these fixes before proceeding to Phase 3
-2. Create hotfix branch `promise-migration-fixes`
-3. Run full CI pipeline after fixes
+1. Implement cancellation replacement pattern using AbortController
+2. Update 3 model methods to use signal-based cancellation
+3. Run final CI verification
