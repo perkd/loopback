@@ -11,7 +11,6 @@ const loopback = require('../');
 const ACL = loopback.ACL;
 const defineModelTestsWithDataSource = require('./util/model-tests');
 const PersistedModel = loopback.PersistedModel;
-const Promise = require('bluebird');
 const TaskEmitter = require('strong-task-emitter');
 const request = require('supertest');
 

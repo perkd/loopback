@@ -10,7 +10,6 @@ const loopback = require('../index');
 const async = require('async');
 const extend = require('util')._extend;
 const expect = require('./helpers/expect');
-const Promise = require('bluebird');
 
 function checkResult(err, result) {
   assert(!err);

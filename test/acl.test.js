@@ -6,11 +6,10 @@
 'use strict';
 const assert = require('assert');
 const expect = require('./helpers/expect');
-const loopback = require('../index');
+const loopback = require('../');
 const Scope = loopback.Scope;
 const ACL = loopback.ACL;
 const request = require('supertest');
-const Promise = require('bluebird');
 const supertest = require('supertest');
 const Role = loopback.Role;
 const RoleMapping = loopback.RoleMapping;

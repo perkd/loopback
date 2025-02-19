@@ -8,7 +8,6 @@
 const expect = require('./helpers/expect');
 const errorHandler = require('strong-error-handler');
 const loopback = require('../');
-const Promise = require('bluebird');
 const request = require('supertest');
 const waitForEvent = require('./helpers/wait-for-event');
 

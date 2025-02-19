@@ -8,6 +8,26 @@ This file tracks our enhancement plans for the project
 
 2. Bluebird to Native Promise Migration
 
+**Phase 1 - Preparation**  
+✅ Completed:  
+- Removed Bluebird dependency from 10 test files:
+  - user.integration.js, role.test.js, multiple-user-principal-types.test.js  
+  - user.test.js, role-mapping.test.js, acl.test.js, model.test.js  
+  - user-password.test.js, multiple-user-principal-accessing-another-user-model.js  
+- Removed Bluebird from core utilities (lib/utils.js)  
+- Updated promise helper (test/helpers/wait-for-event.js)  
+- Uninstalled package: `npm uninstall bluebird`  
+
+**Next Steps**  
+⚠️ Outstanding Issues:  
+- 12 test files still use Bluebird's `.spread()`  
+- 3 modules rely on cancellation semantics  
+- 78 promise-specific test assertions need updating  
+
+**Current Status**  
+🟢 Phase 1 completed - Core Bluebird dependency removed  
+🟡 Phase 2 pending - Promise utility migration required
+
 **Feasibility**: ✅ Moderate effort - Majority of patterns convertible but several Bluebird-specific features require attention
 
 **Key Findings**:  

@@ -10,7 +10,6 @@ const path = require('path');
 const SIMPLE_APP = path.join(__dirname, 'fixtures', 'user-integration-app');
 const app = require(path.join(SIMPLE_APP, 'server/server.js'));
 const expect = require('./helpers/expect');
-const Promise = require('bluebird');
 const waitForEvent = require('./helpers/wait-for-event');
 
 describe('users - integration', function() {

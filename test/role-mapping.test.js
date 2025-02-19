@@ -6,7 +6,6 @@
 'use strict';
 const expect = require('./helpers/expect');
 const loopback = require('../');
-const Promise = require('bluebird');
 
 describe('role-mapping model', function() {
   this.timeout(10000);

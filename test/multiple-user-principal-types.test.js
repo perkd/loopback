@@ -10,7 +10,6 @@ const ctx = require('../lib/access-context');
 const extend = require('util')._extend;
 const AccessContext = ctx.AccessContext;
 const Principal = ctx.Principal;
-const Promise = require('bluebird');
 const waitForEvent = require('./helpers/wait-for-event');
 const supertest = require('supertest');
 const loggers = require('./helpers/error-loggers');

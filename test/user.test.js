@@ -11,7 +11,6 @@ const loopback = require('../');
 const async = require('async');
 const url = require('url');
 const extend = require('util')._extend;
-const Promise = require('bluebird');
 const waitForEvent = require('./helpers/wait-for-event');
 
 let User, AccessToken;
