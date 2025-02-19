@@ -332,7 +332,6 @@ module.exports = function(User) {
    * ```js
    *    User.logout('asd0a9f8dsj9s0s3223mk', function (err) {
   *      console.log(err || 'Logged out');
-  *    });
    * ```
    *
    * @param {String} accessTokenID
@@ -342,14 +341,18 @@ module.exports = function(User) {
    */
 
   User.logout = function(tokenId, fn) {
-    fn = fn || utils.createPromiseCallback();
+    if (!fn) {
+      return new Promise((resolve, reject) => {
+        this.logout(tokenId, (err, result) => err ? reject(err) : resolve(result))
+      })
+    }
 
     let err;
     if (!tokenId) {
       err = new Error(g.f('{{accessToken}} is required to logout'));
       err.statusCode = 401;
       process.nextTick(fn, err);
-      return fn.promise;
+      return;
     }
 
     this.relations.accessTokens.modelTo.destroyById(tokenId, function(err, info) {
@@ -363,7 +366,6 @@ module.exports = function(User) {
         fn();
       }
     });
-    return fn.promise;
   };
 
   User.observe('before delete', function(ctx, next) {
@@ -394,7 +396,12 @@ module.exports = function(User) {
    */
 
   User.prototype.hasPassword = function(plain, fn) {
-    fn = fn || utils.createPromiseCallback();
+    if (!fn) {
+      return new Promise((resolve, reject) => {
+        this.hasPassword(plain, (err, result) => err ? reject(err) : resolve(result))
+      })
+    }
+
     if (this.password && plain) {
       bcrypt.compare(plain, this.password, function(err, isMatch) {
         if (err) return fn(err);
@@ -403,7 +410,6 @@ module.exports = function(User) {
     } else {
       fn(null, false);
     }
-    return fn.promise;
   };
 
   /**
@@ -423,7 +429,12 @@ module.exports = function(User) {
       cb = options;
       options = undefined;
     }
-    cb = cb || utils.createPromiseCallback();
+    if (!cb) {
+      return new Promise((resolve, reject) => {
+        this.changePassword(userId, oldPassword, newPassword, options, 
+          (err, result) => err ? reject(err) : resolve(result))
+      })
+    }
 
     // Make sure to use the constructor of the (sub)class
     // where the method is invoked from (`this` instead of `User`)
@@ -461,7 +472,12 @@ module.exports = function(User) {
       cb = options;
       options = undefined;
     }
-    cb = cb || utils.createPromiseCallback();
+    if (!cb) {
+      return new Promise((resolve, reject) => {
+        this.changePassword(oldPassword, newPassword, options, 
+          (err, result) => err ? reject(err) : resolve(result))
+      })
+    }
 
     this.hasPassword(oldPassword, (err, isMatch) => {
       if (err) return cb(err);
@@ -714,11 +730,11 @@ module.exports = function(User) {
    */
 
   User.prototype.verify = function(verifyOptions, options, cb) {
-    if (cb === undefined && typeof options === 'function') {
-      cb = options;
-      options = undefined;
+    if (!cb) {
+      return new Promise((resolve, reject) => {
+        this.verify(verifyOptions, (err, result) => err ? reject(err) : resolve(result))
+      })
     }
-    cb = cb || utils.createPromiseCallback();
 
     const user = this;
     const userModel = this.constructor;
@@ -951,7 +967,12 @@ module.exports = function(User) {
    */
 
   User.resetPassword = function(options, cb) {
-    cb = cb || utils.createPromiseCallback();
+    if (!cb) {
+      return new Promise((resolve, reject) => {
+        this.resetPassword(options, (err, result) => err ? reject(err) : resolve(result))
+      })
+    }
+
     const UserModel = this;
     const ttl = UserModel.settings.resetPasswordTokenTTL || DEFAULT_RESET_PW_TTL;
     options = options || {};

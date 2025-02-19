@@ -105,15 +105,12 @@ module.exports = function(Application) {
    * @param {Error} err
    * @promise
    */
-  Application.register = function(owner, name, options, cb) {
-    assert(owner, 'owner is required');
-    assert(name, 'name is required');
-
-    if (typeof options === 'function' && !cb) {
-      cb = options;
-      options = {};
+  Application.register = function(owner, name, options, callback) {
+    if (!callback) {
+      return new Promise((resolve, reject) => {
+        this.create(props, (err, result) => err ? reject(err) : resolve(result))
+      })
     }
-    cb = cb || utils.createPromiseCallback();
 
     const props = {owner: owner, name: name};
     for (const p in options) {
@@ -121,8 +118,7 @@ module.exports = function(Application) {
         props[p] = options[p];
       }
     }
-    this.create(props, cb);
-    return cb.promise;
+    this.create(props, callback);
   };
 
   /**
@@ -131,6 +127,11 @@ module.exports = function(Application) {
    * @param {Error} err
    */
   Application.prototype.resetKeys = function(cb) {
+    if (!cb) {
+      return new Promise((resolve, reject) => {
+        this.save((err, result) => err ? reject(err) : resolve(result))
+      })
+    }
     this.clientKey = generateKey('client');
     this.javaScriptKey = generateKey('javaScript');
     this.restApiKey = generateKey('restApi');
@@ -148,7 +149,14 @@ module.exports = function(Application) {
    * @promise
    */
   Application.resetKeys = function(appId, cb) {
-    cb = cb || utils.createPromiseCallback();
+    if (!cb) {
+      return new Promise((resolve, reject) => {
+        this.findById(appId, (err, app) => {
+          if (err) return reject(err);
+          app.resetKeys((err, result) => err ? reject(err) : resolve(result))
+        })
+      })
+    }
     this.findById(appId, function(err, app) {
       if (err) {
         if (cb) cb(err, app);
@@ -156,7 +164,6 @@ module.exports = function(Application) {
       }
       app.resetKeys(cb);
     });
-    return cb.promise;
   };
 
   /**
@@ -172,15 +179,31 @@ module.exports = function(Application) {
    * - restApiKey
    * - windowsKey
    * - masterKey
-   * @promise
    */
   Application.authenticate = function(appId, key, cb) {
-    cb = cb || utils.createPromiseCallback();
-
+    if (!cb) {
+      return new Promise((resolve, reject) => {
+        this.findById(appId, (err, app) => {
+          if (err) return reject(err);
+          let result = null;
+          const keyNames = ['clientKey', 'javaScriptKey', 'restApiKey', 'windowsKey', 'masterKey'];
+          for (let i = 0; i < keyNames.length; i++) {
+            if (app[keyNames[i]] === key) {
+              result = {
+                application: app,
+                keyType: keyNames[i],
+              };
+              break;
+            }
+          }
+          resolve(result)
+        })
+      })
+    }
     this.findById(appId, function(err, app) {
       if (err || !app) {
         cb(err, null);
-        return cb.promise;
+        return;
       }
       let result = null;
       const keyNames = ['clientKey', 'javaScriptKey', 'restApiKey', 'windowsKey', 'masterKey'];
@@ -195,6 +218,15 @@ module.exports = function(Application) {
       }
       cb(null, result);
     });
-    return cb.promise;
+  };
+
+  Application.prototype.getPrincipals = function(userId, roleName, callback) {
+    if (!callback) {
+      return new Promise((resolve, reject) => {
+        this.getPrincipals(userId, roleName, (err, result) => err ? reject(err) : resolve(result))
+      })
+    }
+
+    // ... existing logic ...
   };
 };

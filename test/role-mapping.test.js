@@ -61,10 +61,10 @@ describe('role-mapping model', function() {
   it('supports .user() returning a promise', function() {
     return models.RoleMapping.create({principalType: 'USER', principalId: oneUser.id})
       .then(function(mapping) {
-        return mapping.user();
-      })
-      .then(function(user) {
-        expect(user.id).to.equal(oneUser.id);
+        return mapping.user().then(user => {
+          expect(user.id).to.equal(oneUser.id);
+          return user;
+        });
       });
   });
 

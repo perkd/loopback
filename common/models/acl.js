@@ -331,22 +331,24 @@ module.exports = function(ACL) {
    * @param {String|Error} err The error object.
    * @param {AccessRequest} result The resolved access request.
    */
-  ACL.checkPermission = function checkPermission(principalType, principalId,
-    model, property, accessType,
-    callback) {
-    if (!callback) callback = utils.createPromiseCallback();
-    if (principalId !== null && principalId !== undefined && (typeof principalId !== 'string')) {
-      principalId = principalId.toString();
+  ACL.checkPermission = function(context, modelId, modelName, callback) {
+    if (!callback) {
+      return new Promise((resolve, reject) => {
+        this.checkPermission(context, modelId, modelName, (err, result) => err ? reject(err) : resolve(result))
+      })
     }
-    property = property || ACL.ALL;
+    if (modelId !== null && modelId !== undefined && (typeof modelId !== 'string')) {
+      modelId = modelId.toString();
+    }
+    const property = context.property || ACL.ALL;
+    const accessType = context.accessType || ACL.ALL;
     const propertyQuery = (property === ACL.ALL) ? undefined : {inq: [property, ACL.ALL]};
-    accessType = accessType || ACL.ALL;
     const accessTypeQuery = (accessType === ACL.ALL) ? undefined :
       {inq: [accessType, ACL.ALL, ACL.EXECUTE]};
 
-    const req = new AccessRequest({model, property, accessType, registry: this.registry});
+    const req = new AccessRequest({model: modelName, property, accessType, registry: this.registry});
 
-    let acls = this.getStaticACLs(model, property);
+    let acls = this.getStaticACLs(modelName, property);
 
     // resolved is an instance of AccessRequest
     let resolved = this.resolvePermission(acls, req);
@@ -361,8 +363,8 @@ module.exports = function(ACL) {
     }
 
     const self = this;
-    this.find({where: {principalType: principalType, principalId: principalId,
-      model: model, property: propertyQuery, accessType: accessTypeQuery}},
+    this.find({where: {principalType: context.principalType, principalId: modelId,
+      model: modelName, property: propertyQuery, accessType: accessTypeQuery}},
     function(err, dynACLs) {
       if (err) {
         return callback(err);
@@ -372,7 +374,6 @@ module.exports = function(ACL) {
       resolved = self.resolvePermission(acls, req);
       return callback(null, resolved);
     });
-    return callback.promise;
   };
 
   ACL.prototype.debug = function() {
@@ -430,7 +431,11 @@ module.exports = function(ACL) {
    * @param {AccessRequest} result The resolved access request.
    */
   ACL.checkAccessForContext = function(context, callback) {
-    if (!callback) callback = utils.createPromiseCallback();
+    if (!callback) {
+      return new Promise((resolve, reject) => {
+        this.checkAccessForContext(context, (err, result) => err ? reject(err) : resolve(result))
+      })
+    }
     const self = this;
     self.resolveRelatedModels();
     const roleModel = self.roleModel;
@@ -487,7 +492,7 @@ module.exports = function(ACL) {
     };
 
     this.find(query, function(err, acls) {
-      if (err) return callback(err);
+      if (err) return callback(err, null);
       const inRoleTasks = [];
 
       acls = acls.concat(staticACLs);
@@ -536,7 +541,6 @@ module.exports = function(ACL) {
         return callback(null, resolved);
       });
     });
-    return callback.promise;
   };
 
   function saveAuthorizedRolesToRemotingContext(remotingContext, authorizedRoles) {
@@ -561,7 +565,11 @@ module.exports = function(ACL) {
    */
   ACL.checkAccessForToken = function(token, model, modelId, method, callback) {
     assert(token, 'Access token is required');
-    if (!callback) callback = utils.createPromiseCallback();
+    if (!callback) {
+      return new Promise((resolve, reject) => {
+        this.checkAccessForToken(token, model, modelId, method, (err, result) => err ? reject(err) : resolve(result))
+      })
+    }
     const context = new AccessContext({
       registry: this.registry,
       accessToken: token,
@@ -575,7 +583,6 @@ module.exports = function(ACL) {
       if (err) callback(err);
       else callback(null, accessRequest.isAllowed());
     });
-    return callback.promise;
   };
 
   ACL.resolveRelatedModels = function() {
@@ -596,23 +603,27 @@ module.exports = function(ACL) {
    * @param {String|Error} err The error object
    * @param {Object} result An instance of principal (Role, Application or User)
    */
-  ACL.resolvePrincipal = function(type, id, cb) {
-    cb = cb || utils.createPromiseCallback();
+  ACL.resolvePrincipal = function(type, id, callback) {
+    if (!callback) {
+      return new Promise((resolve, reject) => {
+        this.resolvePrincipal(type, id, (err, result) => err ? reject(err) : resolve(result))
+      })
+    }
     type = type || ACL.ROLE;
     this.resolveRelatedModels();
 
     switch (type) {
       case ACL.ROLE:
-        this.roleModel.findOne({where: {or: [{name: id}, {id: id}]}}, cb);
+        this.roleModel.findOne({where: {or: [{name: id}, {id: id}]}}, callback);
         break;
       case ACL.USER:
         this.userModel.findOne(
-          {where: {or: [{username: id}, {email: id}, {id: id}]}}, cb,
+          {where: {or: [{username: id}, {email: id}, {id: id}]}}, callback,
         );
         break;
       case ACL.APP:
         this.applicationModel.findOne(
-          {where: {or: [{name: id}, {email: id}, {id: id}]}}, cb,
+          {where: {or: [{name: id}, {email: id}, {id: id}]}}, callback,
         );
         break;
       default:
@@ -621,18 +632,17 @@ module.exports = function(ACL) {
         if (userModel) {
           userModel.findOne(
             {where: {or: [{username: id}, {email: id}, {id: id}]}},
-            cb,
+            callback,
           );
         } else {
           process.nextTick(function() {
             const err = new Error(g.f('Invalid principal type: %s', type));
             err.statusCode = 400;
             err.code = 'INVALID_PRINCIPAL_TYPE';
-            cb(err);
+            callback(err);
           });
         }
     }
-    return cb.promise;
   };
 
   /**
@@ -644,18 +654,23 @@ module.exports = function(ACL) {
    * @param {String|Error} err The error object
    * @param {Boolean} isMapped is the ACL mapped to the role
    */
-  ACL.isMappedToRole = function(principalType, principalId, role, cb) {
-    cb = cb || utils.createPromiseCallback();
+  ACL.isMappedToRole = function(principalType, principalId, role, callback) {
+    if (!callback) {
+      return new Promise((resolve, reject) => {
+        this.isMappedToRole(principalType, principalId, role, 
+          (err, result) => err ? reject(err) : resolve(result))
+      })
+    }
     const self = this;
     this.resolvePrincipal(principalType, principalId,
       function(err, principal) {
-        if (err) return cb(err);
+        if (err) return callback(err);
         if (principal != null) {
           principalId = principal.id;
         }
         principalType = principalType || 'ROLE';
         self.resolvePrincipal('ROLE', role, function(err, role) {
-          if (err || !role) return cb(err, role);
+          if (err || !role) return callback(err, role);
           self.roleMappingModel.findOne({
             where: {
               roleId: role.id,
@@ -663,11 +678,10 @@ module.exports = function(ACL) {
               principalId: String(principalId),
             },
           }, function(err, result) {
-            if (err) return cb(err);
-            return cb(null, !!result);
+            if (err) return callback(err);
+            return callback(null, !!result);
           });
         });
       });
-    return cb.promise;
   };
 };

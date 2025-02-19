@@ -80,10 +80,15 @@ module.exports = function(Change) {
    */
 
   Change.rectifyModelChanges = function(modelName, modelIds, callback) {
+    if (!callback) {
+      return new Promise((resolve, reject) => {
+        this.rectifyModelChanges(modelName, modelIds, (err, result) => 
+          err ? reject(err) : resolve(result)
+        )
+      })
+    }
     const Change = this;
     const errors = [];
-
-    callback = callback || utils.createPromiseCallback();
 
     const tasks = modelIds.map(function(id) {
       return function(cb) {
@@ -119,7 +124,6 @@ module.exports = function(Change) {
       }
       callback();
     });
-    return callback.promise;
   };
 
   /**
@@ -146,8 +150,12 @@ module.exports = function(Change) {
    */
 
   Change.findOrCreateChange = function(modelName, modelId, callback) {
+    if (!callback) {
+      return new Promise((resolve, reject) => {
+        this.findOrCreateChange(modelName, modelId, (err, result) => err ? reject(err) : resolve(result))
+      })
+    }
     assert(this.registry.findModel(modelName), modelName + ' does not exist');
-    callback = callback || utils.createPromiseCallback();
     const id = this.idForModel(modelName, modelId);
     const Change = this;
 
@@ -165,7 +173,6 @@ module.exports = function(Change) {
         Change.updateOrCreate(ch, callback);
       }
     });
-    return callback.promise;
   };
 
   /**
@@ -176,19 +183,22 @@ module.exports = function(Change) {
    * @param {Change} change
    */
 
-  Change.prototype.rectify = function(cb) {
+  Change.prototype.rectify = function(callback) {
+    if (!callback) {
+      return new Promise((resolve, reject) => {
+        this.rectify((err, result) => err ? reject(err) : resolve(result))
+      })
+    }
     const change = this;
     const currentRev = this.rev;
 
     change.debug('rectify change');
 
-    cb = cb || utils.createPromiseCallback();
-
     const model = this.getModelCtor();
     const id = this.getModelId();
 
     model.findById(id, function(err, inst) {
-      if (err) return cb(err);
+      if (err) return callback(err);
 
       if (inst) {
         inst.fillCustomChangeProperties(change, function() {
@@ -200,13 +210,11 @@ module.exports = function(Change) {
       }
     });
 
-    return cb.promise;
-
     function prepareAndDoRectify(rev) {
       // avoid setting rev and prev to the same value
       if (currentRev === rev) {
         change.debug('rev and prev are equal (not updating anything)');
-        return cb(null, change);
+        return callback(null, change);
       }
 
       // FIXME(@bajtos) Allow callers to pass in the checkpoint value
@@ -214,7 +222,7 @@ module.exports = function(Change) {
       // That will enable `rectifyAll` to cache the checkpoint value
       change.constructor.getCheckpointModel().current(
         function(err, checkpoint) {
-          if (err) return cb(err);
+          if (err) return callback(err);
           doRectify(checkpoint, rev);
         },
       );
@@ -225,7 +233,7 @@ module.exports = function(Change) {
         if (currentRev === rev) {
           change.debug('ASSERTION FAILED: Change currentRev==rev ' +
             'should have been already handled');
-          return cb(null, change);
+          return callback(null, change);
         } else {
           change.rev = rev;
           change.debug('updated revision (was ' + currentRev + ')');
@@ -258,9 +266,9 @@ module.exports = function(Change) {
       if (change.prev === Change.UNKNOWN) {
         // this occurs when a record of a change doesn't exist
         // and its current revision is null (not found)
-        change.remove(cb);
+        change.remove(callback);
       } else {
-        change.save(cb);
+        change.save(callback);
       }
     }
   };
@@ -272,19 +280,22 @@ module.exports = function(Change) {
    * @param {String} rev The current revision
    */
 
-  Change.prototype.currentRevision = function(cb) {
-    cb = cb || utils.createPromiseCallback();
+  Change.prototype.currentRevision = function(callback) {
+    if (!callback) {
+      return new Promise((resolve, reject) => {
+        this.currentRevision((err, result) => err ? reject(err) : resolve(result))
+      })
+    }
     const model = this.getModelCtor();
     const id = this.getModelId();
     model.findById(id, function(err, inst) {
-      if (err) return cb(err);
+      if (err) return callback(err);
       if (inst) {
-        cb(null, Change.revisionForInst(inst));
+        callback(null, Change.revisionForInst(inst));
       } else {
-        cb(null, null);
+        callback(null, null);
       }
     });
-    return cb.promise;
   };
 
   /**

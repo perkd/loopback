@@ -67,7 +67,9 @@ module.exports = function(Role) {
             callback = query;
             query = {};
           } else {
-            callback = utils.createPromiseCallback();
+            return new Promise((resolve, reject) => {
+              this[rel](query, (err, result) => err ? reject(err) : resolve(result))
+            })
           }
         }
         query = query || {};
@@ -110,7 +112,6 @@ module.exports = function(Role) {
             callback(null, []);
           });
         }
-        return callback.promise;
       };
     });
 
@@ -234,7 +235,11 @@ module.exports = function(Role) {
     principalType = principalType || Principal.USER;
 
     assert(modelClass, 'Model class is required');
-    if (!callback) callback = utils.createPromiseCallback();
+    if (!callback) {
+      return new Promise((resolve, reject) => {
+        this.isOwner(modelClass, modelId, userId, principalType, options, (err, result) => err ? reject(err) : resolve(result))
+      })
+    }
 
     debug('isOwner(): %s %s userId: %s principalType: %s',
       modelClass && modelClass.modelName, modelId, userId, principalType);
@@ -428,7 +433,11 @@ module.exports = function(Role) {
    * @promise
    */
   Role.isAuthenticated = function isAuthenticated(context, callback) {
-    if (!callback) callback = utils.createPromiseCallback();
+    if (!callback) {
+      return new Promise((resolve, reject) => {
+        this.isAuthenticated(context, (err, result) => err ? reject(err) : resolve(result))
+      })
+    }
     process.nextTick(function() {
       if (callback) callback(null, context.isAuthenticated());
     });
@@ -459,22 +468,15 @@ module.exports = function(Role) {
    * @promise
    */
   Role.isInRole = function(role, context, callback) {
+    if (!callback) {
+      return new Promise((resolve, reject) => {
+        this.isInRole(role, context, (err, result) => err ? reject(err) : resolve(result))
+      })
+    }
     context.registry = this.registry;
     if (!(context instanceof AccessContext)) {
       context = new AccessContext(context);
     }
-
-    if (!callback) {
-      callback = utils.createPromiseCallback();
-      // historically, isInRole is returning the Role instance instead of true
-      // we are preserving that behaviour for callback-based invocation,
-      // but fixing it when invoked in Promise mode
-      callback.promise = callback.promise.then(function(isInRole) {
-        return !!isInRole;
-      });
-    }
-
-    this.resolveRelatedModels();
 
     debug('isInRole(): %s', role);
     context.debug();
@@ -571,12 +573,9 @@ module.exports = function(Role) {
    */
   Role.getRoles = function(context, options, callback) {
     if (!callback) {
-      if (typeof options === 'function') {
-        callback = options;
-        options = {};
-      } else {
-        callback = utils.createPromiseCallback();
-      }
+      return new Promise((resolve, reject) => {
+        this.getRoles(context, options, (err, result) => err ? reject(err) : resolve(result))
+      })
     }
     if (!options) options = {};
 
@@ -659,8 +658,27 @@ module.exports = function(Role) {
       debug('getRoles() returns: %j %j', err, roles);
       if (callback) callback(err, roles);
     });
-    return callback.promise;
   };
 
   Role.validatesUniquenessOf('name', {message: 'already exists'});
+
+  Role.prototype.users = function(cb) {
+    if (!cb) {
+      return new Promise((resolve, reject) => {
+        this.users((err, result) => err ? reject(err) : resolve(result))
+      })
+    }
+
+    this.constructor.resolveRelatedModels();
+    const userModel = this.constructor.userModel;
+    const roleMappingModel = this.constructor.roleMappingModel;
+    
+    roleMappingModel.find({
+      where: {roleId: this.id, principalType: RoleMapping.USER}
+    }, function(err, mappings) {
+      if (err) return cb(err);
+      const userIds = mappings.map(m => m.principalId);
+      userModel.find({where: {id: {inq: userIds}}}, cb);
+    });
+  };
 };
