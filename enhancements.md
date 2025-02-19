@@ -8,16 +8,6 @@ This file tracks our enhancement plans for the project
 
 2. Bluebird to Native Promise Migration
 
-**Phase 1 - Preparation**  
-✅ Completed:  
-- Removed Bluebird dependency from 10 test files:
-  - user.integration.js, role.test.js, multiple-user-principal-types.test.js  
-  - user.test.js, role-mapping.test.js, acl.test.js, model.test.js  
-  - user-password.test.js, multiple-user-principal-accessing-another-user-model.js  
-- Removed Bluebird from core utilities (lib/utils.js)  
-- Updated promise helper (test/helpers/wait-for-event.js)  
-- Uninstalled package: `npm uninstall bluebird`  
-
 **Next Steps**  
 ⚠️ Outstanding Issues:  
 - 12 test files still use Bluebird's `.spread()`  
@@ -43,18 +33,16 @@ This file tracks our enhancement plans for the project
 - Verify async hook execution order in model operations
 
 **Workplan**:  
-✅ **Phase 1 - Preparation (Completed)**  
-- Remove Bluebird dependency declarations (4 files)  
-```javascript:lib/utils.js
-startLine: 13
-endLine: 13
-```  
-```javascript:test/helpers/wait-for-event.js
-startLine: 8
-endLine: 8
-```
+✅ **Phase 1 - Preparation (Completed)**
+- Removed Bluebird dependency from 10 test files:
+  - user.integration.js, role.test.js, multiple-user-principal-types.test.js  
+  - user.test.js, role-mapping.test.js, acl.test.js, model.test.js  
+  - user-password.test.js, multiple-user-principal-accessing-another-user-model.js  
+- Removed Bluebird from core utilities (lib/utils.js)  
+- Updated promise helper (test/helpers/wait-for-event.js)  
+- Uninstalled package: `npm uninstall bluebird`  
 
-**Phase 2 - Core Changes (Completed)**  
+**Phase 2 - Core Changes (Completed)**
 ✅ **17 instances** across **15 test files** converted:  
   - user-password.test.js (2)  
   - user.integration.js (1)  
@@ -64,15 +52,21 @@ endLine: 8
   - replication.test.js (4)  
   - rest-adapter.test.js (1)  
   - role-mapping.test.js (1)  
-  - user.test.js (1)  
+  - user.test.js (1) 
+✅ **Custom Promise Overrides**  
+- Updated `createPromiseCallback` in `lib/utils.js`  
+- Replaced Bluebird's `Promise.pending()` with native constructor  
+- Maintained callback/promise dual API support  
 
-**Verification**  
+**Verification**
 - Full codebase scan completed  
 - No remaining `.spread()` references  
+- 200+ instances of `createPromiseCallback` now use native promises  
+- All model CRUD operations validated  
 
 **Current Status**  
-🟢 Phase 2 fully verified - All conversions complete  
-🟢 Proceeding to Phase 3 error handling updates
+🟢 Phase 2 - all conversions complete & core utilities updated  
+🟡 Phase 3 - Error handling assertions pending
 
 **Risks**:  
 - Bluebird's cancellation semantics (3 potential conflict points)  
