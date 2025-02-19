@@ -635,9 +635,7 @@ describe('role model', function() {
               {content: 'secondMessage', receiverId: receiver.id},
               {content: 'thirdMessage'},
             ];
-            return Promise.map(messages, msg => {
-              return Message.create(msg);
-            });
+            return Promise.all(messages.map(msg => Message.create(msg)));
           })
           .then(messages => {
             return Promise.all([
@@ -702,9 +700,7 @@ describe('role model', function() {
             {content: 'secondMessage', receiverId: receiver.id},
             {content: 'thirdMessage'},
           ];
-          return Promise.map(messages, msg => {
-            return Message.create(msg);
-          });
+          return Promise.all(messages.map(msg => Message.create(msg)));
         })
         .then(messages => {
           return Promise.all([
@@ -738,9 +734,7 @@ describe('role model', function() {
               {content: 'secondMessage', receiverId: receiver.id},
               {content: 'thirdMessage'},
             ];
-            return Promise.map(messages, msg => {
-              return Message.create(msg);
-            });
+            return Promise.all(messages.map(msg => Message.create(msg)));
           })
           .then(messages => {
             return Promise.all([
@@ -759,14 +753,13 @@ describe('role model', function() {
       });
 
     // helpers
-    function givenUsers() {
-      return Promise.map(users, user => {
-        return User.create(user);
-      })
-        .then(users => {
-          sender = users[0];
-          receiver = users[1];
+    function givenUsers(count) {
+      return Promise.all(Array.from({length: count}, (_, i) => {
+        return User.create({
+          email: `user${i}@example.com`,
+          password: 'password'
         });
+      }));
     }
 
     function isOwnerForMessage(user, msg) {

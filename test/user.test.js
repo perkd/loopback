@@ -39,7 +39,7 @@ describe('User', function() {
   // the tests were written correctly, it turns out that's not the case :(
   let app = null;
 
-  beforeEach(function setupAppAndModels() {
+  beforeEach(function setupAppAndModels(done) {
     // override the global app object provided by test/support.js
     // and create a local one that does not share state with other tests
     app = loopback({localRegistry: true, loadBuiltinModels: true});
@@ -93,13 +93,21 @@ describe('User', function() {
     app.use(loopback.rest());
 
     // create 2 users: with and without verified email
-    return Promise.map(
-      [validCredentials, validCredentialsEmailVerified],
-      credentials => User.create(credentials),
-    ).then(([user1, user2]) => {
-      validCredentialsUser = user = user1;
-      validCredentialsEmailVerifiedUser = user2;
+    return Promise.all([
+      User.create(validCredentials),
+      User.create(validCredentialsEmailVerified)
+    ]).then(([user1, user2]) => {
+      validCredentialsUser = user = user1
+      validCredentialsEmailVerifiedUser = user2
     });
+
+    return Promise.all([User.destroyAll(), app.destroyAll()])
+      .then(() => createApp())
+      .then(app => {
+        currentApp = app;
+        done();
+      })
+      .catch(done);
   });
 
   describe('User.create', function() {

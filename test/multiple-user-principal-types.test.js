@@ -461,7 +461,7 @@ describe('Multiple users with custom principalType', function() {
                   id: album.id,
                 };
               });
-              return Promise.map(invalidContexts, context => {
+              return Promise.all(invalidContexts.map(context => {
                 return Role.isInRole(Role.OWNER, context)
                   .then(isOwner => {
                     return {
@@ -469,7 +469,7 @@ describe('Multiple users with custom principalType', function() {
                       isOwner,
                     };
                   });
-              });
+              }));
             })
             .then(result => {
               expect(result).to.eql([
@@ -511,9 +511,9 @@ describe('Multiple users with custom principalType', function() {
               {content: 'fourthMessage', customerId: userFromAnotherModel.id},
               {content: 'fifthMessage'},
             ];
-            return Promise.map(messages, msg => {
+            return Promise.all(messages.map(msg => {
               return Message.create(msg);
-            })
+            }))
               .then(messages => {
                 return Promise.all([
                   isOwnerForMessage(userFromOneModel, messages[0]),

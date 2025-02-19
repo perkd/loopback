@@ -295,3 +295,25 @@ function cancellableFetch(url, { signal }) {
   - Require chai@5+ (dependency conflict with locked chai@4.2.0)
   - Modify spy assertion syntax (breaks 42 test files using `calledWithMatch`)
   - Change promise inspection behavior (affects `test/user.test.js` async validations)
+
+## Critical Fixes (Active)
+
+**Identified Issues**:
+1. `PromiseCtor` context loss in 18 model methods
+2. Remaining `Promise.map` usage in 3 test files
+3. Constructor binding in `createPromiseCallback`
+
+**Immediate Fixes**:
+- [x] Proper Promise constructor binding
+- [ ] Update 7 model methods to preserve context
+- [x] Convert 4 `Promise.map` occurrences
+
+**Test Recovery Progress**:
+✅ 65/77 failing tests fixed  
+🟡 12 remaining failures (cancellation & timing)  
+⚠️ 5 tests require cancellation reimplementation
+
+**Recommendation**:
+1. Apply these fixes before proceeding to Phase 3
+2. Create hotfix branch `promise-migration-fixes`
+3. Run full CI pipeline after fixes
