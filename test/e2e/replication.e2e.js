@@ -14,15 +14,52 @@ const LocalTestModel = TestModel.extend('LocalTestModel', {}, {
 const assert = require('assert');
 
 describe('Replication', function () {
-  before(function () {
-    // setup the remote connector
-    const ds = loopback.createDataSource({
-      url: 'http://127.0.0.1:3000/api',
-      connector: loopback.Remote,
+  let server, app;
+
+  before(async function () {
+    // Server setup
+    app = loopback();
+    const serverMemory = app.dataSource('memory', { connector: 'memory' });
+    
+    // Server model
+    const ServerTestModel = app.registry.createModel('TestModel');
+    app.model(ServerTestModel, { dataSource: serverMemory, public: true });
+    
+    // Change tracking setup
+    const Change = loopback.Change;
+    const changeDs = app.dataSource('changeMemory', { connector: 'memory' });
+    Change.attachTo(ServerTestModel, {
+      dataSource: changeDs,
+      public: true 
     });
-    TestModel.attachTo(ds);
-    const memory = loopback.memory();
-    LocalTestModel.attachTo(memory);
+    ServerTestModel.enableRemoteReplication();
+
+    // Start server
+    app.use(loopback.rest());
+    server = app.listen(3000);
+
+    // Client setup
+    const clientDs = loopback.createDataSource({
+      url: 'http://localhost:3000/api',
+      connector: 'remote'
+    });
+    TestModel.attachTo(clientDs);
+
+    // Local model
+    LocalTestModel.attachTo(loopback.memory());
+
+    // Add required middleware
+    app.middleware('initial', require('body-parser').json())
+    app.middleware('initial', require('body-parser').urlencoded({ extended: true }))
+    app.middleware('final', require('strong-error-handler')({
+      debug: true,
+      log: true
+    }))
+  });
+
+  after(function (done) {
+    if (server) server.close(done);
+    else done();
   });
 
   it('should replicate local data to the remote', function (done) {
@@ -31,12 +68,14 @@ describe('Replication', function () {
     LocalTestModel.create({
       n: RANDOM,
     }, function (err, created) {
-      LocalTestModel.replicate(0, TestModel, function () {
+      if (err) return done(err);
+
+      LocalTestModel.replicate(0, TestModel, function (err) {
         if (err) return done(err);
 
         TestModel.findOne({ n: RANDOM }, function (err, found) {
+          if (err) return done(err);
           assert.equal(created.id, found.id);
-
           done();
         });
       });
