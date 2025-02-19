@@ -7,12 +7,6 @@
 const loopback = require('../../../../index');
 const PersistedModel = loopback.PersistedModel;
 
-exports.TestModel = PersistedModel.extend('TestModel', {
-  id: {type: String, id: true, defaultFn: 'uuid', generated: true, required: true},
-  foo: String
-}, {
+exports.TestModel = PersistedModel.extend('TestModel', {}, {
   trackChanges: true,
-  plural: 'TestModels',
-  forceId: false,
-  validateUpsert: false
 });
