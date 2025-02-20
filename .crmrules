@@ -10,6 +10,7 @@
 - use promises by default unless explicitly testing callback functionality
 - when explicitly migrating test scripts from callback to promises:
    - comment out tests that are stated explicitly for testing callback functionality (for legacy documentation)
+- test timeouts mostly due to unresolved promises or logic errors, not slow response. Refrain from increasing timeouts
 
 # Loopback Dependencies
 - assume these packages uses native promises:
