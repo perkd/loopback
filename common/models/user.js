@@ -745,12 +745,13 @@ module.exports = function(User) {
    * @promise
    */
 
-  User.prototype.verify = function(verifyOptions, options) {
-    if (typeof options === 'function') {
+  User.prototype.verify = function(verifyOptions, options, cb) {
+    if (cb === undefined && typeof options === 'function') {
+      cb = options
       options = undefined
     }
 
-    return new Promise((resolve, reject) => {
+    const verifyPromise = new Promise((resolve, reject) => {
       const user = this
       const userModel = this.constructor
       const registry = userModel.registry
@@ -878,6 +879,16 @@ module.exports = function(User) {
         }
       }
     })
+
+    // Support both callback and promise styles
+    if (cb) {
+      verifyPromise
+        .then(result => cb(null, result))
+        .catch(err => cb(err))
+      return
+    }
+
+    return verifyPromise
   }
 
   function createVerificationEmailBody(verifyOptions, options, cb) {
