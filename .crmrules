@@ -1,8 +1,17 @@
 
-## Migration Guidelines
+# Migration Guidelines
 - use the `enhancements.md` file to guide the migration
 - always verify changes against original logic in the corresponding file (with '-org' suffix) in the 'original' folder where available
+- files in the 'original' folder are not modified, only used for reference
+- use async/await where possible when using native promises
 
-## Test Scripts
+# Test Scripts
 - do not modify test scripts to pass tests, unless it is verifed that test script is incorrect
 - use promises by default unless explicitly testing callback functionality
+- when explicitly migrating test scripts from callback to promises:
+   - comment out tests that are stated explicitly for testing callback functionality (for legacy documentation)
+
+# Loopback Dependencies
+- assume these packages uses native promises:
+    - loopback-datasource-juggler
+    - strong-remoting

@@ -215,6 +215,17 @@ User.prototype.verify = function(options, cb) {
    - [ ] Update 12 API documentation comments to reflect that all methods now exclusively return promises.  
    - [ ] Create updated migration examples that demonstrate promise-only usage (e.g. removal of dual API support).
 
+5. **Pending File Conversions**  
+   The following production files still use callback-based implementations and must be updated to a promise-only API (sorted from lowest dependency to highest):  
+   - **common/models/checkpoint.js**  
+     • Functions like `bumpLastSeq` use callbacks for asynchronous control.  
+   - **common/models/acl.js**  
+     • Methods such as `isMappedToRole` maintain a callback route when one is provided.  
+   - **common/models/change.js**  
+     • Functions like `rectify`, `findOrCreateChange`, and `currentRevision` still use callbacks (with dual callback/promise support).  
+   - **lib/persisted-model.js**  
+     • Methods such as `replicate` and `tryReplicate` currently rely on callbacks (and use `async.waterfall`).
+
 **Current Progress:**  
 ✅ 65% of error assertions updated  
 🟡 Cancellation migration and callback elimination are in progress  
