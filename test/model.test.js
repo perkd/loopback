@@ -9,7 +9,6 @@ const async = require('async');
 const describe = require('./util/describe');
 const loopback = require('../');
 const ACL = loopback.ACL;
-const defineModelTestsWithDataSource = require('./util/model-tests');
 const PersistedModel = loopback.PersistedModel;
 const TaskEmitter = require('strong-task-emitter');
 const request = require('supertest');
@@ -17,14 +16,74 @@ const request = require('supertest');
 const expect = require('./helpers/expect');
 
 describe('Model / PersistedModel', function() {
-  defineModelTestsWithDataSource({
-    dataSource: {
-      connector: loopback.Memory,
-    },
+  const dataSource = loopback.createDataSource({
+    connector: loopback.Memory,
   });
+  
+  const User = PersistedModel.extend('User', {
+    first: String,
+    last: String,
+    age: Number,
+    password: String,
+    gender: String,
+    domain: String,
+    email: String
+  });
+  User.attachTo(dataSource);
+
+  describe('Model.create([data], [callback])', function () {
+    it('Create an instance of Model with given data and save to the attached data source', function () {
+      return User.create({ first: 'Joe', last: 'Bob' })
+        .then(user => {
+          assert(user instanceof User)
+        })
+    })
+  })
+
+  describe('model.save([options], [callback])', function () {
+    it('Save an instance of a Model to the attached data source', function () {
+      const joe = new User({ first: 'Joe', last: 'Bob' })
+      return joe.save()
+        .then(user => {
+          assert(user.id)
+          assert(!user.errors)
+        })
+    })
+  })
+
+  describe('model.updateAttributes(data, [callback])', function () {
+    it('Save specified attributes to the attached data source', function () {
+      return User.create({ first: 'joe', age: 100 })
+        .then(user => {
+          assert.equal(user.first, 'joe')
+          return user.updateAttributes({
+            first: 'updatedFirst',
+            last: 'updatedLast',
+          })
+        })
+        .then(updatedUser => {
+          assert.equal(updatedUser.first, 'updatedFirst')
+          assert.equal(updatedUser.last, 'updatedLast')
+          assert.equal(updatedUser.age, 100)
+        })
+    })
+  })
+
+  describe('Model.upsert(data, callback)', function () {
+    it('Update when record with id=data.id found, insert otherwise', function () {
+      return User.upsert({ first: 'joe', id: 7 })
+        .then(user => {
+          assert.equal(user.first, 'joe')
+          return User.upsert({ first: 'bob', id: 7 })
+        })
+        .then(updatedUser => {
+          assert.equal(updatedUser.first, 'bob')
+        })
+    })
+  })
 
   describe('Model.validatesUniquenessOf(property, options)', function() {
-    it('Ensure the value for `property` is unique', function(done) {
+    it('Ensure the value for `property` is unique', function() {
       const User = PersistedModel.extend('ValidatedUser', {
         'first': String,
         'last': String,
@@ -46,14 +105,15 @@ describe('Model / PersistedModel', function() {
       const joe = new User({email: 'joe@joe.com'});
       const joe2 = new User({email: 'joe@joe.com'});
 
-      joe.save(function() {
-        joe2.save(function(err) {
-          assert(err, 'should get a validation error');
-          assert(joe2.errors.email, 'model should have email error');
-
-          done();
-        });
-      });
+      return joe.save()
+        .then(() => joe2.save())
+        .then(
+          () => { throw new Error('Should have rejected') },
+          err => {
+            assert(err, 'should get validation error')
+            assert(joe2.errors.email)
+          }
+        )
     });
   });
 
@@ -66,10 +126,8 @@ describe('Model / PersistedModel', function() {
 
       MyModel.attachTo(dataSource);
 
-      MyModel.find(function(err, results) {
-        assert(results.length === 0,
-          'should have data access methods after attaching to a data source');
-      });
+      return MyModel.find()
+        .then(results => assert(results.length === 0))
     });
   });
 });
@@ -130,165 +188,126 @@ describe.onServer('Remote Methods', function() {
   });
 
   describe('Model.create(data, callback)', function() {
-    it('creates model', function(done) {
-      const anObject = {first: 'June'};
-      request(app)
+    it('creates model', function() {
+      const anObject = {first: 'June'}
+      return request(app)
         .post('/users')
-        // sends an object
         .send(anObject)
         .expect('Content-Type', /json/)
         .expect(200)
-        .end(function(err, res) {
-          if (err) return done(err);
-          expect(res.body).to.have.property('id');
-          expect(res.body).to.have.property('first', 'June');
-          done();
-        });
-    });
-    // batch create must be tested with a remote request because there are
-    // coercion being done on strong-remoting side
-    it('creates array of models', function(done) {
+        .then(res => {
+          expect(res.body).to.have.property('id')
+          expect(res.body).to.have.property('first', 'June')
+        })
+    })
+
+    it('creates array of models', function() {
       const arrayOfObjects = [
         {first: 'John'}, {first: 'Jane'},
-      ];
-      request(app)
+      ]
+      return request(app)
         .post('/users')
-        // sends an array of objects
         .send(arrayOfObjects)
         .expect('Content-Type', /json/)
         .expect(200)
-        .end(function(err, res) {
-          if (err) return done(err);
-          expect(res.body.length).to.eql(2);
-          expect(res.body).to.have.nested.property('[0].first', 'John');
-          expect(res.body).to.have.nested.property('[1].first', 'Jane');
-          done();
-        });
-    });
+        .then(res => {
+          expect(res.body.length).to.eql(2)
+          expect(res.body).to.have.nested.property('[0].first', 'John')
+          expect(res.body).to.have.nested.property('[1].first', 'Jane')
+        })
+    })
 
-    it('creates related models', function(done) {
-      User.create({first: 'Bob'}, function(err, res) {
-        expect(res).to.have.property('id');
-        const aPost = {title: 'A story', content: 'Once upon a time'};
-        request(app)
-          .post('/users/' + res.id + '/posts')
-          .send(aPost)
-          .expect('Content-Type', /json/)
-          .expect(200)
-          .end(function(err, result) {
-            if (err) return done(err);
-            expect(result.body).to.have.property('id');
-            expect(result.body).to.have.property('title', aPost.title);
-            expect(result.body).to.have.property('content', aPost.content);
-            done();
-          });
-      });
-    });
+    it('creates related models', function() {
+      return User.create({first: 'Bob'})
+        .then(res => {
+          const aPost = {title: 'A story', content: 'Once upon a time'}
+          return request(app)
+            .post(`/users/${res.id}/posts`)
+            .send(aPost)
+            .expect('Content-Type', /json/)
+            .expect(200)
+        })
+        .then(result => {
+          expect(result.body).to.have.property('id')
+          expect(result.body).to.have.property('title', 'A story')
+          expect(result.body).to.have.property('content', 'Once upon a time')
+        })
+    })
 
-    it('creates array of hasMany models', function(done) {
-      User.create({first: 'Bob'}, function(err, res) {
-        expect(res).to.have.property('id');
-        const twoPosts = [
-          {title: 'One story', content: 'Content #1'},
-          {title: 'Two story', content: 'Content #2'},
-        ];
-        request(app)
-          .post('/users/' + res.id + '/posts')
-          .send(twoPosts)
-          .expect('Content-Type', /json/)
-          .expect(200)
-          .end(function(err, result) {
-            if (err) return done(err);
-            expect(result.body.length).to.eql(2);
-            expect(result.body).to.have.nested.property('[0].title', 'One story');
-            expect(result.body).to.have.nested.property('[1].title', 'Two story');
-            done();
-          });
-      });
-    });
+    it('creates array of hasMany models', function() {
+      return User.create({first: 'Bob'})
+        .then(res => {
+          const twoPosts = [
+            {title: 'One story', content: 'Content #1'},
+            {title: 'Two story', content: 'Content #2'},
+          ]
+          return request(app)
+            .post(`/users/${res.id}/posts`)
+            .send(twoPosts)
+            .expect('Content-Type', /json/)
+            .expect(200)
+        })
+        .then(result => {
+          expect(result.body.length).to.eql(2)
+          expect(result.body).to.have.nested.property('[0].title', 'One story')
+          expect(result.body).to.have.nested.property('[1].title', 'Two story')
+        })
+    })
 
-    it('rejects array of obj input for hasOne relation', function(done) {
-      const Friend = app.registry.createModel('friend', {name: String});
-      app.model(Friend, {dataSource: 'db'});
-      User.hasOne(Friend);
+    it('rejects array of obj input for hasOne relation', function() {
+      const Friend = app.registry.createModel('friend', {name: String})
+      app.model(Friend, {dataSource: 'db'})
+      User.hasOne(Friend)
 
-      User.create({first: 'Bob'}, function(err, res) {
-        expect(res).to.have.property('id');
-        const twoFriends = [
-          {name: 'bob'},
-          {name: 'rob'},
-        ];
-        request(app)
-          .post('/users/' + res.id + '/friend')
-          .send(twoFriends)
-          .expect('Content-Type', /json/)
-          .expect(400)
-          .end(function(err, result) {
-            if (err) return done(err);
-            const resError = result.body.error;
-            expect(resError.message).to.match(/value(.*?)not(.*?)object(\.?)/i);
-            done();
-          });
-      });
-    });
-  });
+      return User.create({first: 'Bob'})
+        .then(res => {
+          const twoFriends = [
+            {name: 'bob'},
+            {name: 'rob'},
+          ]
+          return request(app)
+            .post(`/users/${res.id}/friend`)
+            .send(twoFriends)
+            .expect('Content-Type', /json/)
+            .expect(400)
+        })
+        .then(result => {
+          const resError = result.body.error
+          expect(resError.message).to.match(/value(.*?)not(.*?)object(\.?)/i)
+        })
+    })
+  })
   // destoryAll is not exposed as a remoteMethod by default
   describe('Model.destroyAll(callback)', function() {
-    it('Delete all Model instances from data source', function(done) {
-      (new TaskEmitter())
-        .task(User, 'create', {first: 'jill'})
-        .task(User, 'create', {first: 'bob'})
-        .task(User, 'create', {first: 'jan'})
-        .task(User, 'create', {first: 'sam'})
-        .task(User, 'create', {first: 'suzy'})
-        .on('done', function() {
-          User.count(function(err, count) {
-            User.destroyAll(function() {
-              User.count(function(err, count) {
-                assert.equal(count, 0);
-
-                done();
-              });
-            });
-          });
-        });
+    it('Delete all Model instances from data source', function() {
+      return Promise.all([
+        User.create({first: 'jill'}),
+        User.create({first: 'bob'}),
+        User.create({first: 'jan'}),
+        User.create({first: 'sam'}),
+        User.create({first: 'suzy'})
+      ])
+        .then(() => User.count())
+        .then(initialCount => {
+          return User.destroyAll()
+            .then(() => User.count())
+            .then(finalCount => assert.equal(finalCount, 0))
+        })
     });
   });
 
   describe('Model.upsertWithWhere(where, data, callback)', function() {
-    it('Updates when a Model instance is retreived from data source', function(done) {
-      const taskEmitter = new TaskEmitter();
-      taskEmitter
-        .task(User, 'create', {first: 'jill', second: 'pill'})
-        .task(User, 'create', {first: 'bob', second: 'sob'})
-        .on('done', function() {
-          User.upsertWithWhere({second: 'pill'}, {second: 'jones'}, function(err, user) {
-            if (err) return done(err);
-            const id = user.id;
-            User.findById(id, function(err, user) {
-              if (err) return done(err);
-              assert.equal(user.second, 'jones');
-              done();
-            });
-          });
-        });
+    it('Updates when a Model instance exists', function() {
+      return User.create({first: 'jill', second: 'pill'})
+        .then(() => User.upsertWithWhere({second: 'pill'}, {second: 'jones'}))
+        .then(user => User.findById(user.id))
+        .then(updated => assert.equal(updated.second, 'jones'))
     });
 
-    it('Creates when no Model instance is retreived from data source', function(done) {
-      const taskEmitter = new TaskEmitter();
-      taskEmitter
-        .task(User, 'create', {first: 'simon', second: 'somers'})
-        .on('done', function() {
-          User.upsertWithWhere({first: 'somers'}, {first: 'Simon'}, function(err, user) {
-            if (err) return done(err);
-            const id = user.id;
-            User.findById(id, function(err, user) {
-              if (err) return done(err);
-              assert.equal(user.first, 'Simon');
-              done();
-            });
-          });
-        });
+    it('Creates when no Model instance exists', function() {
+      return User.upsertWithWhere({first: 'somers'}, {first: 'Simon'})
+        .then(user => User.findById(user.id))
+        .then(created => assert.equal(created.first, 'Simon'))
     });
   });
 
