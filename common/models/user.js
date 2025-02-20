@@ -430,36 +430,29 @@ module.exports = function(User) {
    * @promise
    */
   User.changePassword = function(userId, oldPassword, newPassword, options, cb) {
-    if (cb === undefined && typeof options === 'function') {
-      cb = options;
-      options = undefined;
+    if (typeof options === 'function') {
+      cb = options
+      options = undefined
     }
     if (!cb) {
       return new Promise((resolve, reject) => {
-        this.changePassword(userId, oldPassword, newPassword, options, 
-          (err, result) => err ? reject(err) : resolve(result))
+        this.changePassword(userId, oldPassword, newPassword, options, (err, result) =>
+          err ? reject(err) : resolve(result)
+        )
       })
     }
 
-    // Make sure to use the constructor of the (sub)class
-    // where the method is invoked from (`this` instead of `User`)
+    // Use the instance method on the appropriate (sub)class.
     this.findById(userId, options, (err, inst) => {
-      if (err) return cb(err);
-
+      if (err) return cb(err)
       if (!inst) {
-        const err = new Error(`User ${userId} not found`);
-        Object.assign(err, {
-          code: 'USER_NOT_FOUND',
-          statusCode: 401,
-        });
-        return cb(err);
+        const err = new Error(`User ${userId} not found`)
+        Object.assign(err, {code: 'USER_NOT_FOUND', statusCode: 401})
+        return cb(err)
       }
-
-      inst.changePassword(oldPassword, newPassword, options, cb);
-    });
-
-    return cb.promise;
-  };
+      inst.changePassword(oldPassword, newPassword, options, cb)
+    })
+  }
 
   /**
    * Change this user's password (prototype/instance version).
@@ -473,32 +466,28 @@ module.exports = function(User) {
    * @promise
    */
   User.prototype.changePassword = function(oldPassword, newPassword, options, cb) {
-    if (cb === undefined && typeof options === 'function') {
-      cb = options;
-      options = undefined;
+    if (typeof options === 'function') {
+      cb = options
+      options = undefined
     }
     if (!cb) {
       return new Promise((resolve, reject) => {
-        this.changePassword(oldPassword, newPassword, options, 
-          (err, result) => err ? reject(err) : resolve(result))
+        this.changePassword(oldPassword, newPassword, options, (err, result) =>
+          err ? reject(err) : resolve(result)
+        )
       })
     }
 
     this.hasPassword(oldPassword, (err, isMatch) => {
-      if (err) return cb(err);
+      if (err) return cb(err)
       if (!isMatch) {
-        const err = new Error('Invalid current password');
-        Object.assign(err, {
-          code: 'INVALID_PASSWORD',
-          statusCode: 400,
-        });
-        return cb(err);
+        const err = new Error('Invalid current password')
+        Object.assign(err, {code: 'INVALID_PASSWORD', statusCode: 400})
+        return cb(err)
       }
-
-      this.setPassword(newPassword, options, cb);
-    });
-    return cb.promise;
-  };
+      this.setPassword(newPassword, options, cb)
+    })
+  }
 
   /**
    * Set this user's password after a password-reset request was made.
@@ -511,34 +500,53 @@ module.exports = function(User) {
    * @promise
    */
   User.setPassword = function(userId, newPassword, options, cb) {
-    assert(userId != null && userId !== '', 'userId is a required argument');
-    assert(!!newPassword, 'newPassword is a required argument');
+    assert(userId != null && userId !== '', 'userId is a required argument')
+    assert(!!newPassword, 'newPassword is a required argument')
 
-    if (cb === undefined && typeof options === 'function') {
-      cb = options;
-      options = undefined;
+    if (typeof options === 'function') {
+      cb = options
+      options = undefined
     }
-    cb = cb || utils.createPromiseCallback();
 
-    // Make sure to use the constructor of the (sub)class
-    // where the method is invoked from (`this` instead of `User`)
-    this.findById(userId, options, (err, inst) => {
-      if (err) return cb(err);
+    if (!cb) {
+      return new Promise((resolve, reject) => {
+        this.setPassword(userId, newPassword, options, (err, result) =>
+          err ? reject(err) : resolve(result)
+        )
+      })
+    }
 
-      if (!inst) {
-        const err = new Error(`User ${userId} not found`);
-        Object.assign(err, {
-          code: 'USER_NOT_FOUND',
-          statusCode: 401,
-        });
-        return cb(err);
+    // Validate token scope first. When the settings flag is enabled and an
+    // access token is provided, the token must have the 'reset-password' scope.
+    const tokenId = options && options.accessToken && options.accessToken.id
+    if (this.settings.restrictResetPasswordTokenScope && tokenId) {
+      const token = options.accessToken
+      if (!token.scopes || token.scopes.indexOf('reset-password') === -1) {
+        const err = new Error('Invalid token scope')
+        err.statusCode = 403
+        err.code = 'INVALID_TOKEN_SCOPE'
+        process.nextTick(() => cb(err))
+        return
       }
+    }
 
-      inst.setPassword(newPassword, options, cb);
-    });
+    try {
+      this.validatePassword(newPassword)
+    } catch (err) {
+      process.nextTick(() => cb(err))
+      return
+    }
 
-    return cb.promise;
-  };
+    this.findById(userId, options, (err, inst) => {
+      if (err) return cb(err)
+      if (!inst) {
+        const err = new Error(`User ${userId} not found`)
+        Object.assign(err, {code: 'USER_NOT_FOUND', statusCode: 401})
+        return cb(err)
+      }
+      inst.setPassword(newPassword, options, cb)
+    })
+  }
 
   /**
    * Set this user's password. The callers of this method
@@ -555,32 +563,35 @@ module.exports = function(User) {
   User.prototype.setPassword = function(newPassword, options, cb) {
     assert(!!newPassword, 'newPassword is a required argument')
 
-    if (cb === undefined && typeof options === 'function') {
+    if (typeof options === 'function') {
       cb = options
       options = undefined
     }
-    cb = cb || utils.createPromiseCallback()
+
+    if (!cb) {
+      return new Promise((resolve, reject) => {
+        this.setPassword(newPassword, options, (err, result) =>
+          err ? reject(err) : resolve(result)
+        )
+      })
+    }
 
     try {
       this.constructor.validatePassword(newPassword)
     } catch (err) {
-      cb(err)
-      return cb.promise
+      process.nextTick(() => cb(err))
+      return
     }
 
-    // We need to modify options passed to patchAttributes, but we don't want
-    // to modify the original options object passed to us by setPassword caller
     options = Object.assign({}, options)
-
-    // patchAttributes() does not allow callers to modify the password property
-    // unless "options.setPassword" is set.
     options.setPassword = true
 
     const delta = {password: newPassword}
-    this.patchAttributes(delta, options, (err) => cb(err))
-
-    return cb.promise
-  };
+    this.patchAttributes(delta, options, (err, updated) => {
+      if (err) return cb(err)
+      cb(null, updated)
+    })
+  }
 
   /**
    * Returns default verification options to use when calling User.prototype.verify()

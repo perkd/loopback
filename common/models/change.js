@@ -82,49 +82,65 @@ module.exports = function(Change) {
   Change.rectifyModelChanges = function(modelName, modelIds, callback) {
     if (!callback) {
       return new Promise((resolve, reject) => {
-        this.rectifyModelChanges(modelName, modelIds, (err, result) => 
-          err ? reject(err) : resolve(result)
+        this.rectifyModelChanges(modelName, modelIds, (err, changes) => 
+          err ? reject(err) : resolve(changes)
         )
       })
     }
-    const Change = this;
-    const errors = [];
+    const Change = this
+    const errors = []
+    const trackedChanges = []
 
     const tasks = modelIds.map(function(id) {
       return function(cb) {
         Change.findOrCreateChange(modelName, id, function(err, change) {
-          if (err) return next(err);
-          change.rectify(next);
-        });
+          if (err) return next(err)
+          change.rectify(function(err, rectifiedChange) {
+            if (err) return next(err)
+            // Track both saved and removed changes (removed = null)
+            trackedChanges.push(rectifiedChange || {
+              id: change.id,
+              modelId: change.modelId,
+              modelName: change.modelName,
+              removed: true,
+            })
+            next()
+          })
+        })
 
         function next(err) {
           if (err) {
-            err.modelName = modelName;
-            err.modelId = id;
-            errors.push(err);
+            err.modelName = modelName
+            err.modelId = id
+            errors.push(err)
+            // Only continue if ignoreErrors is true
+            if (!Change.settings.ignoreErrors) {
+              return cb(err)
+            }
           }
-          cb();
+          cb()
         }
-      };
-    });
+      }
+    })
 
     async.parallel(tasks, function(err) {
-      if (err) return callback(err);
+      if (err) return callback(err)
       if (errors.length) {
         const desc = errors
           .map(function(e) {
-            return '#' + e.modelId + ' - ' + e.toString();
+            return '#' + e.modelId + ' - ' + e.toString()
           })
-          .join('\n');
+          .join('\n')
 
-        const msg = g.f('Cannot rectify %s changes:\n%s', modelName, desc);
-        err = new Error(msg);
-        err.details = {errors: errors};
-        return callback(err);
+        const msg = g.f('Cannot rectify %s changes:\n%s', modelName, desc)
+        err = new Error(msg)
+        err.details = {errors: errors}
+        return callback(err)
       }
-      callback();
-    });
-  };
+      // Filter out null changes unless specifically kept for tracking
+      callback(null, trackedChanges.filter(c => c))
+    })
+  }
 
   /**
    * Get an identifier for a given model.
@@ -152,28 +168,30 @@ module.exports = function(Change) {
   Change.findOrCreateChange = function(modelName, modelId, callback) {
     if (!callback) {
       return new Promise((resolve, reject) => {
-        this.findOrCreateChange(modelName, modelId, (err, result) => err ? reject(err) : resolve(result))
+        this.findOrCreateChange(modelName, modelId, (err, result) => 
+          err ? reject(err) : resolve(result)
+        )
       })
     }
-    assert(this.registry.findModel(modelName), modelName + ' does not exist');
-    const id = this.idForModel(modelName, modelId);
-    const Change = this;
+    assert(this.registry.findModel(modelName), modelName + ' does not exist')
+    const id = this.idForModel(modelName, modelId)
+    const Change = this
 
     this.findById(id, function(err, change) {
-      if (err) return callback(err);
+      if (err) return callback(err)
       if (change) {
-        callback(null, change);
+        callback(null, change)
       } else {
         const ch = new Change({
           id: id,
           modelName: modelName,
           modelId: modelId,
-        });
-        ch.debug('creating change');
-        Change.updateOrCreate(ch, callback);
+        })
+        ch.debug('creating change')
+        Change.updateOrCreate(ch, callback)
       }
-    });
-  };
+    })
+  }
 
   /**
    * Update (or create) the change with the current revision.
@@ -189,32 +207,32 @@ module.exports = function(Change) {
         this.rectify((err, result) => err ? reject(err) : resolve(result))
       })
     }
-    const change = this;
-    const currentRev = this.rev;
+    const change = this
+    const currentRev = this.rev
 
-    change.debug('rectify change');
+    change.debug('rectify change')
 
-    const model = this.getModelCtor();
-    const id = this.getModelId();
+    const model = this.getModelCtor()
+    const id = this.getModelId()
 
     model.findById(id, function(err, inst) {
-      if (err) return callback(err);
+      if (err) return callback(err)
 
       if (inst) {
         inst.fillCustomChangeProperties(change, function() {
-          const rev = Change.revisionForInst(inst);
-          prepareAndDoRectify(rev);
-        });
+          const rev = Change.revisionForInst(inst)
+          prepareAndDoRectify(rev)
+        })
       } else {
-        prepareAndDoRectify(null);
+        prepareAndDoRectify(null)
       }
-    });
+    })
 
     function prepareAndDoRectify(rev) {
       // avoid setting rev and prev to the same value
       if (currentRev === rev) {
-        change.debug('rev and prev are equal (not updating anything)');
-        return callback(null, change);
+        change.debug('rev and prev are equal (not updating anything)')
+        return callback(null, change)
       }
 
       // FIXME(@bajtos) Allow callers to pass in the checkpoint value
@@ -222,56 +240,56 @@ module.exports = function(Change) {
       // That will enable `rectifyAll` to cache the checkpoint value
       change.constructor.getCheckpointModel().current(
         function(err, checkpoint) {
-          if (err) return callback(err);
-          doRectify(checkpoint, rev);
+          if (err) return callback(err)
+          doRectify(checkpoint, rev)
         },
-      );
+      )
     }
 
     function doRectify(checkpoint, rev) {
       if (rev) {
         if (currentRev === rev) {
           change.debug('ASSERTION FAILED: Change currentRev==rev ' +
-            'should have been already handled');
-          return callback(null, change);
+            'should have been already handled')
+          return callback(null, change)
         } else {
-          change.rev = rev;
-          change.debug('updated revision (was ' + currentRev + ')');
+          change.rev = rev
+          change.debug('updated revision (was ' + currentRev + ')')
           if (change.checkpoint !== checkpoint) {
             // previous revision is updated only across checkpoints
-            change.prev = currentRev;
-            change.debug('updated prev');
+            change.prev = currentRev
+            change.debug('updated prev')
           }
         }
       } else {
-        change.rev = null;
-        change.debug('updated revision (was ' + currentRev + ')');
+        change.rev = null
+        change.debug('updated revision (was ' + currentRev + ')')
         if (change.checkpoint !== checkpoint) {
           // previous revision is updated only across checkpoints
           if (currentRev) {
-            change.prev = currentRev;
+            change.prev = currentRev
           } else if (!change.prev) {
-            change.debug('ERROR - could not determine prev');
-            change.prev = Change.UNKNOWN;
+            change.debug('ERROR - could not determine prev')
+            change.prev = Change.UNKNOWN
           }
-          change.debug('updated prev');
+          change.debug('updated prev')
         }
       }
 
       if (change.checkpoint != checkpoint) {
-        debug('update checkpoint to', checkpoint);
-        change.checkpoint = checkpoint;
+        debug('update checkpoint to', checkpoint)
+        change.checkpoint = checkpoint
       }
 
       if (change.prev === Change.UNKNOWN) {
         // this occurs when a record of a change doesn't exist
         // and its current revision is null (not found)
-        change.remove(callback);
+        change.remove(callback)
       } else {
-        change.save(callback);
+        change.save(callback)
       }
     }
-  };
+  }
 
   /**
    * Get a change's current revision based on current data.
@@ -286,17 +304,17 @@ module.exports = function(Change) {
         this.currentRevision((err, result) => err ? reject(err) : resolve(result))
       })
     }
-    const model = this.getModelCtor();
-    const id = this.getModelId();
+    const model = this.getModelCtor()
+    const id = this.getModelId()
     model.findById(id, function(err, inst) {
-      if (err) return callback(err);
+      if (err) return callback(err)
       if (inst) {
-        callback(null, Change.revisionForInst(inst));
+        callback(null, Change.revisionForInst(inst))
       } else {
-        callback(null, null);
+        callback(null, null)
       }
-    });
-  };
+    })
+  }
 
   /**
    * Create a hash of the given `string` with the `options.hashAlgorithm`.
@@ -428,75 +446,82 @@ module.exports = function(Change) {
    */
 
   Change.diff = function(modelName, since, remoteChanges, callback) {
-    callback = callback || utils.createPromiseCallback();
+    if (!callback) {
+      return new Promise((resolve, reject) => {
+        this.diff(modelName, since, remoteChanges, (err, result) => {
+          if (err) reject(err)
+          else resolve(result)
+        })
+      })
+    }
 
     if (!Array.isArray(remoteChanges) || remoteChanges.length === 0) {
-      callback(null, {deltas: [], conflicts: []});
-      return callback.promise;
+      callback(null, {deltas: [], conflicts: []})
+      return
     }
-    const remoteChangeIndex = {};
-    const modelIds = [];
+
+    const remoteChangeIndex = {}
+    const modelIds = []
     remoteChanges.forEach(function(ch) {
-      modelIds.push(ch.modelId);
-      remoteChangeIndex[ch.modelId] = new Change(ch);
-    });
+      modelIds.push(ch.modelId)
+      remoteChangeIndex[ch.modelId] = new Change(ch)
+    })
 
     // normalize `since`
-    since = Number(since) || 0;
+    since = Number(since) || 0
     this.find({
       where: {
         modelName: modelName,
         modelId: {inq: modelIds},
       },
     }, function(err, allLocalChanges) {
-      if (err) return callback(err);
-      const deltas = [];
-      const conflicts = [];
-      const localModelIds = [];
+      if (err) return callback(err)
+      const deltas = []
+      const conflicts = []
+      const localModelIds = []
 
       const localChanges = allLocalChanges.filter(function(c) {
-        return c.checkpoint >= since;
-      });
+        return c.checkpoint >= since
+      })
 
       localChanges.forEach(function(localChange) {
-        localChange = new Change(localChange);
-        localModelIds.push(localChange.modelId);
-        const remoteChange = remoteChangeIndex[localChange.modelId];
+        localChange = new Change(localChange)
+        localModelIds.push(localChange.modelId)
+        const remoteChange = remoteChangeIndex[localChange.modelId]
         if (remoteChange && !localChange.equals(remoteChange)) {
           if (remoteChange.conflictsWith(localChange)) {
-            remoteChange.debug('remote conflict');
-            localChange.debug('local conflict');
-            conflicts.push(localChange);
+            remoteChange.debug('remote conflict')
+            localChange.debug('local conflict')
+            conflicts.push(localChange)
           } else {
-            remoteChange.debug('remote delta');
-            deltas.push(remoteChange);
+            remoteChange.debug('remote delta')
+            deltas.push(remoteChange)
           }
         }
-      });
+      })
 
       modelIds.forEach(function(id) {
-        if (localModelIds.indexOf(id) !== -1) return;
+        if (localModelIds.indexOf(id) !== -1) return
 
-        const d = remoteChangeIndex[id];
+        const d = remoteChangeIndex[id]
         const oldChange = allLocalChanges.filter(function(c) {
-          return c.modelId === id;
-        })[0];
+          return c.modelId === id
+        })[0]
 
         if (oldChange) {
-          d.prev = oldChange.rev;
+          d.prev = oldChange.rev
         } else {
-          d.prev = null;
+          d.prev = null
         }
 
-        deltas.push(d);
-      });
+        deltas.push(d)
+      })
 
       callback(null, {
         deltas: deltas,
         conflicts: conflicts,
-      });
-    });
-    return callback.promise;
+      })
+    })
   };
 
   /**
