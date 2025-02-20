@@ -40,7 +40,7 @@ This file tracks our enhancement plans for the project
 🟢 Phase 1 - Preparation (Completed)
 🟢 Phase 2 - Core Changes (Completed)
 🟢 Phase 3 - All model methods using native promises (Completed)
-🟡 Phase 4 - Error Handling & Breaking Changes (In Progress)
+🟡 Phase 4 - Elimination of Callbacks in Production Code (In Progress)
 
 **Risks**:  
 - Bluebird's cancellation semantics (3 potential conflict points)  
@@ -191,137 +191,66 @@ User.prototype.verify = function(options, cb) {
 }
 ```
 
-## Phase 4 - Error Handling & Breaking Changes (In Progress)
+## Phase 4 - Elimination of Callbacks in Production Code (In Progress)
 
+#### Strategic Approach
 
-
-### Strategic Approach
 1. **Cancellation Pattern Migration**  
-   - [ ] Identify 3 cancellation usage points (role.js, user.js, acl.js)  
-   - [ ] Implement graceful degradation with warnings  
-   ```javascript:common/models/role.js
-   context.on('cancel', () => {
-     console.warn('Cancellation not supported - use AbortController instead');
-   });
-   ```
-   - [ ] Update 7 affected tests to skip cancellation checks  
+   - [ ] Remove callback-based implementations for cancellation in files such as `role.js`, `user.js`, and `acl.js`.  
+   - [ ] Fully adopt `AbortController` for cancellation, eliminating all callback fallbacks.  
+   - [ ] Update affected tests to no longer rely on callback-based cancellation checks.
 
 2. **Error Handling Updates**  
-   - [x] Convert 78 Bluebird-specific error assertions  
-   ```javascript:test/user.test.js
-   // Before: expect(err).to.be.an.instanceOf(Promise.CancellationError);
-   // After:  
-   expect(err.message).to.match(/cancell?ed/i);
-   ```
-   - [ ] Address stack trace differences in 15 test files  
+   - [x] Convert 78 Bluebird-specific error assertions.  
+   - [ ] Remove the fallback logic that accepts a callback—**all asynchronous methods will exclusively return native promises.**  
+   - [ ] Address stack trace differences in 15 test files now that callbacks are removed.
 
 3. **Concurrency Patterns**  
-   - [ ] Update 3 integration tests using Promise.settle()  
-   ```javascript:test/relations.integration.js
-   // Replace Bluebird's settle with allSettled polyfill
-   Promise.allSettled(promises).then(results => { /* ... */ });
-   ```
+   - [ ] Refactor all integration tests and production code to remove callback-based concurrency patterns.  
+   - [ ] Adopt `Promise.allSettled` and `async/await` constructs exclusively in place of callback-based orchestration.  
+   - [ ] Update the 3 failing integration tests to expect a promise-only API.
 
 4. **Documentation & Migration Guide**  
-   - [x] Added breaking changes section  
-   - [ ] Create cancellation migration examples  
-   - [ ] Update 12 API documentation comments  
+   - [x] Add a breaking changes section detailing the removal of callbacks.  
+   - [ ] Update 12 API documentation comments to reflect that all methods now exclusively return promises.  
+   - [ ] Create updated migration examples that demonstrate promise-only usage (e.g. removal of dual API support).
 
-**Current Progress**:  
+**Current Progress:**  
 ✅ 65% of error assertions updated  
-🟡 Cancellation migration in progress  
-⚠️ 3 concurrency tests failing  
+🟡 Cancellation migration and callback elimination are in progress  
+⚠️ 3 concurrency tests still failing due to residual callback usage
 
-**Estimated Timeline**:  
-- Error Handling: 3 days  
-- Cancellation Migration: 2 days  
-- Docs Update: 1 day  
+**Next Actions:**  
+1. Remove dual callback/promise support from all asynchronous methods so that they consistently return native promises.  
+2. Finalize the cancellation migration by fully implementing `AbortController` without any callback mechanisms.  
+3. Update all tests to match the new promise-only API contracts.
 
-**Blockers**:  
-- Finalize cancellation API replacement pattern (2 options under consideration)  
+**Estimated Timeline:**  
+- Error Handling Updates: 3 days  
+- Cancellation Migration & Callback Elimination: 2 days  
+- Documentation Updates: 1 day
 
-**Resolution**:  
-✅ Node 20's native Promise support resolves concurrency issues  
-✅ Promise.allSettled() available without polyfills  
+#### Example Migration (for reference)
 
-**Next Actions**:  
-1. Choose between AbortController vs custom cancellation tokens  
-2. Update 3 concurrency tests to use Promise.allSettled()   
-
-**Updated Test Strategy**:  
-```javascript:test/relations.integration.js
-// Replace Bluebird's settle with native allSettled
-return Promise.allSettled(operations)
-  .then(results => {
-    const successes = results.filter(r => r.status === 'fulfilled');
-    assert(successes.length >= 1);
-  });
+**Before (dual API with callbacks):**  
+```javascript:common/models/user.js
+User.prototype.verify = function(options, cb) {
+  cb = cb || utils.createPromiseCallback()
+  // ... logic ...
+  return cb.promise
+}
 ```
 
-**Migration Guide**:  
-
-### Node.js Version Requirements
-- Minimum Node.js version: 20.x
-- Native Promise features guaranteed:
-  - `Promise.allSettled()`
-  - `AbortController`
-  - `AggregateError`
-  - Stable async stack traces
-
-### Breaking Changes:
-- Removed Bluebird-specific features:  
-  - `.spread()` → Use array destructuring  
-  - `.finally()` → Use native `finally()`  
-  - Cancellation → Use `AbortController`
-
-### Error Handling:
-- Errors now throw native `AggregateError` for Promise.all()  
-Stack traces follow native async patterns (shorter but more accurate)
-
-### Recommended Replacements:
-| Bluebird Feature | Node 20+ Replacement                |
-|------------------|-------------------------------------|
-| Promise.map      | `Array.map` + `Promise.all`         |
-| Promise.settle   | `Promise.allSettled`               |
-| .delay           | `setTimeout` + `async/await`       |
-| .cancel()        | `AbortController` + `signal`       |
-
-### Cancellation Example:
-```javascript
-const controller = new AbortController()
-
-// For fetch-based operations
-fetch(url, { signal: controller.signal })
-  .then(/* ... */)
-  .catch(err => {
-    if (err.name === 'AbortError') {
-      console.log('Request aborted')
-    }
-  })
-
-// For custom async operations
-function cancellableFetch(url, { signal }) {
+**After (promise-only, with callbacks eliminated):**  
+```javascript:common/models/user.js
+User.prototype.verify = function(options) {
   return new Promise((resolve, reject) => {
-    const abortHandler = () => {
-      reject(new DOMException('Aborted', 'AbortError'))
-      cleanup()
-    }
-    
-    if (signal.aborted) abortHandler()
-    signal.addEventListener('abort', abortHandler)
-    
-    // Implement actual async logic
-    const cleanup = () => {
-      signal.removeEventListener('abort', abortHandler)
-    }
+    // ... logic rewritten to resolve or reject directly
   })
 }
 ```
 
-### Timing Considerations:
-- Native promises have microtask queue semantics
-- Use `queueMicrotask()` instead of `process.nextTick()`
-- `setImmediate` polyfill not required in Node 20+
+*This update marks a shift from dual callback/promise APIs to a modern, promise-only architecture. All asynchronous methods will now consistently return native promises, ensuring cleaner error handling and improved concurrency throughout the codebase.*
 
 ---------------------------------------------
 1. Dependency Updates

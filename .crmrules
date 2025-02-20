@@ -1,0 +1,8 @@
+
+## Migration Guidelines
+- use the `enhancements.md` file to guide the migration
+- always verify changes against original logic in the corresponding file (with '-org' suffix) in the 'original' folder where available
+
+## Test Scripts
+- do not modify test scripts to pass tests, unless it is verifed that test script is incorrect
+- use promises by default unless explicitly testing callback functionality
