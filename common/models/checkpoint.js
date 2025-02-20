@@ -54,11 +54,10 @@ module.exports = function(Checkpoint) {
    * @param {Object} checkpoint The current checkpoint
    */
   Checkpoint.bumpLastSeq = async function() {
-    const latest = await Checkpoint.findOne({ order: 'seq DESC' })
+    const latest = await this.findOne({order: 'seq DESC'})
     const newSeq = latest ? latest.seq + 1 : 1
-    const { seq } = await Checkpoint.create({ seq: newSeq })
-
-    return seq
+    const created = await this.create({seq: newSeq})
+    return created.seq
   }
 
   Checkpoint._getSingleton = async function() {
