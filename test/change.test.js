@@ -18,7 +18,8 @@ describe('Change', function() {
 
     // Initialize base models first
     await loopback.Change.attachTo(memory);
-    await loopback.Checkpoint.extend('TestCheckpoint').attachTo(memory);
+    const CheckpointModel = loopback.Checkpoint.extend('TestCheckpoint');
+    await CheckpointModel.attachTo(memory);
 
     // Create model with proper initialization
     TestModel = loopback.PersistedModel.extend(
@@ -28,15 +29,21 @@ describe('Change', function() {
       },
       { trackChanges: true }
     );
+    
+    // Attach FIRST before defining change model
     await TestModel.attachTo(memory);
     
-    // Initialize change tracking AFTER attachment
+    // Initialize change tracking
     await TestModel._defineChangeModel();
-    // Attach change model's checkpoint explicitly
-    const checkpoint = TestModel.getChangeModel().getCheckpointModel();
-    if (!checkpoint.dataSource) {
-      await checkpoint.attachTo(memory);
+    
+    // Explicitly attach change model's checkpoint
+    const changeModel = TestModel.getChangeModel();
+    const checkpointModel = changeModel.getCheckpointModel();
+    if (!checkpointModel.dataSource) {
+      await checkpointModel.attachTo(memory);
     }
+
+    // Wait for all models to be ready
     await memory.automigrate();
     
     Change = TestModel.getChangeModel();
@@ -46,6 +53,13 @@ describe('Change', function() {
     this.model = model;
     this.modelId = model.id;
     this.revisionForModel = Change.revisionForInst(model);
+
+    // Add await to ensure models are attached before proceeding
+    await TestModel.attachTo(memory)
+    await checkpointModel.attachTo(memory)
+    
+    // Wait for automigrate to complete
+    await memory.automigrate()
   });
 
   describe('Change.getCheckpointModel()', function() {
@@ -224,7 +238,7 @@ describe('conflict detection - target deleted', function() {
     const TargetModel = this.TargetModel
     const test = this
 
-    await test.createInitalData()
+    await test.createInitialData()
 
     await Promise.all([
       (async () => {
