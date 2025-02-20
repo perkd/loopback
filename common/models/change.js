@@ -11,7 +11,6 @@
 const g = require('../../lib/globalize');
 const PersistedModel = require('../../lib/loopback').PersistedModel;
 const loopback = require('../../lib/loopback');
-const utils = require('../../lib/utils');
 const crypto = require('crypto');
 const CJSON = {stringify: require('canonical-json')};
 const async = require('async');
@@ -74,73 +73,53 @@ module.exports = function(Change) {
    *
    * @param  {String}   modelName
    * @param  {Array}    modelIds
-   * @callback {Function} callback
-   * @param {Error} err
-   * @param {Array} changes Changes that were tracked
+   * @return {Promise<Array>} changes Changes that were tracked
    */
 
-  Change.rectifyModelChanges = function(modelName, modelIds, callback) {
-    if (!callback) {
-      return new Promise((resolve, reject) => {
-        this.rectifyModelChanges(modelName, modelIds, (err, changes) => 
-          err ? reject(err) : resolve(changes)
-        )
-      })
-    }
-    const Change = this
-    const errors = []
-    const trackedChanges = []
+  Change.rectifyModelChanges = async function(modelName, modelIds) {
+    const Change = this;
+    const errors = [];
+    const trackedChanges = [];
 
-    const tasks = modelIds.map(function(id) {
-      return function(cb) {
-        Change.findOrCreateChange(modelName, id, function(err, change) {
-          if (err) return next(err)
-          change.rectify(function(err, rectifiedChange) {
-            if (err) return next(err)
-            // Track both saved and removed changes (removed = null)
-            trackedChanges.push(rectifiedChange || {
-              id: change.id,
-              modelId: change.modelId,
-              modelName: change.modelName,
-              removed: true,
-            })
-            next()
-          })
-        })
-
-        function next(err) {
-          if (err) {
-            err.modelName = modelName
-            err.modelId = id
-            errors.push(err)
-            // Only continue if ignoreErrors is true
-            if (!Change.settings.ignoreErrors) {
-              return cb(err)
-            }
-          }
-          cb()
+    const tasks = modelIds.map(async (id) => {
+      try {
+        const change = await Change.findOrCreateChange(modelName, id);
+        const rectifiedChange = await change.rectify();
+        
+        // Track both saved and removed changes (removed = null)
+        trackedChanges.push(rectifiedChange || {
+          id: change.id,
+          modelId: change.modelId,
+          modelName: change.modelName,
+          removed: true,
+        });
+      } catch (err) {
+        err.modelName = modelName;
+        err.modelId = id;
+        errors.push(err);
+        // Only continue if ignoreErrors is true
+        if (!Change.settings.ignoreErrors) {
+          throw err;
         }
       }
-    })
+    });
 
-    async.parallel(tasks, function(err) {
-      if (err) return callback(err)
-      if (errors.length) {
-        const desc = errors
-          .map(function(e) {
-            return '#' + e.modelId + ' - ' + e.toString()
-          })
-          .join('\n')
+    return Promise.all(tasks)
+      .then(() => {
+        if (errors.length) {
+          const desc = errors
+            .map(e => `#${e.modelId} - ${e.toString()}`)
+            .join('\n');
 
-        const msg = g.f('Cannot rectify %s changes:\n%s', modelName, desc)
-        err = new Error(msg)
-        err.details = {errors: errors}
-        return callback(err)
-      }
-      // Filter out null changes unless specifically kept for tracking
-      callback(null, trackedChanges.filter(c => c))
-    })
-  }
+          const msg = g.f('Cannot rectify %s changes:\n%s', modelName, desc);
+          const error = new Error(msg);
+          error.details = {errors};
+          throw error;
+        }
+        // Filter out null changes unless specifically kept for tracking
+        return trackedChanges.filter(c => c);
+      });
+  };
 
   /**
    * Get an identifier for a given model.
@@ -159,162 +138,372 @@ module.exports = function(Change) {
    *
    * @param  {String}   modelName
    * @param  {String}   modelId
-   * @callback  {Function} callback
-   * @param {Error} err
-   * @param {Change} change
-   * @end
+   * @return {Promise<Change>}
    */
 
-  Change.findOrCreateChange = function(modelName, modelId, callback) {
-    if (!callback) {
-      return new Promise((resolve, reject) => {
-        this.findOrCreateChange(modelName, modelId, (err, result) => 
-          err ? reject(err) : resolve(result)
-        )
-      })
-    }
-    assert(this.registry.findModel(modelName), modelName + ' does not exist')
-    const id = this.idForModel(modelName, modelId)
-    const Change = this
+  Change.findOrCreateChange = async function(modelName, modelId) {
+    assert(this.registry.findModel(modelName), modelName + ' does not exist');
+    const id = this.idForModel(modelName, modelId);
+    const Change = this;
 
-    this.findById(id, function(err, change) {
-      if (err) return callback(err)
-      if (change) {
-        callback(null, change)
-      } else {
-        const ch = new Change({
-          id: id,
-          modelName: modelName,
-          modelId: modelId,
-        })
-        ch.debug('creating change')
-        Change.updateOrCreate(ch, callback)
-      }
-    })
-  }
+    const change = await this.findById(id);
+    if (change) {
+      return change;
+    }
+    
+    const ch = new Change({
+      id: id,
+      modelName: modelName,
+      modelId: modelId,
+    });
+    ch.debug('creating change');
+    return Change.updateOrCreate(ch);
+  };
 
   /**
-   * Update (or create) the change with the current revision.
-   *
-   * @callback {Function} callback
-   * @param {Error} err
-   * @param {Change} change
+   * Rectify a change.
+   * @return {Promise<Change>}
    */
 
-  Change.prototype.rectify = function(callback) {
-    if (!callback) {
-      return new Promise((resolve, reject) => {
-        this.rectify((err, result) => err ? reject(err) : resolve(result))
-      })
-    }
-    const change = this
-    const currentRev = this.rev
+  Change.prototype.rectify = async function() {
+    const change = this;
+    const currentRev = this.rev;
+    change.debug('rectify change');
 
-    change.debug('rectify change')
+    const model = this.getModelCtor();
+    const id = this.getModelId();
 
-    const model = this.getModelCtor()
-    const id = this.getModelId()
+    try {
+      const inst = await model.findById(id);
+      let rev = null;
 
-    model.findById(id)
-      .then(inst => {
-        if (!inst) return prepareAndDoRectify(null)
-
+      if (inst) {
         // Handle fillCustomChangeProperties
         if (typeof inst.fillCustomChangeProperties === 'function') {
           if (inst.fillCustomChangeProperties.length > 1) {
-            // Async version with callback
-            return new Promise((resolve, reject) => {
+            // Async version
+            await new Promise((resolve, reject) => {
               inst.fillCustomChangeProperties(change, err => {
-                if (err) reject(err)
-                else resolve(Change.revisionForInst(inst))
-              })
-            })
+                if (err) reject(err);
+                else resolve();
+              });
+            });
           } else {
             // Sync version
-            inst.fillCustomChangeProperties(change)
-            return Change.revisionForInst(inst)
+            inst.fillCustomChangeProperties(change);
           }
         }
-        return Change.revisionForInst(inst)
-      })
-      .then(rev => prepareAndDoRectify(rev))
-      .catch(err => callback(err))
-
-    function prepareAndDoRectify(rev) {
-      if (currentRev === rev) {
-        change.debug('rev and prev are equal (not updating anything)')
-        return callback(null, change)
+        rev = Change.revisionForInst(inst);
       }
 
-      change.constructor.getCheckpointModel().current()
-        .then(checkpoint => doRectify(checkpoint, rev))
-        .catch(err => callback(err))
-    }
+      if (currentRev === rev) {
+        change.debug('rev and prev are equal (not updating anything)');
+        return change;
+      }
 
-    function doRectify(checkpoint, rev) {
+      const checkpoint = await change.constructor.getCheckpointModel().current();
+
       if (rev) {
         if (currentRev === rev) {
-          change.debug('ASSERTION FAILED: Change currentRev==rev should have been already handled')
-          return callback(null, change)
-        } else {
-          change.rev = rev
-          change.debug('updated revision (was ' + currentRev + ')')
-          if (change.checkpoint !== checkpoint) {
-            change.prev = currentRev
-            change.debug('updated prev')
-          }
+          change.debug('ASSERTION FAILED: Change currentRev==rev should have been already handled');
+          return change;
+        }
+        change.rev = rev;
+        change.debug('updated revision (was ' + currentRev + ')');
+        if (change.checkpoint !== checkpoint) {
+          change.prev = currentRev;
+          change.debug('updated prev');
         }
       } else {
-        change.rev = null
-        change.debug('updated revision (was ' + currentRev + ')')
+        change.rev = null;
+        change.debug('updated revision (was ' + currentRev + ')');
         if (change.checkpoint !== checkpoint) {
           if (currentRev) {
-            change.prev = currentRev
+            change.prev = currentRev;
           } else if (!change.prev) {
-            change.debug('ERROR - could not determine prev')
-            change.prev = Change.UNKNOWN
+            change.debug('ERROR - could not determine prev');
+            change.prev = Change.UNKNOWN;
           }
-          change.debug('updated prev')
+          change.debug('updated prev');
         }
       }
 
       if (change.checkpoint != checkpoint) {
-        change.debug('update checkpoint to', checkpoint)
-        change.checkpoint = checkpoint
+        change.debug('update checkpoint to', checkpoint);
+        change.checkpoint = checkpoint;
       }
 
       if (change.prev === Change.UNKNOWN) {
-        change.remove(callback)
+        await change.remove();
+        return null;
       } else {
-        change.save(callback)
+        return await change.save();
       }
+    } catch (err) {
+      throw err;
     }
+  };
+
+  /**
+   * Get the current revision number of the given model instance.
+   * @return {Promise<String>}
+   */
+
+  Change.prototype.currentRevision = async function() {
+    const model = this.getModelCtor();
+    const id = this.getModelId();
+    const inst = await model.findById(id);
+    return inst ? Change.revisionForInst(inst) : null;
+  };
+
+  /**
+   * Correct all change list entries.
+   * @return {Promise<void>}
+   */
+
+  Change.rectifyAll = async function() {
+    debug('rectify all');
+    const changes = await this.find();
+    await Promise.all(changes.map(c => c.rectify()));
+  };
+
+  /**
+   * Get the checkpoint model.
+   * @return {Checkpoint}
+   */
+
+  Change.getCheckpointModel = function() {
+    let checkpointModel = this.Checkpoint;
+    if (checkpointModel) return checkpointModel;
+    // FIXME(bajtos) This code creates multiple different models with the same
+    // model name, which is not a valid supported usage of juggler's API.
+    this.Checkpoint = checkpointModel = loopback.Checkpoint.extend('checkpoint');
+    assert(this.dataSource, 'Cannot getCheckpointModel(): ' + this.modelName +
+      ' is not attached to a dataSource');
+    checkpointModel.attachTo(this.dataSource);
+    return checkpointModel;
+  };
+
+  Change.prototype.debug = function() {
+    if (debug.enabled) {
+      const args = Array.prototype.slice.call(arguments);
+      args[0] = args[0] + ' %s';
+      args.push(this.modelName);
+      debug.apply(this, args);
+      debug('\tid', this.id);
+      debug('\trev', this.rev);
+      debug('\tprev', this.prev);
+      debug('\tcheckpoint', this.checkpoint);
+      debug('\tmodelName', this.modelName);
+      debug('\tmodelId', this.modelId);
+      debug('\ttype', this.type());
+    }
+  };
+
+  /**
+   * Get the `Model` class for `change.modelName`.
+   * @return {Model}
+   */
+
+  Change.prototype.getModelCtor = function() {
+    return this.constructor.settings.trackModel;
+  };
+
+  Change.prototype.getModelId = function() {
+    // TODO(ritch) get rid of the need to create an instance
+    const Model = this.getModelCtor();
+    const id = this.modelId;
+    const m = new Model();
+    m.setId(id);
+    return m.getId();
+  };
+
+  Change.prototype.getModel = function(callback) {
+    const Model = this.constructor.settings.trackModel;
+    const id = this.getModelId();
+    Model.findById(id, callback);
+  };
+
+  /**
+   * When two changes conflict a conflict is created.
+   *
+   * **Note**: call `conflict.fetch()` to get the `target` and `source` models.
+   *
+   * @param {*} modelId
+   * @param {PersistedModel} SourceModel
+   * @param {PersistedModel} TargetModel
+   * @property {ModelClass} source The source model instance
+   * @property {ModelClass} target The target model instance
+   * @class Change.Conflict
+   */
+
+  function Conflict(modelId, SourceModel, TargetModel) {
+    this.SourceModel = SourceModel;
+    this.TargetModel = TargetModel;
+    this.SourceChange = SourceModel.getChangeModel();
+    this.TargetChange = TargetModel.getChangeModel();
+    this.modelId = modelId;
   }
 
   /**
-   * Get a change's current revision based on current data.
-   * @callback  {Function} callback
+   * Fetch the conflicting models.
+   *
+   * @callback {Function} callback
    * @param {Error} err
-   * @param {String} rev The current revision
+   * @param {PersistedModel} source
+   * @param {PersistedModel} target
    */
 
-  Change.prototype.currentRevision = function(callback) {
-    if (!callback) {
-      return new Promise((resolve, reject) => {
-        this.currentRevision((err, result) => err ? reject(err) : resolve(result))
-      })
-    }
-    const model = this.getModelCtor()
-    const id = this.getModelId()
-    model.findById(id, function(err, inst) {
-      if (err) return callback(err)
-      if (inst) {
-        callback(null, Change.revisionForInst(inst))
-      } else {
-        callback(null, null)
-      }
+  Conflict.prototype.models = async function() {
+    const conflict = this
+    const SourceModel = this.SourceModel
+    const TargetModel = this.TargetModel
+
+    const [source, target] = await Promise.all([
+      SourceModel.findById(conflict.modelId),
+      TargetModel.findById(conflict.modelId)
+    ])
+
+    return [source, target]
+  };
+
+  /**
+   * Get the conflicting changes.
+   *
+   * @callback {Function} callback
+   * @param {Error} err
+   * @param {Change} sourceChange
+   * @param {Change} targetChange
+   */
+
+  Conflict.prototype.changes = async function() {
+    const conflict = this
+    const SourceModel = conflict.SourceModel
+    const TargetModel = conflict.TargetModel
+
+    const [sourceChange, targetChange] = await Promise.all([
+      SourceModel.findLastChange(conflict.modelId),
+      TargetModel.findLastChange(conflict.modelId)
+    ])
+
+    return [sourceChange, targetChange]
+  };
+
+  /**
+   * Resolve the conflict.
+   *
+   * Set the source change's previous revision to the current revision of the
+   * (conflicting) target change. Since the changes are no longer conflicting
+   * and appear as if the source change was based on the target, they will be
+   * replicated normally as part of the next replicate() call.
+   *
+   * This is effectively resolving the conflict using the source version.
+   *
+   * @callback {Function} callback
+   * @param {Error} err
+   */
+
+  Conflict.prototype.resolve = async function() {
+    const targetChange = await this.TargetModel.findLastChange(this.modelId)
+    await this.SourceModel.updateLastChange(this.modelId, {
+      prev: targetChange.rev
     })
-  }
+  };
+
+  /**
+   * Resolve the conflict using the instance data in the source model.
+   *
+   * @callback {Function} callback
+   * @param {Error} err
+   */
+  Conflict.prototype.resolveUsingSource = async function() {
+    await this.resolve()
+  };
+
+  /**
+   * Resolve the conflict using the instance data in the target model.
+   *
+   * @callback {Function} callback
+   * @param {Error} err
+   */
+  Conflict.prototype.resolveUsingTarget = async function() {
+    const [source, target] = await this.models()
+    
+    if (target === null) {
+      await this.SourceModel.deleteById(this.modelId)
+      return
+    }
+
+    const inst = new this.SourceModel(target.toObject(), {persisted: true})
+    await inst.save()
+  };
+
+  /**
+   * Return a new Conflict instance with swapped Source and Target models.
+   *
+   * This is useful when resolving a conflict in one-way
+   * replication, where the source data must not be changed:
+   *
+   * ```js
+   * conflict.swapParties().resolveUsingTarget(cb);
+   * ```
+   *
+   * @returns {Conflict} A new Conflict instance.
+   */
+  Conflict.prototype.swapParties = function() {
+    const Ctor = this.constructor;
+    return new Ctor(this.modelId, this.TargetModel, this.SourceModel);
+  };
+
+  /**
+   * Resolve the conflict using the supplied instance data.
+   *
+   * @param {Object} data The set of changes to apply on the model
+   * instance. Use `null` value to delete the source instance instead.
+   * @callback {Function} callback
+   * @param {Error} err
+   */
+
+  Conflict.prototype.resolveManually = async function(data) {
+    if (!data) {
+      await this.SourceModel.deleteById(this.modelId)
+      return
+    }
+
+    const [source, target] = await this.models()
+    const inst = source || new this.SourceModel(target)
+    inst.setAttributes(data)
+    await inst.save()
+    await this.resolve()
+  };
+
+  /**
+   * Determine the conflict type.
+   *
+   * Possible results are
+   *
+   *  - `Change.UPDATE`: Source and target models were updated.
+   *  - `Change.DELETE`: Source and or target model was deleted.
+   *  - `Change.UNKNOWN`: the conflict type is uknown or due to an error.
+   *
+   * @callback {Function} callback
+   * @param {Error} err
+   * @param {String} type The conflict type.
+   */
+
+  Conflict.prototype.type = async function() {
+    const [sourceChange, targetChange] = await this.changes()
+    const sourceChangeType = sourceChange.type()
+    const targetChangeType = targetChange.type()
+
+    if (sourceChangeType === Change.UPDATE && targetChangeType === Change.UPDATE) {
+      return Change.UPDATE
+    }
+    if (sourceChangeType === Change.DELETE || targetChangeType === Change.DELETE) {
+      return Change.DELETE
+    }
+    return Change.UNKNOWN
+  };
 
   /**
    * Create a hash of the given `string` with the `options.hashAlgorithm`.
@@ -445,19 +634,9 @@ module.exports = function(Change) {
    * @param {Object} result See above.
    */
 
-  Change.diff = function(modelName, since, remoteChanges, callback) {
-    if (!callback) {
-      return new Promise((resolve, reject) => {
-        this.diff(modelName, since, remoteChanges, (err, result) => {
-          if (err) reject(err)
-          else resolve(result)
-        })
-      })
-    }
-
+  Change.diff = async function(modelName, since, remoteChanges) {
     if (!Array.isArray(remoteChanges) || remoteChanges.length === 0) {
-      callback(null, {deltas: [], conflicts: []})
-      return
+      return {deltas: [], conflicts: []}
     }
 
     const remoteChangeIndex = {}
@@ -469,386 +648,55 @@ module.exports = function(Change) {
 
     // normalize `since`
     since = Number(since) || 0
-    this.find({
+    
+    const allLocalChanges = await this.find({
       where: {
         modelName: modelName,
         modelId: {inq: modelIds},
       },
-    }, function(err, allLocalChanges) {
-      if (err) return callback(err)
-      const deltas = []
-      const conflicts = []
-      const localModelIds = []
-
-      const localChanges = allLocalChanges.filter(function(c) {
-        return c.checkpoint >= since
-      })
-
-      localChanges.forEach(function(localChange) {
-        localChange = new Change(localChange)
-        localModelIds.push(localChange.modelId)
-        const remoteChange = remoteChangeIndex[localChange.modelId]
-        if (remoteChange && !localChange.equals(remoteChange)) {
-          if (remoteChange.conflictsWith(localChange)) {
-            remoteChange.debug('remote conflict')
-            localChange.debug('local conflict')
-            conflicts.push(localChange)
-          } else {
-            remoteChange.debug('remote delta')
-            deltas.push(remoteChange)
-          }
-        }
-      })
-
-      modelIds.forEach(function(id) {
-        if (localModelIds.indexOf(id) !== -1) return
-
-        const d = remoteChangeIndex[id]
-        const oldChange = allLocalChanges.filter(function(c) {
-          return c.modelId === id
-        })[0]
-
-        if (oldChange) {
-          d.prev = oldChange.rev
-        } else {
-          d.prev = null
-        }
-
-        deltas.push(d)
-      })
-
-      callback(null, {
-        deltas: deltas,
-        conflicts: conflicts,
-      })
     })
-  };
 
-  /**
-   * Correct all change list entries.
-   * @param {Function} cb
-   */
+    const deltas = []
+    const conflicts = []
+    const localModelIds = []
 
-  Change.rectifyAll = function(cb) {
-    debug('rectify all');
-    const Change = this;
-    // this should be optimized
-    this.find(function(err, changes) {
-      if (err) return cb(err);
-      async.each(
-        changes,
-        function(c, next) { c.rectify(next); },
-        cb,
-      );
-    });
-  };
+    const localChanges = allLocalChanges.filter(function(c) {
+      return c.checkpoint >= since
+    })
 
-  /**
-   * Get the checkpoint model.
-   * @return {Checkpoint}
-   */
+    localChanges.forEach(function(localChange) {
+      localChange = new Change(localChange)
+      localModelIds.push(localChange.modelId)
+      const remoteChange = remoteChangeIndex[localChange.modelId]
+      if (remoteChange && !localChange.equals(remoteChange)) {
+        if (remoteChange.conflictsWith(localChange)) {
+          remoteChange.debug('remote conflict')
+          localChange.debug('local conflict')
+          conflicts.push(localChange)
+        } else {
+          remoteChange.debug('remote delta')
+          deltas.push(remoteChange)
+        }
+      }
+    })
 
-  Change.getCheckpointModel = function() {
-    let checkpointModel = this.Checkpoint;
-    if (checkpointModel) return checkpointModel;
-    // FIXME(bajtos) This code creates multiple different models with the same
-    // model name, which is not a valid supported usage of juggler's API.
-    this.Checkpoint = checkpointModel = loopback.Checkpoint.extend('checkpoint');
-    assert(this.dataSource, 'Cannot getCheckpointModel(): ' + this.modelName +
-      ' is not attached to a dataSource');
-    checkpointModel.attachTo(this.dataSource);
-    return checkpointModel;
-  };
+    modelIds.forEach(function(id) {
+      if (localModelIds.indexOf(id) !== -1) return
 
-  Change.prototype.debug = function() {
-    if (debug.enabled) {
-      const args = Array.prototype.slice.call(arguments);
-      args[0] = args[0] + ' %s';
-      args.push(this.modelName);
-      debug.apply(this, args);
-      debug('\tid', this.id);
-      debug('\trev', this.rev);
-      debug('\tprev', this.prev);
-      debug('\tcheckpoint', this.checkpoint);
-      debug('\tmodelName', this.modelName);
-      debug('\tmodelId', this.modelId);
-      debug('\ttype', this.type());
-    }
-  };
+      const d = remoteChangeIndex[id]
+      const oldChange = allLocalChanges.filter(function(c) {
+        return c.modelId === id
+      })[0]
 
-  /**
-   * Get the `Model` class for `change.modelName`.
-   * @return {Model}
-   */
+      if (oldChange) {
+        d.prev = oldChange.rev
+      } else {
+        d.prev = null
+      }
 
-  Change.prototype.getModelCtor = function() {
-    return this.constructor.settings.trackModel;
-  };
+      deltas.push(d)
+    })
 
-  Change.prototype.getModelId = function() {
-    // TODO(ritch) get rid of the need to create an instance
-    const Model = this.getModelCtor();
-    const id = this.modelId;
-    const m = new Model();
-    m.setId(id);
-    return m.getId();
-  };
-
-  Change.prototype.getModel = function(callback) {
-    const Model = this.constructor.settings.trackModel;
-    const id = this.getModelId();
-    Model.findById(id, callback);
-  };
-
-  /**
-   * When two changes conflict a conflict is created.
-   *
-   * **Note**: call `conflict.fetch()` to get the `target` and `source` models.
-   *
-   * @param {*} modelId
-   * @param {PersistedModel} SourceModel
-   * @param {PersistedModel} TargetModel
-   * @property {ModelClass} source The source model instance
-   * @property {ModelClass} target The target model instance
-   * @class Change.Conflict
-   */
-
-  function Conflict(modelId, SourceModel, TargetModel) {
-    this.SourceModel = SourceModel;
-    this.TargetModel = TargetModel;
-    this.SourceChange = SourceModel.getChangeModel();
-    this.TargetChange = TargetModel.getChangeModel();
-    this.modelId = modelId;
+    return { deltas, conflicts }
   }
-
-  /**
-   * Fetch the conflicting models.
-   *
-   * @callback {Function} callback
-   * @param {Error} err
-   * @param {PersistedModel} source
-   * @param {PersistedModel} target
-   */
-
-  Conflict.prototype.models = function(cb) {
-    const conflict = this;
-    const SourceModel = this.SourceModel;
-    const TargetModel = this.TargetModel;
-    let source, target;
-
-    async.parallel([
-      getSourceModel,
-      getTargetModel,
-    ], done);
-
-    function getSourceModel(cb) {
-      SourceModel.findById(conflict.modelId, function(err, model) {
-        if (err) return cb(err);
-        source = model;
-        cb();
-      });
-    }
-
-    function getTargetModel(cb) {
-      TargetModel.findById(conflict.modelId, function(err, model) {
-        if (err) return cb(err);
-        target = model;
-        cb();
-      });
-    }
-
-    function done(err) {
-      if (err) return cb(err);
-      cb(null, source, target);
-    }
-  };
-
-  /**
-   * Get the conflicting changes.
-   *
-   * @callback {Function} callback
-   * @param {Error} err
-   * @param {Change} sourceChange
-   * @param {Change} targetChange
-   */
-
-  Conflict.prototype.changes = function(cb) {
-    const conflict = this;
-    let sourceChange, targetChange;
-
-    async.parallel([
-      getSourceChange,
-      getTargetChange,
-    ], done);
-
-    function getSourceChange(cb) {
-      const SourceModel = conflict.SourceModel;
-      SourceModel.findLastChange(conflict.modelId, function(err, change) {
-        if (err) return cb(err);
-        sourceChange = change;
-        cb();
-      });
-    }
-
-    function getTargetChange(cb) {
-      const TargetModel = conflict.TargetModel;
-      TargetModel.findLastChange(conflict.modelId, function(err, change) {
-        if (err) return cb(err);
-        targetChange = change;
-        cb();
-      });
-    }
-
-    function done(err) {
-      if (err) return cb(err);
-      cb(null, sourceChange, targetChange);
-    }
-  };
-
-  /**
-   * Resolve the conflict.
-   *
-   * Set the source change's previous revision to the current revision of the
-   * (conflicting) target change. Since the changes are no longer conflicting
-   * and appear as if the source change was based on the target, they will be
-   * replicated normally as part of the next replicate() call.
-   *
-   * This is effectively resolving the conflict using the source version.
-   *
-   * @callback {Function} callback
-   * @param {Error} err
-   */
-
-  Conflict.prototype.resolve = function(cb) {
-    const conflict = this;
-    conflict.TargetModel.findLastChange(
-      this.modelId,
-      function(err, targetChange) {
-        if (err) return cb(err);
-        conflict.SourceModel.updateLastChange(
-          conflict.modelId,
-          {prev: targetChange.rev},
-          cb,
-        );
-      },
-    );
-  };
-
-  /**
-   * Resolve the conflict using the instance data in the source model.
-   *
-   * @callback {Function} callback
-   * @param {Error} err
-   */
-  Conflict.prototype.resolveUsingSource = function(cb) {
-    this.resolve(function(err) {
-      // don't forward any cb arguments from resolve()
-      cb(err);
-    });
-  };
-
-  /**
-   * Resolve the conflict using the instance data in the target model.
-   *
-   * @callback {Function} callback
-   * @param {Error} err
-   */
-  Conflict.prototype.resolveUsingTarget = function(cb) {
-    const conflict = this;
-
-    conflict.models(function(err, source, target) {
-      if (err) return done(err);
-      if (target === null) {
-        return conflict.SourceModel.deleteById(conflict.modelId, done);
-      }
-      const inst = new conflict.SourceModel(
-        target.toObject(),
-        {persisted: true},
-      );
-      inst.save(done);
-    });
-
-    function done(err) {
-      // don't forward any cb arguments from internal calls
-      cb(err);
-    }
-  };
-
-  /**
-   * Return a new Conflict instance with swapped Source and Target models.
-   *
-   * This is useful when resolving a conflict in one-way
-   * replication, where the source data must not be changed:
-   *
-   * ```js
-   * conflict.swapParties().resolveUsingTarget(cb);
-   * ```
-   *
-   * @returns {Conflict} A new Conflict instance.
-   */
-  Conflict.prototype.swapParties = function() {
-    const Ctor = this.constructor;
-    return new Ctor(this.modelId, this.TargetModel, this.SourceModel);
-  };
-
-  /**
-   * Resolve the conflict using the supplied instance data.
-   *
-   * @param {Object} data The set of changes to apply on the model
-   * instance. Use `null` value to delete the source instance instead.
-   * @callback {Function} callback
-   * @param {Error} err
-   */
-
-  Conflict.prototype.resolveManually = function(data, cb) {
-    const conflict = this;
-    if (!data) {
-      return conflict.SourceModel.deleteById(conflict.modelId, done);
-    }
-
-    conflict.models(function(err, source, target) {
-      if (err) return done(err);
-      const inst = source || new conflict.SourceModel(target);
-      inst.setAttributes(data);
-      inst.save(function(err) {
-        if (err) return done(err);
-        conflict.resolve(done);
-      });
-    });
-
-    function done(err) {
-      // don't forward any cb arguments from internal calls
-      cb(err);
-    }
-  };
-
-  /**
-   * Determine the conflict type.
-   *
-   * Possible results are
-   *
-   *  - `Change.UPDATE`: Source and target models were updated.
-   *  - `Change.DELETE`: Source and or target model was deleted.
-   *  - `Change.UNKNOWN`: the conflict type is uknown or due to an error.
-   *
-   * @callback {Function} callback
-   * @param {Error} err
-   * @param {String} type The conflict type.
-   */
-
-  Conflict.prototype.type = function(cb) {
-    const conflict = this;
-    this.changes(function(err, sourceChange, targetChange) {
-      if (err) return cb(err);
-      const sourceChangeType = sourceChange.type();
-      const targetChangeType = targetChange.type();
-      if (sourceChangeType === Change.UPDATE && targetChangeType === Change.UPDATE) {
-        return cb(null, Change.UPDATE);
-      }
-      if (sourceChangeType === Change.DELETE || targetChangeType === Change.DELETE) {
-        return cb(null, Change.DELETE);
-      }
-      return cb(null, Change.UNKNOWN);
-    });
-  };
-};
+}

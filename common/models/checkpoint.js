@@ -34,12 +34,19 @@ module.exports = function(Checkpoint) {
    * @param {Error} err
    * @param {Number} checkpoint The current checkpoint seq
    */
-  Checkpoint.current = function(cb) {
-    const Checkpoint = this;
-    Checkpoint._getSingleton(function(err, cp) {
-      cb(err, cp.seq);
-    });
-  };
+  Checkpoint.current = async function() {
+    const checkpoint = await this.findOne({
+      order: 'seq DESC',
+    })
+    
+    if (checkpoint) {
+      return checkpoint.seq
+    }
+    
+    // Create the first checkpoint
+    const newCheckpoint = await this.create({})
+    return newCheckpoint.seq
+  }
 
   Checkpoint._getSingleton = function(cb) {
     const query = {limit: 1}; // match all instances, return only one
