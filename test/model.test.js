@@ -732,35 +732,37 @@ describe.onServer('Remote Methods', function() {
 
   describe('Model.checkpoint(callback)', function() {
     it('Create a checkpoint', function(done) {
-      const Checkpoint = User.getChangeModel().getCheckpointModel();
+      const Checkpoint = User.getChangeModel().getCheckpointModel()
       const tasks = [
         getCurrentCheckpoint,
-        checkpoint,
-      ];
-      let result, current;
+        checkpoint
+      ]
+      let result, current
 
       async.series(tasks, function(err) {
-        if (err) return done(err);
+        if (err) return done(err)
+        assert.equal(result, current + 1)
+        done()
+      })
 
-        assert.equal(result, current + 1);
-
-        done();
-      });
-
+      // Updated to use promise-based Checkpoint.current()
       function getCurrentCheckpoint(cb) {
-        Checkpoint.current(function(err, cp) {
-          current = cp;
-          cb(err);
-        });
+        Checkpoint.current()
+          .then(cp => {
+            current = cp
+            cb()
+          })
+          .catch(cb)
       }
 
+      // (Assuming User.checkpoint still supports a callback)
       function checkpoint(cb) {
         User.checkpoint(function(err, cp) {
-          result = cp.seq;
-          cb(err);
-        });
+          result = cp.seq
+          cb(err)
+        })
       }
-    });
+    })
   });
 
   describe('Model._getACLModel()', function() {
