@@ -1,0 +1,4 @@
+
+## Test Scripts
+- maintain original test logic unless otherwise specified
+- use promises by default unless explicitly testing callback functionality
