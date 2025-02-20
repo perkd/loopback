@@ -42,12 +42,18 @@ module.exports = function(Scope) {
     assert(aclModel,
       'ACL model must be defined before Scope.checkPermission is called');
 
-    this.findOne({where: {name: scope}}, function(err, scope) {
+    this.findOne({where: {name: scope}}, function(err, scopeRecord) {
       if (err) {
         if (callback) callback(err);
+      } else if (!scopeRecord) {
+        // Explicitly handle missing scope records
+        const error = new Error('Scope ' + scope + ' not found');
+        error.statusCode = 403;
+        error.code = 'SCOPE_NOT_FOUND';
+        return callback(error);
       } else {
         aclModel.checkPermission(
-          aclModel.SCOPE, scope.id, model, property, accessType, callback,
+          aclModel.SCOPE, scopeRecord.id, model, property, accessType, callback,
         );
       }
     });

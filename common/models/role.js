@@ -23,7 +23,7 @@ assert(RoleMapping, 'RoleMapping model must be defined before Role model');
  */
 module.exports = function(Role) {
   Role.resolveRelatedModels = function() {
-    if (!this.userModel) {
+    if (!this.roleMappingModel) {
       const reg = this.registry;
       this.roleMappingModel = reg.getModelByType('RoleMapping');
       this.userModel = reg.getModelByType('User');

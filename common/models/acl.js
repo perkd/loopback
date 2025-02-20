@@ -30,15 +30,13 @@
  Map to oAuth 2.0 scopes
  */
 
+const assert = require('node:assert');
+const async = require('async');
 const g = require('../../lib/globalize');
 const loopback = require('../../lib/loopback');
-const utils = require('../../lib/utils');
-const async = require('async');
-const extend = require('util')._extend;
-const assert = require('assert');
 const debug = require('debug')('loopback:security:acl');
-
 const ctx = require('../../lib/access-context');
+
 const AccessContext = ctx.AccessContext;
 const Principal = ctx.Principal;
 const AccessRequest = ctx.AccessRequest;
@@ -331,46 +329,61 @@ module.exports = function(ACL) {
    * @param {String|Error} err The error object.
    * @param {AccessRequest} result The resolved access request.
    */
-  ACL.checkPermission = function checkPermission(principalType, principalId, model, property, accessType, callback) {
+  ACL.checkPermission = function(principalType, principalId, model, property, accessType, callback) {
     if (!callback) {
       return new Promise((resolve, reject) => {
-        this.checkPermission(principalType, principalId, model, property, accessType, (err, result) => err ? reject(err) : resolve(result))
+        this.checkPermission(principalType, principalId, model, property, accessType, 
+          (err, result) => err ? reject(err) : resolve(result))
       })
     }
+    
     if (principalId !== null && principalId !== undefined && (typeof principalId !== 'string')) {
-      principalId = principalId.toString();
+      principalId = principalId.toString()
     }
-    property = property || ACL.ALL;
-    const propertyQuery = (property === ACL.ALL) ? undefined : {inq: [property, ACL.ALL]};
-    accessType = accessType || ACL.ALL;
-    const accessTypeQuery = (accessType === ACL.ALL) ? undefined : {inq: [accessType, ACL.ALL, ACL.EXECUTE]};
+    
+    property = property || ACL.ALL
+    const propertyQuery = (property === ACL.ALL) ? undefined : {inq: [property, ACL.ALL]}
+    accessType = accessType || ACL.ALL
+    const accessTypeQuery = (accessType === ACL.ALL) ? undefined : {inq: [accessType, ACL.ALL, ACL.EXECUTE]}
 
-    const req = new AccessRequest({model, property, accessType, registry: this.registry});
+    const req = new AccessRequest({model, property, accessType, registry: this.registry})
 
-    let acls = this.getStaticACLs(model, property);
+    let acls = this.getStaticACLs(model, property)
 
     // resolved is an instance of AccessRequest
-    let resolved = this.resolvePermission(acls, req);
+    let resolved = this.resolvePermission(acls, req)
 
     if (resolved && resolved.permission === ACL.DENY) {
-      debug('Permission denied by statically resolved permission')
-      debug(' Resolved Permission: %j', resolved)
-      process.nextTick(function() {
-        callback(null, resolved)
+      return new Promise(resolve => {
+        process.nextTick(() => {
+          callback(null, resolved)
+          resolve(resolved)
+        })
       })
-      return
     }
 
-    const self = this;
-    this.find({where: {principalType: principalType, principalId: principalId, model: model, property: propertyQuery, accessType: accessTypeQuery}}, function(err, dynACLs) {
-      if (err) {
-        return callback(err);
-      }
-      acls = acls.concat(dynACLs);
-      resolved = self.resolvePermission(acls, req);
-      return callback(null, resolved);
-    });
-  };
+    const self = this
+    return new Promise((resolve, reject) => {
+      self.find({
+        where: {
+          principalType: principalType, 
+          principalId: principalId,
+          model: model, 
+          property: propertyQuery, 
+          accessType: accessTypeQuery
+        }
+      }, function(err, dynACLs) {
+        if (err) {
+          callback(err)
+          return reject(err)
+        }
+        acls = acls.concat(dynACLs)
+        resolved = self.resolvePermission(acls, req)
+        callback(null, resolved)
+        resolve(resolved)
+      })
+    })
+  }
 
   ACL.prototype.debug = function() {
     if (debug.enabled) {
@@ -432,31 +445,31 @@ module.exports = function(ACL) {
         this.checkAccessForContext(context, (err, result) => err ? reject(err) : resolve(result))
       })
     }
-    const self = this;
-    self.resolveRelatedModels();
-    const roleModel = self.roleModel;
+    const self = this
+    self.resolveRelatedModels()
+    const roleModel = self.roleModel
 
     if (!(context instanceof AccessContext)) {
-      context.registry = this.registry;
-      context = new AccessContext(context);
+      context.registry = this.registry
+      context = new AccessContext(context)
     }
 
-    let authorizedRoles = {};
-    const remotingContext = context.remotingContext;
-    const model = context.model;
-    const modelDefaultPermission = model && model.settings.defaultPermission;
-    const property = context.property;
-    const accessType = context.accessType;
-    const modelName = context.modelName;
+    let authorizedRoles = {}
+    const remotingContext = context.remotingContext
+    const model = context.model
+    const modelDefaultPermission = model && model.settings.defaultPermission
+    const property = context.property
+    const accessType = context.accessType
+    const modelName = context.modelName
 
-    const methodNames = context.methodNames;
-    const propertyQuery = (property === ACL.ALL) ? undefined : {inq: methodNames.concat([ACL.ALL])};
+    const methodNames = context.methodNames
+    const propertyQuery = (property === ACL.ALL) ? undefined : { inq: methodNames.concat([ACL.ALL]) }
 
     const accessTypeQuery = (accessType === ACL.ALL) ?
       undefined :
       (accessType === ACL.REPLICATE) ?
-        {inq: [ACL.REPLICATE, ACL.WRITE, ACL.ALL]} :
-        {inq: [accessType, ACL.ALL]};
+        { inq: [ACL.REPLICATE, ACL.WRITE, ACL.ALL] } :
+        { inq: [accessType, ACL.ALL] }
 
     const req = new AccessRequest({
       model: modelName,
@@ -464,7 +477,8 @@ module.exports = function(ACL) {
       accessType,
       permission: ACL.DEFAULT,
       methodNames,
-      registry: this.registry});
+      registry: this.registry
+    })
 
     if (!context.isScopeAllowed()) {
       req.permission = ACL.DENY
@@ -472,79 +486,66 @@ module.exports = function(ACL) {
       debug('Scopes allowed:', context.accessToken.scopes || ctx.DEFAULT_SCOPES)
       debug('Scope required:', context.getScopes())
       context.debug()
-      return
+      return callback(null, req)
     }
 
-    const effectiveACLs = [];
-    const staticACLs = self.getStaticACLs(model.modelName, property);
+    const effectiveACLs = []
+    const staticACLs = self.getStaticACLs(model.modelName, property)
 
     const query = {
       where: {
-        model: {inq: [model.modelName, ACL.ALL]},
+        model: { inq: [model.modelName, ACL.ALL] },
         property: propertyQuery,
         accessType: accessTypeQuery,
-      },
-    };
+      }
+    }
 
     this.find(query, function(err, acls) {
-      if (err) return callback(err, null);
-      const inRoleTasks = [];
-
-      acls = acls.concat(staticACLs);
+      if (err) return callback(err)
+      const inRoleTasks = []
+      acls = acls.concat(staticACLs)
 
       acls.forEach(function(acl) {
         // Check exact matches
         for (let i = 0; i < context.principals.length; i++) {
-          const p = context.principals[i];
-          const typeMatch = p.type === acl.principalType;
-          const idMatch = String(p.id) === String(acl.principalId);
-          if (typeMatch && idMatch) {
-            effectiveACLs.push(acl);
-            return;
+          const p = context.principals[i]
+          if (p.type === acl.principalType && String(p.id) === String(acl.principalId)) {
+            effectiveACLs.push(acl)
+            return
           }
         }
 
         // Check role matches
         if (acl.principalType === ACL.ROLE) {
           inRoleTasks.push(function(done) {
-            roleModel.isInRole(acl.principalId, context,
-              function(err, inRole) {
-                if (!err && inRole) {
-                  effectiveACLs.push(acl);
-                  // add the role to authorizedRoles if allowed
-                  if (acl.isAllowed(modelDefaultPermission))
-                    authorizedRoles[acl.principalId] = true;
-                }
-                done(err, acl);
-              });
-          });
+            roleModel.isInRole(acl.principalId, context, function(err, inRole) {
+              if (!err && inRole) {
+                effectiveACLs.push(acl)
+                if (acl.isAllowed(modelDefaultPermission))
+                  authorizedRoles[acl.principalId] = true
+              }
+              done(err, acl)
+            })
+          })
         }
-      });
+      })
 
       async.parallel(inRoleTasks, function(err, results) {
-        if (err) return callback(err, null);
-
-        // resolved is an instance of AccessRequest
-        const resolved = self.resolvePermission(effectiveACLs, req);
-        debug('---Resolved---');
-        resolved.debug();
-
-        // set authorizedRoles in remotingContext options argument if
-        // resolved AccessRequest permission is ALLOW, else set it to empty object
-        authorizedRoles = resolved.isAllowed() ? authorizedRoles : {};
-        saveAuthorizedRolesToRemotingContext(remotingContext, authorizedRoles);
-        return callback(null, resolved);
-      });
-    });
-  };
+        if (err) return callback(err, null)
+        const resolved = self.resolvePermission(effectiveACLs, req)
+        debug('---Resolved---')
+        resolved.debug()
+        authorizedRoles = resolved.isAllowed() ? authorizedRoles : {}
+        saveAuthorizedRolesToRemotingContext(remotingContext, authorizedRoles)
+        callback(null, resolved)
+      })
+    })
+  }
 
   function saveAuthorizedRolesToRemotingContext(remotingContext, authorizedRoles) {
-    const options = remotingContext && remotingContext.args && remotingContext.args.options;
-    // authorizedRoles key/value map is added to the options argument only if
-    // the latter exists and is an object. This means that the feature's availability
-    // will depend on the app configuration
-    if (options && typeof options === 'object') { // null is object too
-      options.authorizedRoles = authorizedRoles;
+    const options = remotingContext && remotingContext.args && remotingContext.args.options
+    if (options && typeof options === 'object') {
+      options.authorizedRoles = authorizedRoles
     }
   }
 
@@ -562,7 +563,8 @@ module.exports = function(ACL) {
     assert(token, 'Access token is required');
     if (!callback) {
       return new Promise((resolve, reject) => {
-        this.checkAccessForToken(token, model, modelId, method, (err, result) => err ? reject(err) : resolve(result))
+        this.checkAccessForToken(token, model, modelId, method, 
+          (err, result) => err ? reject(err) : resolve(result))
       })
     }
     const context = new AccessContext({registry: this.registry, accessToken: token, model: model, property: method, method: method, modelId: modelId})
@@ -594,7 +596,8 @@ module.exports = function(ACL) {
   ACL.resolvePrincipal = function(type, id, cb) {
     if (!cb) {
       return new Promise((resolve, reject) => {
-        this.resolvePrincipal(type, id, (err, result) => err ? reject(err) : resolve(result))
+        this.resolvePrincipal(type, id, 
+          (err, result) => err ? reject(err) : resolve(result))
       })
     }
     type = type || ACL.ROLE
@@ -636,7 +639,8 @@ module.exports = function(ACL) {
   ACL.isMappedToRole = function(principalType, principalId, role, cb) {
     if (!cb) {
       return new Promise((resolve, reject) => {
-        this.isMappedToRole(principalType, principalId, role, (err, result) => err ? reject(err) : resolve(result))
+        this.isMappedToRole(principalType, principalId, role, 
+          (err, result) => err ? reject(err) : resolve(result))
       })
     }
     const self = this

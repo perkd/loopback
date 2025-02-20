@@ -923,41 +923,51 @@ module.exports = function(User) {
    * @param {Error} err
    * @promise
    */
-  User.confirm = function(uid, token, redirect, fn) {
-    if (fn === undefined && typeof redirect === 'function') {
+  User.confirm = function(userId, token, redirect, fn) {
+    // Handle optional redirect param
+    if (typeof redirect === 'function') {
       fn = redirect
       redirect = undefined
     }
 
-    this.findById(uid, (err, user) => {
-      if (err) return fn(err)
-      if (!user) {
-        const err = new Error('User not found')
-        err.statusCode = 404
-        err.code = 'USER_NOT_FOUND'
-        return fn(err)
-      }
-      if (!user.verificationToken) {
-        const err = new Error('Invalid token')
-        err.statusCode = 400
-        err.code = 'INVALID_TOKEN'
-        return fn(err)
-      }
-      if (user.verificationToken !== token) {
-        const err = new Error('Invalid token')
-        err.statusCode = 400
-        err.code = 'INVALID_TOKEN'
-        return fn(err)
-      }
+    const confirmPromise = this.findById(userId)
+      .then(user => {
+        if (!user) {
+          const err = new Error(g.f('User not found: %s', userId))
+          err.statusCode = 404
+          err.code = 'USER_NOT_FOUND'
+          throw err
+        }
 
-      user.verificationToken = null
-      user.emailVerified = true
+        if (user.verificationToken !== token) {
+          const err = new Error(g.f('Invalid token: %s', token))
+          err.statusCode = 400
+          err.code = 'INVALID_TOKEN'
+          throw err
+        }
 
-      user.save((err) => {
-        if (err) return fn(err)
-        fn()
+        return user.updateAttributes({
+          verificationToken: null,
+          emailVerified: true
+        })
       })
-    })
+      .then(user => {
+        // Match the original behavior - only return user for redirect case
+        if (redirect) {
+          return { user }
+        }
+        return undefined
+      })
+
+    // Support both callback and promise styles
+    if (fn) {
+      confirmPromise
+        .then(result => fn(null, result))
+        .catch(err => fn(err))
+      return
+    }
+
+    return confirmPromise
   }
 
   /**
