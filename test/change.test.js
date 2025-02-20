@@ -32,12 +32,15 @@ describe('Change', function() {
     
     // Initialize change tracking AFTER attachment
     await TestModel._defineChangeModel();
+    // Attach change model's checkpoint explicitly
+    const checkpoint = TestModel.getChangeModel().getCheckpointModel();
+    if (!checkpoint.dataSource) {
+      await checkpoint.attachTo(memory);
+    }
     await memory.automigrate();
     
     Change = TestModel.getChangeModel();
-  });
 
-  beforeEach(async function() {
     this.data = { foo: 'bar' };
     const model = await TestModel.create(this.data)
     this.model = model;
@@ -64,6 +67,7 @@ describe('Change', function() {
       // Define change models before accessing them
       await this.Model._defineChangeModel();
       await this.ChildModel._defineChangeModel();
+      await ds.automigrate();
     });
 
     it("Shouldn't create two models if called twice", async function() {
@@ -177,7 +181,7 @@ describe('Change with custom properties', function() {
     
     await loopback.Change.attachTo(memory)
     const Checkpoint = loopback.Checkpoint.extend('TestCheckpoint')
-    Checkpoint.attachTo(memory)
+    await Checkpoint.attachTo(memory)
 
     TestModel = loopback.PersistedModel.extend(
       'ChangeTestModelWithTenant',
@@ -190,11 +194,11 @@ describe('Change with custom properties', function() {
         additionalChangeModelProperties: { tenantId: 'string' }
       }
     )
-    TestModel.attachTo(memory)
+    await TestModel.attachTo(memory)
     
     // Initialize change model before use
     await TestModel._defineChangeModel()
-    await memory.automigrate(['Change', 'TestCheckpoint'])
+    await memory.automigrate()
     Change = TestModel.getChangeModel()
   })
 
