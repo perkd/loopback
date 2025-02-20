@@ -16,7 +16,6 @@ const waitForEvent = require('./helpers/wait-for-event');
 let User, AccessToken;
 
 describe('User', function () {
-  this.timeout(10000);
 
   const validCredentialsEmail = 'foo@bar.com';
   const validCredentials = { email: validCredentialsEmail, password: 'bar' };
@@ -2273,127 +2272,128 @@ describe('User', function () {
     });
 
     describe('User.confirm(options, fn)', function () {
-      let verifyOptions;
+      let verifyOptions
 
-      function testConfirm(testFunc, done) {
-        User.afterRemote('create', function (ctx, user, next) {
-          assert(user, 'afterRemote should include result');
+      // Helper function to create and verify a user
+      function setupVerifyUser() {
+        // Create a new user first
+        return User.create({ email: 'bar@bat.com', password: 'bar' })
+          .then(user => {
+            verifyOptions = {
+              type: 'email',
+              to: user.email,
+              from: 'noreply@myapp.org',
+              redirect: 'http://foo.com/bar',
+              protocol: 'http',
+              host: 'myapp.org'
+            }
 
-          verifyOptions = {
-            type: 'email',
-            to: user.email,
-            from: 'noreply@myapp.org',
-            redirect: 'http://foo.com/bar',
-            protocol: ctx.req.protocol,
-            host: ctx.req.get('host'),
-          };
-
-          user.verify(verifyOptions, function (err, result) {
-            if (err) return done(err);
-
-            testFunc(result, done);
-          });
-        });
-
-        request(app)
-          .post('/test-users')
-          .expect('Content-Type', /json/)
-          .expect(302)
-          .send({ email: 'bar@bat.com', password: 'bar' })
-          .end(function (err, res) {
-            if (err) return done(err);
-          });
+            return user.verify(verifyOptions)
+          })
       }
 
-      it('Confirm a user verification', function (done) {
-        testConfirm(function (result, done) {
-          request(app)
-            .get('/test-users/confirm?uid=' + (result.uid) +
-              '&token=' + encodeURIComponent(result.token) +
-              '&redirect=' + encodeURIComponent(verifyOptions.redirect))
-            .expect(302)
-            .end(function (err, res) {
-              if (err) return done(err);
+      it('Confirm a user verification', function() {
+        return setupVerifyUser()
+          .then(result => {
+            return request(app)
+              .get('/test-users/confirm')
+              .query({
+                uid: result.uid,
+                token: result.token,
+                redirect: verifyOptions.redirect
+              })
+              .expect(302)
+          })
+      })
 
-              done();
-            });
-        }, done);
-      });
+      it('sets verificationToken to null after confirmation', function() {
+        return setupVerifyUser()
+          .then(result => {
+            return User.confirm(result.uid, result.token, false)
+              .then(() => User.findById(result.uid))
+              .then(user => {
+                expect(user).to.have.property('verificationToken', null)
+              })
+          })
+      })
 
-      it('sets verificationToken to null after confirmation', function (done) {
-        testConfirm(function (result, done) {
-          User.confirm(result.uid, result.token, false, function (err) {
-            if (err) return done(err);
+      it('Should report 302 when redirect url is set', function() {
+        return setupVerifyUser()
+          .then(result => {
+            return request(app)
+              .get('/test-users/confirm')
+              .query({
+                uid: result.uid,
+                token: result.token,
+                redirect: 'http://foo.com/bar'
+              })
+              .expect(302)
+              .expect('Location', 'http://foo.com/bar')
+          })
+      })
 
-            // Verify by loading user data stored in the datasource
-            User.findById(result.uid, function (err, user) {
-              if (err) return done(err);
-              expect(user).to.have.property('verificationToken', null);
-              done();
-            });
-          });
-        }, done);
-      });
+      it('Should report 204 when redirect url is not set', function() {
+        return setupVerifyUser()
+          .then(result => {
+            return request(app)
+              .get('/test-users/confirm')
+              .query({
+                uid: result.uid,
+                token: result.token
+              })
+              .expect(204)
+          })
+      })
 
-      it('Should report 302 when redirect url is set', function (done) {
-        testConfirm(function (result, done) {
-          request(app)
-            .get('/test-users/confirm?uid=' + (result.uid) +
-              '&token=' + encodeURIComponent(result.token) +
-              '&redirect=http://foo.com/bar')
-            .expect(302)
-            .expect('Location', 'http://foo.com/bar')
-            .end(done);
-        }, done);
-      });
+      it('Report error for invalid user id during verification', function() {
+        return setupVerifyUser()
+          .then(result => {
+            return request(app)
+              .get('/test-users/confirm')
+              .query({
+                uid: result.uid + '_invalid',
+                token: result.token,
+                redirect: verifyOptions.redirect
+              })
+              .expect(404)
+              .then(res => {
+                const errorResponse = res.body.error
+                assert(errorResponse)
+                assert.equal(errorResponse.code, 'USER_NOT_FOUND')
+              })
+          })
+      })
 
-      it('Should report 204 when redirect url is not set', function (done) {
-        testConfirm(function (result, done) {
-          request(app)
-            .get('/test-users/confirm?uid=' + (result.uid) +
-              '&token=' + encodeURIComponent(result.token))
-            .expect(204)
-            .end(done);
-        }, done);
-      });
+      it('Report error for invalid token during verification', function() {
+        return setupVerifyUser()
+          .then(result => {
+            return request(app)
+              .get('/test-users/confirm')
+              .query({
+                uid: result.uid,
+                token: result.token + '_invalid',
+                redirect: verifyOptions.redirect
+              })
+              .expect(400)
+              .then(res => {
+                const errorResponse = res.body.error
+                assert(errorResponse)
+                assert.equal(errorResponse.code, 'INVALID_TOKEN')
+              })
+          })
+      })
 
-      it('Report error for invalid user id during verification', function (done) {
-        testConfirm(function (result, done) {
-          request(app)
-            .get('/test-users/confirm?uid=' + (result.uid + '_invalid') +
-              '&token=' + encodeURIComponent(result.token) +
-              '&redirect=' + encodeURIComponent(verifyOptions.redirect))
-            .expect(404)
-            .end(function (err, res) {
-              if (err) return done(err);
-
-              const errorResponse = res.body.error;
-              assert(errorResponse);
-              assert.equal(errorResponse.code, 'USER_NOT_FOUND');
-
-              done();
-            });
-        }, done);
-      });
-
-      it('Report error for invalid token during verification', function (done) {
-        testConfirm(function (result, done) {
-          request(app)
-            .get('/test-users/confirm?uid=' + result.uid +
-              '&token=' + encodeURIComponent(result.token) + '_invalid' +
-              '&redirect=' + encodeURIComponent(verifyOptions.redirect))
-            .expect(400)
-            .end(function (err, res) {
-              if (err) return done(err);
-
-              const errorResponse = res.body.error;
-              assert(errorResponse);
-              assert.equal(errorResponse.code, 'INVALID_TOKEN');
-
-              done();
-            });
-        }, done);
-      });
+      // Keep this test as it explicitly tests callback functionality
+      it('supports callback style when calling confirm', function(done) {
+        setupVerifyUser()
+          .then(result => {
+            User.confirm(result.uid, result.token, (err) => {
+              if (err) return done(err)
+              done()
+            })
+          })
+          .catch(done)
+      })
     });
   });
 
