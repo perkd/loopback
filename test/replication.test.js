@@ -301,41 +301,23 @@ describe('Replication / Change APIs', function() {
   });
 
   describe('Model.replicate(since, targetModel, options, callback)', function() {
-    it('Replicate data using the target model', function(done) {
-      const test = this;
-      const options = {};
+    it('Replicate data using the target model', async function() {
+      const { SourceModel, TargetModel, startingCheckpoint } = this
+      const options = {}
+      const created = await SourceModel.create({name: 'foo'})
+      const { conflicts } = await SourceModel.replicate(startingCheckpoint, TargetModel, options)
 
-      this.SourceModel.create({name: 'foo'}, function(err) {
-        if (err) return done(err);
-
-        test.SourceModel.replicate(test.startingCheckpoint, test.TargetModel,
-          options, function(err, conflicts) {
-            if (err) return done(err);
-
-            assertTargetModelEqualsSourceModel(conflicts, test.SourceModel,
-              test.TargetModel, done);
-          });
-      });
+      await assertTargetModelEqualsSourceModel(conflicts, SourceModel, TargetModel)
     });
 
-    it('Replicate data using the target model - promise variant', function(done) {
-      const test = this;
-      const options = {};
+    it('Replicate data using the target model - promise variant', async function() {
+      const { SourceModel, TargetModel, startingCheckpoint } = this
+      const options = {}
+      const created = await SourceModel.create({name: 'foo'})
+      const { conflicts } = await SourceModel.replicate(startingCheckpoint, TargetModel, options)
 
-      this.SourceModel.create({name: 'foo'}, function(err) {
-        if (err) return done(err);
-
-        test.SourceModel.replicate(test.startingCheckpoint, test.TargetModel,
-          options)
-          .then(function(conflicts) {
-            assertTargetModelEqualsSourceModel(conflicts, test.SourceModel,
-              test.TargetModel, done);
-          })
-          .catch(function(err) {
-            done(err);
-          });
-      });
-    });
+      await assertTargetModelEqualsSourceModel(conflicts, SourceModel, TargetModel)
+    })
 
     it('applies "since" filter on source changes', function(done) {
       async.series([
@@ -1719,23 +1701,15 @@ describe('Replication / Change APIs', function() {
     });
 
     describe('Model.replicate(since, targetModel, options, callback)', function() {
-      it('calls bulkUpdate multiple times', function(done) {
-        const test = this;
+      it('calls bulkUpdate multiple times', async function() {
+        const { SourceModel, TargetModel, startingCheckpoint } = this;
         const options = {};
-        const calls = mockBulkUpdate(TargetModel);
+        const calls = mockBulkUpdate(TargetModel)
+        const created = await SourceModel.create([{name: 'foo'}, {name: 'bar'}])
+        const { conflicts } = await SourceModel.replicate(startingCheckpoint, TargetModel, options)
 
-        SourceModel.create([{name: 'foo'}, {name: 'bar'}], function(err) {
-          if (err) return done(err);
-
-          test.SourceModel.replicate(test.startingCheckpoint, test.TargetModel,
-            options, function(err, conflicts) {
-              if (err) return done(err);
-
-              assertTargetModelEqualsSourceModel(conflicts, test.SourceModel,
-                test.TargetModel, done);
-              expect(calls.length).to.eql(2);
-            });
-        });
+        await assertTargetModelEqualsSourceModel(conflicts, SourceModel, TargetModel)
+        expect(calls.length).to.eql(2)
       });
     });
   });
@@ -1767,26 +1741,18 @@ describe('Replication / Change APIs', function() {
     });
 
     describe('Model.replicate(since, targetModel, options, callback)', function() {
-      it('calls bulkUpdate only once', function(done) {
-        const test = this;
+      it('calls bulkUpdate only once', async function() {
+        const { SourceModel, TargetModel, startingCheckpoint } = this;
         const options = {};
         const calls = mockBulkUpdate(TargetModel);
+        const created = await SourceModel.create([{name: 'foo'}, {name: 'bar'}])
+        const { conflicts } = await SourceModel.replicate(startingCheckpoint, TargetModel, options)
 
-        SourceModel.create([{name: 'foo'}, {name: 'bar'}], function(err) {
-          if (err) return done(err);
-
-          test.SourceModel.replicate(test.startingCheckpoint, test.TargetModel,
-            options, function(err, conflicts) {
-              if (err) return done(err);
-
-              assertTargetModelEqualsSourceModel(conflicts, test.SourceModel,
-                test.TargetModel, done);
-              expect(calls.length).to.eql(1);
-            });
-        });
-      });
-    });
-  });
+        await assertTargetModelEqualsSourceModel(conflicts, SourceModel, TargetModel)
+        expect(calls.length).to.eql(1)
+      })
+    })
+  })
 
   function mockBulkUpdate(modelToMock) {
     const calls = [];
@@ -1906,37 +1872,17 @@ describe('Replication / Change APIs', function() {
     return getPropValue(list, 'id');
   }
 
-  function assertTargetModelEqualsSourceModel(conflicts, sourceModel,
-    targetModel, done) {
-    let sourceData, targetData;
+  async function assertTargetModelEqualsSourceModel(conflicts, sourceModel, targetModel) {
+    assert(conflicts.length === 0)
+    
+    const [sourceData, targetData] = await Promise.all([
+      sourceModel.find(),
+      targetModel.find()
+    ])
 
-    assert(conflicts.length === 0);
-    async.parallel([
-      function(cb) {
-        sourceModel.find(function(err, result) {
-          if (err) return cb(err);
-
-          sourceData = result;
-          cb();
-        });
-      },
-      function(cb) {
-        targetModel.find(function(err, result) {
-          if (err) return cb(err);
-
-          targetData = result;
-          cb();
-        });
-      },
-    ], function(err) {
-      if (err) return done(err);
-
-      assert.deepEqual(sourceData, targetData);
-
-      done();
-    });
+    assert.deepEqual(sourceData, targetData)
   }
-});
+})
 
 describe('Replication / Change APIs with custom change properties', function() {
   this.timeout(10000);
