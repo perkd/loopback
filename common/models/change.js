@@ -215,48 +215,51 @@ module.exports = function(Change) {
     const model = this.getModelCtor()
     const id = this.getModelId()
 
-    model.findById(id, function(err, inst) {
-      if (err) return callback(err)
+    model.findById(id)
+      .then(inst => {
+        if (!inst) return prepareAndDoRectify(null)
 
-      if (inst) {
-        inst.fillCustomChangeProperties(change, function() {
-          const rev = Change.revisionForInst(inst)
-          prepareAndDoRectify(rev)
-        })
-      } else {
-        prepareAndDoRectify(null)
-      }
-    })
+        // Handle fillCustomChangeProperties
+        if (typeof inst.fillCustomChangeProperties === 'function') {
+          if (inst.fillCustomChangeProperties.length > 1) {
+            // Async version with callback
+            return new Promise((resolve, reject) => {
+              inst.fillCustomChangeProperties(change, err => {
+                if (err) reject(err)
+                else resolve(Change.revisionForInst(inst))
+              })
+            })
+          } else {
+            // Sync version
+            inst.fillCustomChangeProperties(change)
+            return Change.revisionForInst(inst)
+          }
+        }
+        return Change.revisionForInst(inst)
+      })
+      .then(rev => prepareAndDoRectify(rev))
+      .catch(err => callback(err))
 
     function prepareAndDoRectify(rev) {
-      // avoid setting rev and prev to the same value
       if (currentRev === rev) {
         change.debug('rev and prev are equal (not updating anything)')
         return callback(null, change)
       }
 
-      // FIXME(@bajtos) Allow callers to pass in the checkpoint value
-      // (or even better - a memoized async function to get the cp value)
-      // That will enable `rectifyAll` to cache the checkpoint value
-      change.constructor.getCheckpointModel().current(
-        function(err, checkpoint) {
-          if (err) return callback(err)
-          doRectify(checkpoint, rev)
-        },
-      )
+      change.constructor.getCheckpointModel().current()
+        .then(checkpoint => doRectify(checkpoint, rev))
+        .catch(err => callback(err))
     }
 
     function doRectify(checkpoint, rev) {
       if (rev) {
         if (currentRev === rev) {
-          change.debug('ASSERTION FAILED: Change currentRev==rev ' +
-            'should have been already handled')
+          change.debug('ASSERTION FAILED: Change currentRev==rev should have been already handled')
           return callback(null, change)
         } else {
           change.rev = rev
           change.debug('updated revision (was ' + currentRev + ')')
           if (change.checkpoint !== checkpoint) {
-            // previous revision is updated only across checkpoints
             change.prev = currentRev
             change.debug('updated prev')
           }
@@ -265,7 +268,6 @@ module.exports = function(Change) {
         change.rev = null
         change.debug('updated revision (was ' + currentRev + ')')
         if (change.checkpoint !== checkpoint) {
-          // previous revision is updated only across checkpoints
           if (currentRev) {
             change.prev = currentRev
           } else if (!change.prev) {
@@ -277,13 +279,11 @@ module.exports = function(Change) {
       }
 
       if (change.checkpoint != checkpoint) {
-        debug('update checkpoint to', checkpoint)
+        change.debug('update checkpoint to', checkpoint)
         change.checkpoint = checkpoint
       }
 
       if (change.prev === Change.UNKNOWN) {
-        // this occurs when a record of a change doesn't exist
-        // and its current revision is null (not found)
         change.remove(callback)
       } else {
         change.save(callback)
