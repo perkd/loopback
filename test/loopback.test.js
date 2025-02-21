@@ -4,11 +4,11 @@
 // License text available at https://opensource.org/licenses/MIT
 
 'use strict';
+const assert = require('node:assert');
 const it = require('./util/it');
 const describe = require('./util/describe');
 const loopback = require('../');
 const expect = require('./helpers/expect');
-const assert = require('assert');
 
 describe('loopback', function() {
   let nameCounter = 0;
@@ -257,23 +257,26 @@ describe('loopback', function() {
 
   describe('loopback.createModel(config)', function() {
     it('creates the model', function() {
+      const app = loopback({localRegistry: true, loadBuiltinModels: true})
       const model = loopback.createModel({
-        name: uniqueModelName,
-      });
-
-      expect(model.prototype).to.be.instanceof(loopback.Model);
-    });
+        name: uniqueModelName
+      })
+      app.model(model)
+      expect(model.prototype).to.be.instanceof(loopback.Model)
+    })
 
     it('interprets extra first-level keys as options', function() {
+      const app = loopback({localRegistry: true, loadBuiltinModels: true})
       const model = loopback.createModel({
         name: uniqueModelName,
-        base: 'User',
-      });
-
-      expect(model.prototype).to.be.instanceof(loopback.User);
-    });
+        base: 'User'
+      })
+      app.model(model)
+      expect(model.prototype).to.be.instanceof(loopback.User)
+    })
 
     it('prefers config.options.key over config.key', function() {
+      const app = loopback({localRegistry: true, loadBuiltinModels: true});
       const model = loopback.createModel({
         name: uniqueModelName,
         base: 'User',
