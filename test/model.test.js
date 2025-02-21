@@ -24,7 +24,7 @@ describe('Model / PersistedModel', function() {
     gender: String,
     domain: String,
     email: String
-  });
+  }, { forceId: false })    // MUST forceId to false for this test, otherwise upsert will fail
   User.attachTo(dataSource);
 
   // Attach AccessToken to the datasource before setting up the relation
@@ -64,7 +64,7 @@ describe('Model / PersistedModel', function() {
   describe('Model.upsert(data)', function () {
     it('should update when record with id=data.id is found, or insert otherwise', async function () {
       const user = await User.upsert({ first: 'joe', id: 7 })
-      
+
       assert.strictEqual(user.first, 'joe');
       const updatedUser = await User.upsert({ first: 'bob', id: 7 });
       assert.strictEqual(updatedUser.first, 'bob');
