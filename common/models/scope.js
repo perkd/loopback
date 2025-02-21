@@ -43,20 +43,18 @@ module.exports = function(Scope) {
 
     const scopeRecord = await this.findOne({where: {name: scope}})
     if (!scopeRecord) {
-      const error = new Error('Scope ' + scope + ' not found');
-      error.statusCode = 403;
+      const error = new Error('Scope ' + scope + ' not found')
+      error.statusCode = 403
       error.code = 'SCOPE_NOT_FOUND'
-      return error;
+      throw error
     }
 
-    const permission = await aclModel.checkPermission(
+    return aclModel.checkPermission(
       aclModel.SCOPE,
       scopeRecord.id,
       model,
       property,
       accessType
     )
-
-    return permission
   }
 }
