@@ -73,27 +73,19 @@ module.exports = function(Change) {
    *
    * @param  {String}   modelName
    * @param  {Array}    modelIds
-   * @return {Promise<Array>} changes Changes that were tracked
+   * @return {Promise<void>}
    */
 
   Change.rectifyModelChanges = async function(modelName, modelIds) {
     const Change = this;
     const errors = [];
-    const trackedChanges = [];
 
     const tasks = modelIds.map(async (id) => {
       try {
-        const change = await Change.findOrCreateChange(modelName, id);
-        const rectifiedChange = await change.rectify();
-        
-        // Track both saved and removed changes (removed = null)
-        trackedChanges.push(rectifiedChange || {
-          id: change.id,
-          modelId: change.modelId,
-          modelName: change.modelName,
-          removed: true,
-        });
-      } catch (err) {
+        const change = await Change.findOrCreateChange(modelName, id)
+        await change.rectify()
+      }
+      catch (err) {
         err.modelName = modelName;
         err.modelId = id;
         errors.push(err);
@@ -104,22 +96,19 @@ module.exports = function(Change) {
       }
     });
 
-    return Promise.all(tasks)
-      .then(() => {
-        if (errors.length) {
-          const desc = errors
-            .map(e => `#${e.modelId} - ${e.toString()}`)
-            .join('\n');
+    await Promise.all(tasks)
 
-          const msg = g.f('Cannot rectify %s changes:\n%s', modelName, desc);
-          const error = new Error(msg);
-          error.details = {errors};
-          throw error;
-        }
-        // Filter out null changes unless specifically kept for tracking
-        return trackedChanges.filter(c => c);
-      });
-  };
+    if (errors.length) {
+      const desc = errors
+        .map(e => `#${e.modelId} - ${e.toString()}`)
+        .join('\n');
+
+      const msg = g.f('Cannot rectify %s changes:\n%s', modelName, desc);
+      const error = new Error(msg);
+      error.details = {errors};
+      throw error;
+    }
+  }
 
   /**
    * Get an identifier for a given model.
@@ -142,23 +131,19 @@ module.exports = function(Change) {
    */
 
   Change.findOrCreateChange = async function(modelName, modelId) {
-    assert(this.registry.findModel(modelName), modelName + ' does not exist');
-    const id = this.idForModel(modelName, modelId);
-    const Change = this;
+    assert(this.registry.findModel(modelName), modelName + ' does not exist')
+    const id = this.idForModel(modelName, modelId)
+    const Change = this
 
-    const change = await this.findById(id);
+    const change = await this.findById(id)
     if (change) {
-      return change;
+      return change
     }
-    
-    const ch = new Change({
-      id: id,
-      modelName: modelName,
-      modelId: modelId,
-    });
-    ch.debug('creating change');
-    return Change.updateOrCreate(ch);
-  };
+
+    const ch = new Change({ id, modelName, modelId })
+    ch.debug('creating change')
+    return Change.updateOrCreate(ch)
+  }
 
   /**
    * Rectify a change.
@@ -166,83 +151,73 @@ module.exports = function(Change) {
    */
 
   Change.prototype.rectify = async function() {
-    const change = this;
-    const currentRev = this.rev;
-    change.debug('rectify change');
+    const change = this
+    const currentRev = this.rev
 
-    const model = this.getModelCtor();
-    const id = this.getModelId();
+    change.debug('rectify change')
+
+    const model = this.getModelCtor()
+    const id = this.getModelId()
 
     try {
-      const inst = await model.findById(id);
-      let rev = null;
+      const inst = await model.findById(id)
+      let rev = null
 
       if (inst) {
-        // Handle fillCustomChangeProperties
         if (typeof inst.fillCustomChangeProperties === 'function') {
-          if (inst.fillCustomChangeProperties.length > 1) {
-            // Async version
-            await new Promise((resolve, reject) => {
-              inst.fillCustomChangeProperties(change, err => {
-                if (err) reject(err);
-                else resolve();
-              });
-            });
-          } else {
-            // Sync version
-            inst.fillCustomChangeProperties(change);
-          }
+          await inst.fillCustomChangeProperties(change)
         }
-        rev = Change.revisionForInst(inst);
+        rev = Change.revisionForInst(inst)
       }
 
+      // avoid setting rev and prev to the same value
       if (currentRev === rev) {
-        change.debug('rev and prev are equal (not updating anything)');
-        return change;
+        change.debug('rev and prev are equal (not updating anything)')
+        return change
       }
 
-      const checkpoint = await change.constructor.getCheckpointModel().current();
+      const checkpoint = await change.constructor.getCheckpointModel().current()
 
       if (rev) {
         if (currentRev === rev) {
-          change.debug('ASSERTION FAILED: Change currentRev==rev should have been already handled');
-          return change;
+          change.debug('ASSERTION FAILED: Change currentRev==rev should have been already handled')
+          return change
         }
-        change.rev = rev;
-        change.debug('updated revision (was ' + currentRev + ')');
+        change.rev = rev
+        change.debug('updated revision (was ' + currentRev + ')')
         if (change.checkpoint !== checkpoint) {
-          change.prev = currentRev;
-          change.debug('updated prev');
+          change.prev = currentRev
+          change.debug('updated prev')
         }
       } else {
-        change.rev = null;
-        change.debug('updated revision (was ' + currentRev + ')');
+        change.rev = null
+        change.debug('updated revision (was ' + currentRev + ')')
         if (change.checkpoint !== checkpoint) {
           if (currentRev) {
-            change.prev = currentRev;
+            change.prev = currentRev
           } else if (!change.prev) {
-            change.debug('ERROR - could not determine prev');
-            change.prev = Change.UNKNOWN;
+            change.debug('ERROR - could not determine prev')
+            change.prev = Change.UNKNOWN
           }
-          change.debug('updated prev');
+          change.debug('updated prev')
         }
       }
 
-      if (change.checkpoint != checkpoint) {
-        change.debug('update checkpoint to', checkpoint);
-        change.checkpoint = checkpoint;
+      if (change.checkpoint !== checkpoint) {
+        change.debug('update checkpoint to', checkpoint)
+        change.checkpoint = checkpoint
       }
 
       if (change.prev === Change.UNKNOWN) {
-        await change.remove();
-        return null;
+        await change.remove()
+        return null
       } else {
-        return await change.save();
+        return await change.save()
       }
     } catch (err) {
-      throw err;
+      throw err
     }
-  };
+  }
 
   /**
    * Get the current revision number of the given model instance.
@@ -355,16 +330,16 @@ module.exports = function(Change) {
    */
 
   Conflict.prototype.models = async function() {
-    const conflict = this
-    const SourceModel = this.SourceModel
-    const TargetModel = this.TargetModel
+    const conflict = this;
+    const SourceModel = this.SourceModel;
+    const TargetModel = this.TargetModel;
 
     const [source, target] = await Promise.all([
       SourceModel.findById(conflict.modelId),
       TargetModel.findById(conflict.modelId)
-    ])
+    ]);
 
-    return [source, target]
+    return [source, target];
   };
 
   /**
@@ -377,16 +352,16 @@ module.exports = function(Change) {
    */
 
   Conflict.prototype.changes = async function() {
-    const conflict = this
-    const SourceModel = conflict.SourceModel
-    const TargetModel = conflict.TargetModel
+    const conflict = this;
+    const SourceModel = conflict.SourceModel;
+    const TargetModel = conflict.TargetModel;
 
     const [sourceChange, targetChange] = await Promise.all([
       SourceModel.findLastChange(conflict.modelId),
       TargetModel.findLastChange(conflict.modelId)
-    ])
+    ]);
 
-    return [sourceChange, targetChange]
+    return [sourceChange, targetChange];
   };
 
   /**
@@ -404,10 +379,10 @@ module.exports = function(Change) {
    */
 
   Conflict.prototype.resolve = async function() {
-    const targetChange = await this.TargetModel.findLastChange(this.modelId)
+    const targetChange = await this.TargetModel.findLastChange(this.modelId);
     await this.SourceModel.updateLastChange(this.modelId, {
       prev: targetChange.rev
-    })
+    });
   };
 
   /**
@@ -417,7 +392,7 @@ module.exports = function(Change) {
    * @param {Error} err
    */
   Conflict.prototype.resolveUsingSource = async function() {
-    await this.resolve()
+    await this.resolve();
   };
 
   /**
@@ -427,15 +402,15 @@ module.exports = function(Change) {
    * @param {Error} err
    */
   Conflict.prototype.resolveUsingTarget = async function() {
-    const [source, target] = await this.models()
+    const [source, target] = await this.models();
     
     if (target === null) {
-      await this.SourceModel.deleteById(this.modelId)
-      return
+      await this.SourceModel.deleteById(this.modelId);
+      return;
     }
 
-    const inst = new this.SourceModel(target.toObject(), {persisted: true})
-    await inst.save()
+    const inst = new this.SourceModel(target.toObject(), {persisted: true});
+    await inst.save();
   };
 
   /**
@@ -466,15 +441,15 @@ module.exports = function(Change) {
 
   Conflict.prototype.resolveManually = async function(data) {
     if (!data) {
-      await this.SourceModel.deleteById(this.modelId)
-      return
+      await this.SourceModel.deleteById(this.modelId);
+      return;
     }
 
-    const [source, target] = await this.models()
-    const inst = source || new this.SourceModel(target)
-    inst.setAttributes(data)
-    await inst.save()
-    await this.resolve()
+    const [source, target] = await this.models();
+    const inst = source || new this.SourceModel(target);
+    inst.setAttributes(data);
+    await inst.save();
+    await this.resolve();
   };
 
   /**
@@ -492,17 +467,17 @@ module.exports = function(Change) {
    */
 
   Conflict.prototype.type = async function() {
-    const [sourceChange, targetChange] = await this.changes()
-    const sourceChangeType = sourceChange.type()
-    const targetChangeType = targetChange.type()
+    const [sourceChange, targetChange] = await this.changes();
+    const sourceChangeType = sourceChange.type();
+    const targetChangeType = targetChange.type();
 
     if (sourceChangeType === Change.UPDATE && targetChangeType === Change.UPDATE) {
-      return Change.UPDATE
+      return Change.UPDATE;
     }
     if (sourceChangeType === Change.DELETE || targetChangeType === Change.DELETE) {
-      return Change.DELETE
+      return Change.DELETE;
     }
-    return Change.UNKNOWN
+    return Change.UNKNOWN;
   };
 
   /**
@@ -636,67 +611,67 @@ module.exports = function(Change) {
 
   Change.diff = async function(modelName, since, remoteChanges) {
     if (!Array.isArray(remoteChanges) || remoteChanges.length === 0) {
-      return {deltas: [], conflicts: []}
+      return {deltas: [], conflicts: []};
     }
 
-    const remoteChangeIndex = {}
-    const modelIds = []
+    const remoteChangeIndex = {};
+    const modelIds = [];
     remoteChanges.forEach(function(ch) {
-      modelIds.push(ch.modelId)
-      remoteChangeIndex[ch.modelId] = new Change(ch)
-    })
+      modelIds.push(ch.modelId);
+      remoteChangeIndex[ch.modelId] = new Change(ch);
+    });
 
     // normalize `since`
-    since = Number(since) || 0
+    since = Number(since) || 0;
     
     const allLocalChanges = await this.find({
       where: {
         modelName: modelName,
         modelId: {inq: modelIds},
       },
-    })
+    });
 
-    const deltas = []
-    const conflicts = []
-    const localModelIds = []
+    const deltas = [];
+    const conflicts = [];
+    const localModelIds = [];
 
     const localChanges = allLocalChanges.filter(function(c) {
-      return c.checkpoint >= since
-    })
+      return c.checkpoint >= since;
+    });
 
     localChanges.forEach(function(localChange) {
-      localChange = new Change(localChange)
-      localModelIds.push(localChange.modelId)
-      const remoteChange = remoteChangeIndex[localChange.modelId]
+      localChange = new Change(localChange);
+      localModelIds.push(localChange.modelId);
+      const remoteChange = remoteChangeIndex[localChange.modelId];
       if (remoteChange && !localChange.equals(remoteChange)) {
         if (remoteChange.conflictsWith(localChange)) {
-          remoteChange.debug('remote conflict')
-          localChange.debug('local conflict')
-          conflicts.push(localChange)
+          remoteChange.debug('remote conflict');
+          localChange.debug('local conflict');
+          conflicts.push(localChange);
         } else {
-          remoteChange.debug('remote delta')
-          deltas.push(remoteChange)
+          remoteChange.debug('remote delta');
+          deltas.push(remoteChange);
         }
       }
-    })
+    });
 
     modelIds.forEach(function(id) {
-      if (localModelIds.indexOf(id) !== -1) return
+      if (localModelIds.indexOf(id) !== -1) return;
 
-      const d = remoteChangeIndex[id]
+      const d = remoteChangeIndex[id];
       const oldChange = allLocalChanges.filter(function(c) {
-        return c.modelId === id
-      })[0]
+        return c.modelId === id;
+      })[0];
 
       if (oldChange) {
-        d.prev = oldChange.rev
+        d.prev = oldChange.rev;
       } else {
-        d.prev = null
+        d.prev = null;
       }
 
-      deltas.push(d)
-    })
+      deltas.push(d);
+    });
 
-    return { deltas, conflicts }
-  }
-}
+    return {deltas, conflicts};
+  };
+};
