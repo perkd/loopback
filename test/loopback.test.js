@@ -6,8 +6,6 @@
 'use strict';
 const it = require('./util/it');
 const describe = require('./util/describe');
-const Domain = require('domain');
-const EventEmitter = require('events').EventEmitter;
 const loopback = require('../');
 const expect = require('./helpers/expect');
 const assert = require('assert');
