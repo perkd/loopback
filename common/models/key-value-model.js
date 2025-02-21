@@ -230,10 +230,15 @@ function throwNotAttached(modelName, methodName) {
   ));
 }
 
+/**
+ * Convert null result to a 404 error object.
+ * @param  {HttpContext} ctx
+ * @param  {Function} cb - // TODO MUST not be promise yet, dependents on migration of remoting
+ */
 function convertNullToNotFoundError(ctx, cb) {
   if (ctx.result !== null) return cb();
 
-  const modelName = ctx.method.sharedClass.name;
+  const { name: modelName } = ctx.method.sharedClass
   const id = ctx.getArgByName('id');
   const msg = g.f('Unknown "%s" {{key}} "%s".', modelName, id);
   const error = new Error(msg);
