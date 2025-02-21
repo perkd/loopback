@@ -12,7 +12,6 @@ const expect = require('./helpers/expect');
 const supertest = require('supertest');
 
 describe('Replication over REST', function() {
-  this.timeout(10000);
 
   const ALICE = {id: 'a', username: 'alice', email: 'a@t.io', password: 'p'};
   const PETER = {id: 'p', username: 'peter', email: 'p@t.io', password: 'p'};
@@ -88,12 +87,20 @@ describe('Replication over REST', function() {
 
   describe('sync with model-level permissions', function() {
     describe('as anonymous user', function() {
-      it('rejects pull from server', function(done) {
-        RemoteCar.replicate(LocalCar, expectHttpError(401, done));
+      it('rejects pull from server', async function() {
+        const result = await RemoteCar.replicate(LocalCar)
+          .catch(err => {
+            expect(err).to.have.property('statusCode', 401)
+          })
+        expect(result).to.be.undefined
       });
 
-      it('rejects push to the server', function(done) {
-        LocalCar.replicate(RemoteCar, expectHttpError(401, done));
+      it('rejects push to the server', async function() {
+        const result = await LocalCar.replicate(RemoteCar)
+          .catch(err => {
+            expect(err).to.have.property('statusCode', 401)
+          })
+        expect(result).to.be.undefined
       });
     });
 
@@ -102,12 +109,20 @@ describe('Replication over REST', function() {
         setAccessToken(emeryToken);
       });
 
-      it('rejects pull from server', function(done) {
-        RemoteCar.replicate(LocalCar, expectHttpError(401, done));
+      it('rejects pull from server', async function() {
+        const result = await RemoteCar.replicate(LocalCar)
+          .catch(err => {
+            expect(err).to.have.property('statusCode', 401)
+          })
+        expect(result).to.be.undefined
       });
 
-      it('rejects push to the server', function(done) {
-        LocalCar.replicate(RemoteCar, expectHttpError(401, done));
+      it('rejects push to the server', async function() {
+        const result = await LocalCar.replicate(RemoteCar)
+          .catch(err => {
+            expect(err).to.have.property('statusCode', 401)
+          })
+        expect(result).to.be.undefined
       });
     });
 
@@ -116,65 +131,51 @@ describe('Replication over REST', function() {
         setAccessToken(aliceToken);
       });
 
-      it('allows pull from server', function(done) {
-        RemoteCar.replicate(LocalCar, function(err, conflicts, cps) {
-          if (err) return done(err);
+      it('allows pull from server', async function() {
+        const result = await RemoteCar.replicate(LocalCar)
+        const { conflicts } = result
 
-          if (conflicts.length) return done(conflictError(conflicts));
+        if (conflicts.length) return conflictError(conflicts)
 
-          LocalCar.find(function(err, list) {
-            if (err) return done(err);
+        const list = await LocalCar.find()
+        expect(list.map(carToString)).to.include.members(serverCars)
+      })
 
-            expect(list.map(carToString)).to.include.members(serverCars);
-
-            done();
-          });
-        });
-      });
-
-      it('rejects push to the server', function(done) {
-        LocalCar.replicate(RemoteCar, expectHttpError(401, done));
-      });
-    });
+      it('rejects push to the server', async function() {
+        const result = await LocalCar.replicate(RemoteCar)
+          .catch(err => {
+            expect(err).to.have.property('statusCode', 401)
+          })
+        expect(result).to.be.undefined
+      })
+    })
 
     describe('as user with READ and WRITE permissions', function() {
       beforeEach(function() {
         setAccessToken(peterToken);
       });
 
-      it('allows pull from server', function(done) {
-        RemoteCar.replicate(LocalCar, function(err, conflicts, cps) {
-          if (err) return done(err);
+      it('allows pull from server', async function() {
+        const result = await RemoteCar.replicate(LocalCar)
+        const { conflicts } = result
 
-          if (conflicts.length) return done(conflictError(conflicts));
+        if (conflicts.length) return conflictError(conflicts)
 
-          LocalCar.find(function(err, list) {
-            if (err) return done(err);
+        const list = await LocalCar.find()
+        expect(list.map(carToString)).to.include.members(serverCars)
+      })
 
-            expect(list.map(carToString)).to.include.members(serverCars);
+      it('allows push to the server', async function() {
+        const result = await LocalCar.replicate(RemoteCar)
+        const { conflicts, checkpoints } = result
 
-            done();
-          });
-        });
-      });
+        if (conflicts.length) return conflictError(conflicts)
 
-      it('allows push to the server', function(done) {
-        LocalCar.replicate(RemoteCar, function(err, conflicts, cps) {
-          if (err) return done(err);
-
-          if (conflicts.length) return done(conflictError(conflicts));
-
-          ServerCar.find(function(err, list) {
-            if (err) return done(err);
-
-            expect(list.map(carToString)).to.include.members(clientCars);
-
-            done();
-          });
-        });
-      });
-    });
-  });
+        const list = await RemoteCar.find()
+        expect(list.map(carToString)).to.include.members(clientCars)
+      })
+    })
+  })
 
   describe('conflict resolution with model-level permissions', function() {
     let LocalConflict, RemoteConflict;
@@ -182,236 +183,190 @@ describe('Replication over REST', function() {
     before(function setupConflictModels() {
       LocalConflict = LocalCar.getChangeModel().Conflict;
       RemoteConflict = RemoteCar.getChangeModel().Conflict;
-    });
+    })
 
-    beforeEach(seedConflict);
+    beforeEach(async function() {
+      await seedConflict()
+    })
 
     describe('as anonymous user', function() {
-      it('rejects resolve() on the client', function(done) {
+      it('rejects resolve() on the client', async function() {
         // simulate replication Client->Server
-        const conflict = new LocalConflict(
-          conflictedCarId,
-          LocalCar,
-          RemoteCar,
-        );
-        conflict.resolveUsingSource(expectHttpError(401, done));
-      });
+        const conflict = new LocalConflict(conflictedCarId, LocalCar, RemoteCar)
+        try {
+          await conflict.resolveUsingSource()
+          throw new Error('resolveUsingSource should have failed')
+        }
+        catch (err) {
+          expect(err).to.have.property('statusCode', 401)
+        }
+      })
 
-      it('rejects resolve() on the server', function(done) {
+      it('rejects resolve() on the server', async function() {
         // simulate replication Server->Client
-        const conflict = new RemoteConflict(
-          conflictedCarId,
-          RemoteCar,
-          LocalCar,
-        );
-        conflict.resolveUsingSource(expectHttpError(401, done));
-      });
-    });
+        const conflict = new RemoteConflict(conflictedCarId, RemoteCar, LocalCar)
+        try {
+          await conflict.resolveUsingSource()
+          throw new Error('resolveUsingSource should have failed')
+        }
+        catch (err) {
+          expect(err).to.have.property('statusCode', 401)
+        }
+      })
+    })
 
     describe('as user with READ-only permissions', function() {
       beforeEach(function() {
-        setAccessToken(emeryToken);
-      });
+        setAccessToken(emeryToken)
+      })
 
-      it('allows resolve() on the client', function(done) {
+      it('allows resolve() on the client', async function() {
         // simulate replication Client->Server
-        const conflict = new LocalConflict(
-          conflictedCarId,
-          LocalCar,
-          RemoteCar,
-        );
-        conflict.resolveUsingSource(done);
-      });
+        const conflict = new LocalConflict(conflictedCarId, LocalCar, RemoteCar)
+        await conflict.resolveUsingSource()
+      })
 
-      it('rejects resolve() on the server', function(done) {
+      it('rejects resolve() on the server', async function() {
         // simulate replication Server->Client
-        const conflict = new RemoteConflict(
-          conflictedCarId,
-          RemoteCar,
-          LocalCar,
-        );
-        conflict.resolveUsingSource(expectHttpError(401, done));
-      });
-    });
+        const conflict = new RemoteConflict(conflictedCarId, RemoteCar, LocalCar)
+        try {
+          await conflict.resolveUsingSource()
+          throw new Error('resolveUsingSource should have failed')
+        }
+        catch (err) {
+          expect(err).to.have.property('statusCode', 401)
+        }
+      })
+    })
 
     describe('as user with REPLICATE-only permissions', function() {
       beforeEach(function() {
         setAccessToken(aliceToken);
-      });
+      })
 
-      it('allows reverse resolve() on the client', function(done) {
-        RemoteCar.replicate(LocalCar, function(err, conflicts) {
-          if (err) return done(err);
+      it('allows reverse resolve() on the client', async function() {
+        const result = await RemoteCar.replicate(LocalCar)
+        const { conflicts } = result
+        expect(conflicts, 'conflicts').to.have.length(1)
+        
+        // Await the resolution after swapping parties
+        await conflicts[0].swapParties().resolveUsingTarget()
+        
+        const local = await RemoteCar.replicate(LocalCar)
+        const { conflicts: localConflicts } = local
+        expect(localConflicts).to.have.length(1)
+        
+        await localConflicts[0].resolveUsingSource()
+        if (localConflicts.length) throw conflictError(localConflicts)
+      })
 
-          expect(conflicts, 'conflicts').to.have.length(1);
-
-          // By default, conflicts are always resolved by modifying
-          // the source datasource, so that the next replication run
-          // replicates the resolved data.
-          // However, when replicating changes from a datasource that
-          // users are not authorized to change, the users have to resolve
-          // conflicts at the target, discarding any changes made in
-          // the target datasource only.
-          conflicts[0].swapParties().resolveUsingTarget(function(err) {
-            if (err) return done(err);
-
-            RemoteCar.replicate(LocalCar, function(err, conflicts) {
-              if (err) return done(err);
-
-              if (conflicts.length) return done(conflictError(conflicts));
-
-              done();
-            });
-          });
-        });
-      });
-
-      it('rejects resolve() on the server', function(done) {
-        RemoteCar.replicate(LocalCar, function(err, conflicts) {
-          if (err) return done(err);
-
-          expect(conflicts, 'conflicts').to.have.length(1);
-          conflicts[0].resolveUsingSource(expectHttpError(401, done));
-        });
-      });
-    });
+      it('rejects resolve() on the server', async function() {
+        const result = await RemoteCar.replicate(LocalCar)
+        const { conflicts } = result
+        expect(conflicts, 'conflicts').to.have.length(1)
+        try {
+          await conflicts[0].resolveUsingSource()
+          throw new Error('resolveUsingSource should have failed')
+        }
+        catch (err) {
+          expect(err).to.have.property('statusCode', 401)
+        }
+      })
+    })
 
     describe('as user with READ and WRITE permissions', function() {
       beforeEach(function() {
         setAccessToken(peterToken);
       });
 
-      it('allows resolve() on the client', function(done) {
-        LocalCar.replicate(RemoteCar, function(err, conflicts) {
-          if (err) return done(err);
+      it('allows resolve() on the client', async function() {
+        const local = await LocalCar.replicate(RemoteCar)
+        const { conflicts } = local
+        expect(conflicts, 'conflicts').to.have.length(1)
+        await conflicts[0].resolveUsingSource()
+        
+        const remote = await LocalCar.replicate(RemoteCar)
+        const { conflicts: remoteConflicts } = remote
+        expect(remoteConflicts).to.have.length(1)
+        await remoteConflicts[0].resolveUsingSource()
+        if (remoteConflicts.length) throw conflictError(remoteConflicts)
+      })
 
-          expect(conflicts).to.have.length(1);
-
-          conflicts[0].resolveUsingSource(function(err) {
-            if (err) return done(err);
-
-            LocalCar.replicate(RemoteCar, function(err, conflicts) {
-              if (err) return done(err);
-
-              if (conflicts.length) return done(conflictError(conflicts));
-
-              done();
-            });
-          });
-        });
-      });
-
-      it('allows resolve() on the server', function(done) {
-        RemoteCar.replicate(LocalCar, function(err, conflicts) {
-          if (err) return done(err);
-
-          expect(conflicts).to.have.length(1);
-
-          conflicts[0].resolveUsingSource(function(err) {
-            if (err) return done(err);
-
-            RemoteCar.replicate(LocalCar, function(err, conflicts) {
-              if (err) return done(err);
-
-              if (conflicts.length) return done(conflictError(conflicts));
-
-              done();
-            });
-          });
-        });
-      });
-    });
-  });
+      it('allows resolve() on the server', async function() {
+        const remote = await RemoteCar.replicate(LocalCar)
+        const { conflicts } = remote
+        expect(conflicts).to.have.length(1)
+        await conflicts[0].resolveUsingSource()
+        
+        const local = await RemoteCar.replicate(LocalCar)
+        const { conflicts: localConflicts } = local
+        expect(localConflicts).to.have.length(1)
+        await localConflicts[0].resolveUsingSource()
+        if (localConflicts.length) throw conflictError(localConflicts)
+      })
+    })
+  })
 
   describe.skip('sync with instance-level permissions', function() {
-    it('pulls only authorized records', function(done) {
-      setAccessToken(aliceToken);
-      RemoteUser.replicate(LocalUser, function(err, conflicts, cps) {
-        if (err) return done(err);
+    it('pulls only authorized records', async function() {
+      setAccessToken(aliceToken)
 
-        if (conflicts.length) return done(conflictError(conflicts));
+      const result = await RemoteUser.replicate(LocalUser)
+      const { conflicts } = result
+      if (conflicts.length) return conflictError(conflicts)
 
-        LocalUser.find(function(err, users) {
-          const userNames = users.map(function(u) { return u.username; });
-          expect(userNames).to.eql([ALICE.username]);
+      const users = await LocalUser.find()
+      const userNames = users.map(function(u) { return u.username; })
+      expect(userNames).to.eql([ALICE.username])
+    })
 
-          done();
-        });
-      });
-    });
+    it('rejects push of unauthorized records', async function() {
+      // First, set up the modified local copy of Alice
+      await setupModifiedLocalCopyOfAlice()
 
-    it('allows push of authorized records', function(done) {
-      async.series([
-        setupModifiedLocalCopyOfAlice,
+      // Simulate a replication attempt with a user who doesn't have write permissions
+      setAccessToken(peterToken)
+      try {
+        await LocalUser.replicate(RemoteUser)
+        throw new Error('Replicate should have failed.')
+      }
+      catch (err) {
+        expect(err).to.have.property('statusCode', 401)
+      }
 
-        function replicateAsCurrentUser(next) {
-          setAccessToken(aliceToken);
-          LocalUser.replicate(RemoteUser, function(err, conflicts) {
-            if (err) return next(err);
+      // Verify that the server record was not modified
+      const found = await ServerUser.findById(aliceId)
+      expect(found.toObject()).to.not.have.property('fullname')
+    })
 
-            if (conflicts.length) return next(conflictError(conflicts));
+    it('allows push of authorized records', async function() {
+      // First, set up the modified local copy of Alice
+      await setupModifiedLocalCopyOfAlice()
 
-            next();
-          });
-        },
+      // Simulate replication with proper write permissions
+      setAccessToken(aliceToken)
+      const result = await LocalUser.replicate(RemoteUser)
+      if (result.conflicts && result.conflicts.length) {
+        throw conflictError(result.conflicts)
+      }
 
-        function verify(next) {
-          RemoteUser.findById(aliceId, function(err, found) {
-            if (err) return next(err);
-
-            expect(found.toObject())
-              .to.have.property('fullname', 'Alice Smith');
-
-            next();
-          });
-        },
-      ], done);
-    });
-
-    it('rejects push of unauthorized records', function(done) {
-      async.series([
-        setupModifiedLocalCopyOfAlice,
-
-        function replicateAsDifferentUser(next) {
-          setAccessToken(peterToken);
-          LocalUser.replicate(RemoteUser, function(err, conflicts) {
-            if (!err)
-              return next(new Error('Replicate should have failed.'));
-
-            expect(err).to.have.property('statusCode', 401); // or 403?
-
-            next();
-          });
-        },
-
-        function verify(next) {
-          ServerUser.findById(aliceId, function(err, found) {
-            if (err) return next(err);
-
-            expect(found.toObject())
-              .to.not.have.property('fullname');
-
-            next();
-          });
-        },
-      ], done);
-    });
+      // Verify that the server record was updated
+      const found = await RemoteUser.findById(aliceId)
+      expect(found.toObject()).to.have.property('fullname', 'Alice Smith')
+    })
 
     // TODO(bajtos) verify conflict resolution
 
-    function setupModifiedLocalCopyOfAlice(done) {
+    async function setupModifiedLocalCopyOfAlice() {
       // Replicate directly, bypassing REST+AUTH layers
-      replicateServerToLocal(function(err) {
-        if (err) return done(err);
+      await replicateServerToLocal()
 
-        LocalUser.updateAll(
-          {id: aliceId},
-          {fullname: 'Alice Smith'},
-          done,
-        );
-      });
+      await LocalUser.updateAll(
+        {id: aliceId},
+        {fullname: 'Alice Smith'},
+      )
     }
-  });
+  })
 
   const USER_PROPS = {
     id: {type: 'string', id: true},
@@ -637,29 +592,25 @@ describe('Replication over REST', function() {
     ], done);
   }
 
-  function seedConflict(done) {
-    LocalCar.replicate(ServerCar, function(err, conflicts) {
-      if (err) return done(err);
+  async function seedConflict() {
+    const server = await LocalCar.replicate(ServerCar)
+    const { conflicts: serverConflicts } = server
 
-      if (conflicts.length) return done(conflictError(conflicts));
+    if (serverConflicts.length) return conflictError(serverConflicts)
 
-      ServerCar.replicate(LocalCar, function(err, conflicts) {
-        if (err) return done(err);
+    const local = await ServerCar.replicate(LocalCar)
+    const { conflicts: localConflicts } = local
 
-        if (conflicts.length) return done(conflictError(conflicts));
+    if (localConflicts.length) return conflictError(localConflicts)
 
-        // Hard-coded, see the seed data above
-        conflictedCarId = 'Ford-Mustang';
+    // Hard-coded, see the seed data above
+    conflictedCarId = 'Ford-Mustang';
 
-        new LocalCar({id: conflictedCarId})
-          .updateAttributes({model: 'Client'}, function(err, c) {
-            if (err) return done(err);
+    await new LocalCar({id: conflictedCarId})
+        .updateAttributes({model: 'Client'})
 
-            new ServerCar({id: conflictedCarId})
-              .updateAttributes({model: 'Server'}, done);
-          });
-      });
-    });
+    await new ServerCar({id: conflictedCarId})
+      .updateAttributes({model: 'Server'})
   }
 
   function setAccessToken(token) {
@@ -679,14 +630,10 @@ describe('Replication over REST', function() {
     };
   }
 
-  function replicateServerToLocal(next) {
-    ServerUser.replicate(LocalUser, function(err, conflicts) {
-      if (err) return next(err);
-
-      if (conflicts.length) return next(conflictError(conflicts));
-
-      next();
-    });
+  async function replicateServerToLocal() {
+    const result = await ServerUser.replicate(LocalUser)
+    const { conflicts } = result
+    if (conflicts.length) return conflictError(conflicts)
   }
 
   function conflictError(conflicts) {
