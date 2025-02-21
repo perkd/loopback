@@ -31,56 +31,67 @@ describe('ACL model', function() {
 describe('security scopes', function() {
   beforeEach(setupTestModels);
 
-  it('should allow access to models for the given scope by wildcard', function(done) {
-    Scope.create({name: 'userScope', description: 'access user information'},
-      function(err, scope) {
-        ACL.create({
-          principalType: ACL.SCOPE, principalId: scope.id,
-          model: 'User', property: ACL.ALL,
-          accessType: ACL.ALL, permission: ACL.ALLOW,
-        }, function(err, resource) {
-          async.parallel([
-            cb => Scope.checkPermission('userScope', 'User', ACL.ALL, ACL.ALL, cb),
-            cb => Scope.checkPermission('userScope', 'User', 'name', ACL.ALL, cb),
-            cb => Scope.checkPermission('userScope', 'User', 'name', ACL.READ, cb),
-          ], (err) => {
-            assert.ifError(err);
-            done();
-          });
-        });
-      });
+  it('should allow access to models for the given scope by wildcard', async function() {
+    const scope = await Scope.create({
+      name: 'userScope', 
+      description: 'access user information'
+    })
+
+    await ACL.create({
+      principalType: ACL.SCOPE,
+      principalId: scope.id,
+      model: 'User',
+      property: ACL.ALL,
+      accessType: ACL.ALL,
+      permission: ACL.ALLOW
+    })
+
+    // Run permission checks in parallel
+    await Promise.all([
+      Scope.checkPermission('userScope', 'User', ACL.ALL, ACL.ALL),
+      Scope.checkPermission('userScope', 'User', 'name', ACL.ALL),
+      Scope.checkPermission('userScope', 'User', 'name', ACL.READ)
+    ])
   });
 
-  it('should allow access to models for the given scope', function(done) {
-    Scope.create({name: 'testModelScope', description: 'access testModel information'},
-      function(err, scope) {
-        ACL.create({
-          principalType: ACL.SCOPE, principalId: scope.id,
-          model: 'testModel', property: 'name',
-          accessType: ACL.READ, permission: ACL.ALLOW,
-        }, function(err, resource) {
-          ACL.create({principalType: ACL.SCOPE, principalId: scope.id,
-            model: 'testModel', property: 'name',
-            accessType: ACL.WRITE, permission: ACL.DENY,
-          }, function(err, resource) {
-            async.parallel([
-              cb => Scope.checkPermission('testModelScope', 'testModel', ACL.ALL, ACL.ALL, cb),
-              cb => Scope.checkPermission('testModelScope', 'testModel', 'name', ACL.ALL, cb),
-              cb => Scope.checkPermission('testModelScope', 'testModel', 'name', ACL.READ, cb),
-              cb => Scope.checkPermission('testModelScope', 'testModel', 'name', ACL.WRITE, cb),
-            ], (err, perms) => {
-              if (err) return done(err);
-              assert.deepEqual(perms.map(p => p.permission), [
-                ACL.DENY,
-                ACL.DENY,
-                ACL.ALLOW,
-                ACL.DENY,
-              ]);
-              done();
-            });
-          });
-        });
-      });
+  it('should allow access to models for the given scope', async function() {
+    const scope = await Scope.create({
+      name: 'testModelScope',
+      description: 'access testModel information'
+    })
+
+    await ACL.create({
+      principalType: ACL.SCOPE,
+      principalId: scope.id,
+      model: 'testModel',
+      property: 'name', 
+      accessType: ACL.READ,
+      permission: ACL.ALLOW
+    })
+
+    await ACL.create({
+      principalType: ACL.SCOPE,
+      principalId: scope.id,
+      model: 'testModel',
+      property: 'name',
+      accessType: ACL.WRITE,
+      permission: ACL.DENY
+    })
+
+    // Check permissions one at a time with error handling
+    const perm1 = await Scope.checkPermission('testModelScope', 'testModel', ACL.ALL, ACL.ALL)
+    const perm2 = await Scope.checkPermission('testModelScope', 'testModel', 'name', ACL.ALL)
+    const perm3 = await Scope.checkPermission('testModelScope', 'testModel', 'name', ACL.READ)
+    const perm4 = await Scope.checkPermission('testModelScope', 'testModel', 'name', ACL.WRITE)
+
+    const perms = [perm1, perm2, perm3, perm4]
+    
+    assert.deepEqual(perms.map(p => p.permission), [
+      ACL.DENY,
+      ACL.DENY, 
+      ACL.ALLOW,
+      ACL.DENY
+    ])
   });
 });
 
@@ -247,149 +258,178 @@ describe('security ACLs', function() {
       methodNames: []});
   });
 
-  it('should allow access to models for the given principal by wildcard', function(done) {
-    // jscs:disable validateIndentation
-    ACL.create({
-      principalType: ACL.USER, principalId: 'u001', model: 'User', property: ACL.ALL,
-      accessType: ACL.ALL, permission: ACL.ALLOW,
-    }, function(err, acl) {
-      ACL.create({
-        principalType: ACL.USER, principalId: 'u001', model: 'User', property: ACL.ALL,
-        accessType: ACL.READ, permission: ACL.DENY,
-      }, function(err, acl) {
-        async.parallel([
-          cb => ACL.checkPermission(ACL.USER, 'u001', 'User', 'name', ACL.READ, cb),
-          cb => ACL.checkPermission(ACL.USER, 'u001', 'User', 'name', ACL.ALL, cb),
-        ], (err, perms) => {
-          if (err) return done(err);
-          assert.deepEqual(perms.map(p => p.permission), [
-            ACL.DENY,
-            ACL.DENY,
-          ]);
-          done();
-        });
-      });
-    });
-  });
+  it('should allow access to models for the given principal by wildcard', async function() {
+    await ACL.create({
+      principalType: ACL.USER,
+      principalId: 'u001',
+      model: 'User',
+      property: ACL.ALL,
+      accessType: ACL.ALL,
+      permission: ACL.ALLOW,
+    })
 
-  it('should allow access to models by exception', function(done) {
-    ACL.create({
-      principalType: ACL.USER, principalId: 'u001', model: 'testModel', property: ACL.ALL,
-      accessType: ACL.ALL, permission: ACL.DENY,
-    }, function(err, acl) {
-      ACL.create({
-        principalType: ACL.USER, principalId: 'u001', model: 'testModel', property: ACL.ALL,
-        accessType: ACL.READ, permission: ACL.ALLOW,
-      }, function(err, acl) {
-        ACL.create({
-          principalType: ACL.USER, principalId: 'u002', model: 'testModel', property: ACL.ALL,
-          accessType: ACL.EXECUTE, permission: ACL.ALLOW,
-        }, function(err, acl) {
-          async.parallel([
-            cb => ACL.checkPermission(ACL.USER, 'u001', 'testModel', 'name', ACL.READ, cb),
-            cb => ACL.checkPermission(ACL.USER, 'u001', 'testModel', ACL.ALL, ACL.READ, cb),
-            cb => ACL.checkPermission(ACL.USER, 'u001', 'testModel', 'name', ACL.WRITE, cb),
-            cb => ACL.checkPermission(ACL.USER, 'u001', 'testModel', 'name', ACL.ALL, cb),
-            cb => ACL.checkPermission(ACL.USER, 'u002', 'testModel', 'name', ACL.WRITE, cb),
-            cb => ACL.checkPermission(ACL.USER, 'u002', 'testModel', 'name', ACL.READ, cb),
-          ], (err, perms) => {
-            if (err) return done(err);
-            assert.deepEqual(perms.map(p => p.permission), [
-              ACL.ALLOW,
-              ACL.ALLOW,
-              ACL.DENY,
-              ACL.DENY,
-              ACL.ALLOW,
-              ACL.ALLOW,
-            ]);
-            done();
-          });
-        });
-      });
-    });
-  });
+    await ACL.create({
+      principalType: ACL.USER,
+      principalId: 'u001',
+      model: 'User',
+      property: ACL.ALL,
+      accessType: ACL.READ,
+      permission: ACL.DENY,
+    })
 
-  it('should honor defaultPermission from the model', function(done) {
+    const permRead = await ACL.checkPermission(ACL.USER, 'u001', 'User', 'name', ACL.READ)
+    const permAll = await ACL.checkPermission(ACL.USER, 'u001', 'User', 'name', ACL.ALL)
+
+    assert.deepEqual([permRead.permission, permAll.permission], [
+      ACL.DENY,
+      ACL.DENY,
+    ])
+  })
+
+  it('should allow access to models by exception', async function() {
+    await ACL.create({
+      principalType: ACL.USER,
+      principalId: 'u001',
+      model: 'testModel',
+      property: ACL.ALL,
+      accessType: ACL.ALL,
+      permission: ACL.DENY,
+    })
+
+    await ACL.create({
+      principalType: ACL.USER,
+      principalId: 'u001',
+      model: 'testModel',
+      property: ACL.ALL,
+      accessType: ACL.READ,
+      permission: ACL.ALLOW,
+    })
+
+    await ACL.create({
+      principalType: ACL.USER,
+      principalId: 'u002',
+      model: 'testModel',
+      property: ACL.ALL,
+      accessType: ACL.EXECUTE,
+      permission: ACL.ALLOW,
+    })
+
+    const perm1 = await ACL.checkPermission(ACL.USER, 'u001', 'testModel', 'name', ACL.READ)
+    const perm2 = await ACL.checkPermission(ACL.USER, 'u001', 'testModel', ACL.ALL, ACL.READ)
+    const perm3 = await ACL.checkPermission(ACL.USER, 'u001', 'testModel', 'name', ACL.WRITE)
+    const perm4 = await ACL.checkPermission(ACL.USER, 'u001', 'testModel', 'name', ACL.ALL)
+    const perm5 = await ACL.checkPermission(ACL.USER, 'u002', 'testModel', 'name', ACL.WRITE)
+    const perm6 = await ACL.checkPermission(ACL.USER, 'u002', 'testModel', 'name', ACL.READ)
+
+    assert.deepEqual([perm1.permission, perm2.permission, perm3.permission, perm4.permission, perm5.permission, perm6.permission], [
+      ACL.ALLOW,
+      ACL.ALLOW,
+      ACL.DENY,
+      ACL.DENY,
+      ACL.ALLOW,
+      ACL.ALLOW,
+    ])
+  })
+
+  it('should honor defaultPermission from the model', async function() {
     const Customer = ds.createModel('Customer', {
       name: {
         type: String,
         acls: [
-          {principalType: ACL.USER, principalId: 'u001',
-            accessType: ACL.WRITE, permission: ACL.DENY},
-          {principalType: ACL.USER, principalId: 'u001',
-            accessType: ACL.ALL, permission: ACL.ALLOW},
+          {
+            principalType: ACL.USER,
+            principalId: 'u001',
+            accessType: ACL.WRITE,
+            permission: ACL.DENY
+          },
+          {
+            principalType: ACL.USER,
+            principalId: 'u001',
+            accessType: ACL.ALL,
+            permission: ACL.ALLOW
+          }
         ],
       },
     }, {
       acls: [
-        {principalType: ACL.USER, principalId: 'u001',
-          accessType: ACL.ALL, permission: ACL.ALLOW},
+        {
+          principalType: ACL.USER,
+          principalId: 'u001',
+          accessType: ACL.ALL,
+          permission: ACL.ALLOW
+        }
       ],
-    });
+    })
 
     // ACL default permission is to DENY for model Customer
-    Customer.settings.defaultPermission = ACL.DENY;
+    Customer.settings.defaultPermission = ACL.DENY
 
-    async.parallel([
-      cb => ACL.checkPermission(ACL.USER, 'u001', 'Customer', 'name', ACL.WRITE, cb),
-      cb => ACL.checkPermission(ACL.USER, 'u001', 'Customer', 'name', ACL.READ, cb),
-      cb => ACL.checkPermission(ACL.USER, 'u002', 'Customer', 'name', ACL.WRITE, cb),
-    ], (err, perms) => {
-      if (err) return done(err);
-      assert.deepEqual(perms.map(p => p.permission), [
-        ACL.DENY,
-        ACL.ALLOW,
-        ACL.DENY,
-      ]);
-      done();
-    });
+    const perm1 = await ACL.checkPermission(ACL.USER, 'u001', 'Customer', 'name', ACL.WRITE)
+    const perm2 = await ACL.checkPermission(ACL.USER, 'u001', 'Customer', 'name', ACL.READ)
+    const perm3 = await ACL.checkPermission(ACL.USER, 'u002', 'Customer', 'name', ACL.WRITE)
+
+    assert.deepEqual([perm1.permission, perm2.permission, perm3.permission], [
+      ACL.DENY,
+      ACL.ALLOW,
+      ACL.DENY
+    ])
   });
 
-  it('should honor static ACLs from the model', function(done) {
+  it('should honor static ACLs from the model', async function() {
     const Customer = ds.createModel('Customer', {
       name: {
         type: String,
         acls: [
-          {principalType: ACL.USER, principalId: 'u001',
-            accessType: ACL.WRITE, permission: ACL.DENY},
-          {principalType: ACL.USER, principalId: 'u001',
-            accessType: ACL.ALL, permission: ACL.ALLOW},
+          {
+            principalType: ACL.USER,
+            principalId: 'u001',
+            accessType: ACL.WRITE,
+            permission: ACL.DENY
+          },
+          {
+            principalType: ACL.USER,
+            principalId: 'u001',
+            accessType: ACL.ALL,
+            permission: ACL.ALLOW
+          }
         ],
       },
     }, {
       acls: [
-        {principalType: ACL.USER, principalId: 'u001',
-          accessType: ACL.ALL, permission: ACL.ALLOW},
-        {principalType: ACL.USER, principalId: 'u002',
-          accessType: ACL.EXECUTE, permission: ACL.ALLOW},
-        {principalType: ACL.USER, principalId: 'u003',
-          accessType: ACL.EXECUTE, permission: ACL.DENY},
+        {
+          principalType: ACL.USER,
+          principalId: 'u001',
+          accessType: ACL.ALL,
+          permission: ACL.ALLOW
+        },
+        {
+          principalType: ACL.USER,
+          principalId: 'u002',
+          accessType: ACL.EXECUTE,
+          permission: ACL.ALLOW
+        },
+        {
+          principalType: ACL.USER,
+          principalId: 'u003',
+          accessType: ACL.EXECUTE,
+          permission: ACL.DENY
+        }
       ],
-    });
+    })
 
-    /*
-     Customer.settings.acls = [
-     {principalType: ACL.USER, principalId: 'u001', accessType: ACL.ALL, permission: ACL.ALLOW}
-     ];
-     */
+    const perm1 = await ACL.checkPermission(ACL.USER, 'u001', 'Customer', 'name', ACL.WRITE)
+    const perm2 = await ACL.checkPermission(ACL.USER, 'u001', 'Customer', 'name', ACL.READ)
+    const perm3 = await ACL.checkPermission(ACL.USER, 'u001', 'Customer', 'name', ACL.ALL)
+    const perm4 = await ACL.checkPermission(ACL.USER, 'u002', 'Customer', 'name', ACL.READ)
+    const perm5 = await ACL.checkPermission(ACL.USER, 'u003', 'Customer', 'name', ACL.WRITE)
 
-    async.parallel([
-      cb => ACL.checkPermission(ACL.USER, 'u001', 'Customer', 'name', ACL.WRITE, cb),
-      cb => ACL.checkPermission(ACL.USER, 'u001', 'Customer', 'name', ACL.READ, cb),
-      cb => ACL.checkPermission(ACL.USER, 'u001', 'Customer', 'name', ACL.ALL, cb),
-      cb => ACL.checkPermission(ACL.USER, 'u002', 'Customer', 'name', ACL.READ, cb),
-      cb => ACL.checkPermission(ACL.USER, 'u003', 'Customer', 'name', ACL.WRITE, cb),
-    ], (err, perms) => {
-      if (err) return done(err);
-      assert.deepEqual(perms.map(p => p.permission), [
-        ACL.DENY,
-        ACL.ALLOW,
-        ACL.ALLOW,
-        ACL.ALLOW,
-        ACL.DENY,
-      ]);
-      done();
-    });
+    assert.deepEqual([perm1.permission, perm2.permission, perm3.permission, perm4.permission, perm5.permission], [
+      ACL.DENY,
+      ACL.ALLOW,
+      ACL.ALLOW,
+      ACL.ALLOW,
+      ACL.DENY
+    ])
   });
 
   it('should filter static ACLs by model/property', function() {
@@ -425,132 +465,146 @@ describe('security ACLs', function() {
     assert(staticACLs[0].property === 'findById');
   });
 
-  it('should check access against LDL, ACL, and Role', function(done) {
-    const log = function() {};
+  it('should check access against LDL, ACL, and Role', async function() {
+    const user = await User.create({
+      name: 'Raymond',
+      email: 'x@y.com',
+      password: 'foobar'
+    })
 
-    // Create
-    User.create({name: 'Raymond', email: 'x@y.com', password: 'foobar'}, function(err, user) {
-      log('User: ', user.toObject());
+    const userId = user.id
 
-      const userId = user.id;
-
-      // Define a model with static ACLs
-      const Customer = ds.createModel('Customer', {
-        name: {
-          type: String,
-          acls: [
-            {principalType: ACL.USER, principalId: userId,
-              accessType: ACL.WRITE, permission: ACL.DENY},
-            {principalType: ACL.USER, principalId: userId,
-              accessType: ACL.ALL, permission: ACL.ALLOW},
-          ],
-        },
-      }, {
+    // Define model with static ACLs
+    const Customer = ds.createModel('Customer', {
+      name: {
+        type: String,
         acls: [
-          {principalType: ACL.USER, principalId: userId,
-            accessType: ACL.ALL, permission: ACL.ALLOW},
-        ],
-        defaultPermission: 'DENY',
-      });
+          {
+            principalType: ACL.USER,
+            principalId: userId,
+            accessType: ACL.WRITE,
+            permission: ACL.DENY
+          },
+          {
+            principalType: ACL.USER,
+            principalId: userId,
+            accessType: ACL.ALL,
+            permission: ACL.ALLOW
+          }
+        ]
+      }
+    }, {
+      acls: [
+        {
+          principalType: ACL.USER,
+          principalId: userId,
+          accessType: ACL.ALL,
+          permission: ACL.ALLOW
+        }
+      ],
+      defaultPermission: 'DENY'
+    })
 
-      ACL.create({
-        principalType: ACL.USER, principalId: userId,
-        model: 'Customer', property: ACL.ALL,
-        accessType: ACL.ALL, permission: ACL.ALLOW,
-      }, function(err, acl) {
-        log('ACL 1: ', acl.toObject());
+    const acl = await ACL.create({
+      principalType: ACL.USER,
+      principalId: userId,
+      model: 'Customer',
+      property: ACL.ALL,
+      accessType: ACL.ALL,
+      permission: ACL.ALLOW
+    })
 
-        Role.create({name: 'MyRole'}, function(err, myRole) {
-          log('Role: ', myRole.toObject());
+    const myRole = await Role.create({name: 'MyRole'})
 
-          myRole.principals.create({principalType: RoleMapping.USER, principalId: userId},
-            function(err, p) {
-              log('Principal added to role: ', p.toObject());
+    await myRole.principals.create({
+      principalType: RoleMapping.USER,
+      principalId: userId
+    })
 
-              ACL.create({
-                principalType: ACL.ROLE, principalId: 'MyRole',
-                model: 'Customer', property: ACL.ALL,
-                accessType: ACL.READ, permission: ACL.DENY,
-              }, function(err, acl) {
-                log('ACL 2: ', acl.toObject());
+    await ACL.create({
+      principalType: ACL.ROLE,
+      principalId: 'MyRole',
+      model: 'Customer',
+      property: ACL.ALL,
+      accessType: ACL.READ,
+      permission: ACL.DENY
+    })
 
-                async.parallel([
-                  cb => {
-                    ACL.checkAccessForContext({
-                      principals: [
-                        {type: ACL.USER, id: userId},
-                      ],
-                      model: 'Customer',
-                      property: 'name',
-                      accessType: ACL.READ,
-                    }, function(err, access) {
-                      assert.ifError(err);
-                      assert.equal(access.permission, ACL.ALLOW);
-                      cb();
-                    });
-                  },
-                  cb => {
-                    ACL.checkAccessForContext({
-                      principals: [
-                        {type: ACL.ROLE, id: Role.EVERYONE},
-                      ],
-                      model: 'Customer',
-                      property: 'name',
-                      accessType: ACL.READ,
-                    }, function(err, access) {
-                      assert.ifError(err);
-                      assert.equal(access.permission, ACL.DENY);
-                      cb();
-                    });
-                  }], done);
-              });
-            });
-        });
-      });
-    });
+    // Run access checks in parallel
+    await Promise.all([
+      ACL.checkAccessForContext({
+        principals: [{type: ACL.USER, id: userId}],
+        model: 'Customer',
+        property: 'name',
+        accessType: ACL.READ
+      }).then(access => {
+        assert.equal(access.permission, ACL.ALLOW)
+      }),
+
+      ACL.checkAccessForContext({
+        principals: [{type: ACL.ROLE, id: Role.EVERYONE}],
+        model: 'Customer',
+        property: 'name', 
+        accessType: ACL.READ
+      }).then(access => {
+        assert.equal(access.permission, ACL.DENY)
+      })
+    ])
   });
 });
 
 describe('access check', function() {
-  it('should occur before other remote hooks', function(done) {
-    const app = loopback();
-    const MyTestModel = app.registry.createModel('MyTestModel');
-    let checkAccessCalled = false;
-    let beforeHookCalled = false;
+  it('should occur before other remote hooks', async function() {
+    const app = loopback()
+    const MyTestModel = app.registry.createModel('MyTestModel')
+    let checkAccessCalled = false
+    let beforeHookCalled = false
 
-    app.use(loopback.rest());
-    app.set('remoting', {errorHandler: {debug: true, log: false}});
-    app.enableAuth();
-    app.dataSource('test', {connector: 'memory'});
-    app.model(MyTestModel, {dataSource: 'test'});
+    // Set up models and datasources first
+    app.dataSource('test', {connector: 'memory'})
+    app.model(MyTestModel, {dataSource: 'test'})
+    
+    // Configure remoting and authentication BEFORE registering REST middleware
+    app.set('remoting', {errorHandler: {debug: true, log: false}})
+    app.enableAuth({dataSource: 'test'})
+    
+    // Now register the REST middleware
+    app.use(loopback.rest())
+    
+    // Set up access check
+    MyTestModel.checkAccess = async function() {
+      checkAccessCalled = true
+      return true
+    }
 
-    // fake / spy on the checkAccess method
-    MyTestModel.checkAccess = function() {
-      const cb = arguments[arguments.length - 1];
-      checkAccessCalled = true;
-      const allowed = true;
-      cb(null, allowed);
-    };
+    // Set up before hook
+    MyTestModel.beforeRemote('find', async (ctx) => {
+      if (!checkAccessCalled) {
+        const err = new Error('incorrect order')
+        ctx.res.status(500).send(err.message)
+        throw err
+      }
+      beforeHookCalled = true
+    })
 
-    MyTestModel.beforeRemote('find', function(ctx, next) {
-      // ensure this is called after checkAccess
-      if (!checkAccessCalled) return done(new Error('incorrect order'));
+    // Wait for app to be ready
+    await new Promise(resolve => {
+      app.listen(0, resolve)
+    })
 
-      beforeHookCalled = true;
+    try {
+      await request(app)
+        .get('/MyTestModels')
+        .expect(200)
 
-      next();
-    });
-
-    request(app)
-      .get('/MyTestModels')
-      .end(function(err, result) {
-        assert(beforeHookCalled, 'the before hook should be called');
-        assert(checkAccessCalled, 'checkAccess should have been called');
-
-        done();
-      });
-  });
-});
+      assert(beforeHookCalled, 'the before hook should be called')
+      assert(checkAccessCalled, 'checkAccess should have been called')
+    }
+    finally {
+      app.close()
+    }
+  })
+})
 
 describe('authorized roles propagation in RemotingContext', function() {
   let app, request, accessToken;
