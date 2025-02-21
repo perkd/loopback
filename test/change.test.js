@@ -16,12 +16,12 @@ describe('Change', function() {
       connector: loopback.Memory,
     });
 
-    // Initialize base models first
+    // Attach base Change model and Checkpoint model first
     await loopback.Change.attachTo(memory);
     const CheckpointModel = loopback.Checkpoint.extend('TestCheckpoint');
     await CheckpointModel.attachTo(memory);
 
-    // Create model with proper initialization
+    // Create model with change tracking enabled
     TestModel = loopback.PersistedModel.extend(
       'ChangeTestModel',
       {
@@ -29,37 +29,29 @@ describe('Change', function() {
       },
       { trackChanges: true }
     );
-    
-    // Attach FIRST before defining change model
+
+    // Attach the TestModel and then explicitly define change tracking
     await TestModel.attachTo(memory);
-    
-    // Initialize change tracking
     await TestModel._defineChangeModel();
-    
-    // Explicitly attach change model's checkpoint
+
+    // Ensure the checkpoint associated with the Change model is attached
     const changeModel = TestModel.getChangeModel();
     const checkpointModel = changeModel.getCheckpointModel();
     if (!checkpointModel.dataSource) {
       await checkpointModel.attachTo(memory);
     }
 
-    // Wait for all models to be ready
-    await memory.automigrate(); 
-    
+    // Migrate all models (once all are attached)
+    await memory.automigrate();
+
+    // Set reference to Change model for later use
     Change = TestModel.getChangeModel();
 
-    this.data = { foo: 'bar' };
-    const model = await TestModel.create(this.data)
+    // Create an instance as needed for later tests
+    const model = await TestModel.create({ foo: 'bar' });
     this.model = model;
     this.modelId = model.id;
     this.revisionForModel = Change.revisionForInst(model);
-
-    // Add await to ensure models are attached before proceeding
-    await TestModel.attachTo(memory)
-    await checkpointModel.attachTo(memory)
-    
-    // Wait for automigrate to complete
-    await memory.automigrate()
   });
 
   describe('Change.getCheckpointModel()', function() {
