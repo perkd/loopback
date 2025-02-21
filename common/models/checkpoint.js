@@ -34,17 +34,11 @@ module.exports = function(Checkpoint) {
    * @param {Number} checkpoint The current checkpoint seq
    */
   Checkpoint.current = async function() {
-    const checkpoint = await this.findOne({
-      order: 'seq DESC',
-    })
-    
-    if (checkpoint) {
-      return checkpoint.seq
-    }
-    
-    // Create the first checkpoint
-    const newCheckpoint = await this.create({})
-    return newCheckpoint.seq
+    // Use findOrCreate to ensure we always have a valid checkpoint with seq
+    const query = { limit: 1 }  // match any record
+    const initialData = { seq: 1 }
+    const [ checkpoint ] = await this.findOrCreate(query, initialData)
+    return checkpoint.seq
   }
 
   /**
@@ -54,14 +48,20 @@ module.exports = function(Checkpoint) {
    * @param {Object} checkpoint The current checkpoint
    */
   Checkpoint.bumpLastSeq = async function() {
-    const latest = await this.findOne({order: 'seq DESC'})
-    const newSeq = latest ? latest.seq + 1 : 1
-    const created = await this.create({seq: newSeq})
-    return created.seq
+    const { id, seq } = await this._getSingleton()
+    const nextSeq = seq + 1
+    
+    // Update only if not changed by another process
+    await this.updateAll(
+      { id, seq },
+      { seq: nextSeq }
+    )
+
+    return nextSeq
   }
 
   Checkpoint._getSingleton = async function() {
-    const query = { limit: 1 }  // match all instances, return only one
+    const query = { limit: 1 }  // match any record
     const initialData = { seq: 1 }
     const [ instance ] = await this.findOrCreate(query, initialData)
     return instance
