@@ -44,7 +44,7 @@ describe('Change', function() {
     }
 
     // Wait for all models to be ready
-    await memory.automigrate();
+    await memory.automigrate(); 
     
     Change = TestModel.getChangeModel();
 

@@ -7,9 +7,7 @@
 const assert = require('assert');
 const async = require('async');
 const loopback = require('../');
-const Change = loopback.Change;
-const defineModelTestsWithDataSource = require('./util/model-tests');
-const PersistedModel = loopback.PersistedModel;
+const { Change, PersistedModel } = loopback
 const expect = require('./helpers/expect');
 const debug = require('debug')('test');
 const runtime = require('./../lib/runtime');
@@ -137,10 +135,9 @@ describe('Replication / Change APIs', function() {
     function mockRectifyAllChanges(Model) {
       const calls = [];
 
-      Model.rectifyAllChanges = function(cb) {
-        calls.push('rectifyAllChanges');
-        process.nextTick(cb);
-      };
+      Model.rectifyAllChanges = async function() {
+        calls.push('rectifyAllChanges')
+      }
 
       return calls;
     }
@@ -248,14 +245,12 @@ describe('Replication / Change APIs', function() {
     function mockSourceModelRectify() {
       const calls = [];
 
-      SourceModel.rectifyChange = function(id, cb) {
+      SourceModel.rectifyChange = async function(id) {
         calls.push('rectifyChange');
-        process.nextTick(cb);
       };
 
-      SourceModel.rectifyAllChanges = function(cb) {
+      SourceModel.rectifyAllChanges = async function() {
         calls.push('rectifyAllChanges');
-        process.nextTick(cb);
       };
 
       return calls;
@@ -264,15 +259,13 @@ describe('Replication / Change APIs', function() {
     function mockTargetModelRectify() {
       const calls = [];
 
-      TargetModel.rectifyChange = function(id, cb) {
-        calls.push('rectifyChange');
-        process.nextTick(cb);
-      };
+      TargetModel.rectifyChange = async function(id) {
+        calls.push('rectifyChange')
+      }
 
-      TargetModel.rectifyAllChanges = function(cb) {
-        calls.push('rectifyAllChanges');
-        process.nextTick(cb);
-      };
+      TargetModel.rectifyAllChanges = async function() {
+        calls.push('rectifyAllChanges')
+      }
 
       return calls;
     }
