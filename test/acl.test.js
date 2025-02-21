@@ -46,13 +46,18 @@ describe('security scopes', function() {
       permission: ACL.ALLOW
     })
 
-    // Run permission checks in parallel
-    await Promise.all([
+    // Run permission checks in parallel and check for errors
+    const perms = await Promise.all([
       Scope.checkPermission('userScope', 'User', ACL.ALL, ACL.ALL),
       Scope.checkPermission('userScope', 'User', 'name', ACL.ALL),
       Scope.checkPermission('userScope', 'User', 'name', ACL.READ)
     ])
-  });
+
+    // Verify no errors were returned
+    perms.forEach(perm => {
+      assert(!perm.error, 'Permission check should not return an error')
+    })
+  })
 
   it('should allow access to models for the given scope', async function() {
     const scope = await Scope.create({
@@ -78,15 +83,15 @@ describe('security scopes', function() {
       permission: ACL.DENY
     })
 
-    // Check permissions one at a time with error handling
-    const perm1 = await Scope.checkPermission('testModelScope', 'testModel', ACL.ALL, ACL.ALL)
-    const perm2 = await Scope.checkPermission('testModelScope', 'testModel', 'name', ACL.ALL)
-    const perm3 = await Scope.checkPermission('testModelScope', 'testModel', 'name', ACL.READ)
-    const perm4 = await Scope.checkPermission('testModelScope', 'testModel', 'name', ACL.WRITE)
+    // Run permission checks in parallel
+    const [perm1, perm2, perm3, perm4] = await Promise.all([
+      Scope.checkPermission('testModelScope', 'testModel', ACL.ALL, ACL.ALL),
+      Scope.checkPermission('testModelScope', 'testModel', 'name', ACL.ALL),
+      Scope.checkPermission('testModelScope', 'testModel', 'name', ACL.READ),
+      Scope.checkPermission('testModelScope', 'testModel', 'name', ACL.WRITE)
+    ])
 
-    const perms = [perm1, perm2, perm3, perm4]
-    
-    assert.deepEqual(perms.map(p => p.permission), [
+    assert.deepEqual([perm1.permission, perm2.permission, perm3.permission, perm4.permission], [
       ACL.DENY,
       ACL.DENY, 
       ACL.ALLOW,
@@ -259,30 +264,34 @@ describe('security ACLs', function() {
   });
 
   it('should allow access to models for the given principal by wildcard', async function() {
+    // Create first ACL and wait for it to complete
     await ACL.create({
       principalType: ACL.USER,
       principalId: 'u001',
       model: 'User',
       property: ACL.ALL,
       accessType: ACL.ALL,
-      permission: ACL.ALLOW,
+      permission: ACL.ALLOW
     })
 
+    // Only create second ACL after first is done
     await ACL.create({
       principalType: ACL.USER,
       principalId: 'u001',
       model: 'User',
       property: ACL.ALL,
       accessType: ACL.READ,
-      permission: ACL.DENY,
+      permission: ACL.DENY
     })
 
-    const permRead = await ACL.checkPermission(ACL.USER, 'u001', 'User', 'name', ACL.READ)
-    const permAll = await ACL.checkPermission(ACL.USER, 'u001', 'User', 'name', ACL.ALL)
+    const [permRead, permAll] = await Promise.all([
+      ACL.checkPermission(ACL.USER, 'u001', 'User', 'name', ACL.READ),
+      ACL.checkPermission(ACL.USER, 'u001', 'User', 'name', ACL.ALL)
+    ])
 
     assert.deepEqual([permRead.permission, permAll.permission], [
       ACL.DENY,
-      ACL.DENY,
+      ACL.DENY
     ])
   })
 
