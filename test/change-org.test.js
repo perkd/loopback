@@ -610,7 +610,7 @@ describe('Change', function() {
   });
 });
 
-describe('Change with with custom properties', function() {
+describe('Change with custom properties', function() {
   let Change, TestModel;
 
   beforeEach(function() {

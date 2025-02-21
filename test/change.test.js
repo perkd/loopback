@@ -21,18 +21,14 @@ describe('Change', function() {
     const CheckpointModel = loopback.Checkpoint.extend('TestCheckpoint');
     await CheckpointModel.attachTo(memory);
 
-    // Create model with change tracking enabled
-    TestModel = loopback.PersistedModel.extend(
+    // Create and register the model first
+    TestModel = loopback.registry.createModel(
       'ChangeTestModel',
-      {
-        id: { id: true, type: 'string', defaultFn: 'guid' }
-      },
+      { id: { type: 'string', id: true } },
       { trackChanges: true }
     );
-
-    // Attach the TestModel and then explicitly define change tracking
-    await TestModel.attachTo(memory);
-    await TestModel._defineChangeModel();
+    // Then attach to datasource
+    TestModel.attachTo(memory);
 
     // Ensure the checkpoint associated with the Change model is attached
     const changeModel = TestModel.getChangeModel();
@@ -45,6 +41,7 @@ describe('Change', function() {
     await memory.automigrate();
 
     // Set reference to Change model for later use
+    this.modelName = TestModel.modelName;
     Change = TestModel.getChangeModel();
 
     // Create an instance as needed for later tests
@@ -115,26 +112,26 @@ describe('Change', function() {
   });
 
   describe('change.rectify', function() {
-    let change;
+    let change
+
     beforeEach(async function() {
-      // findOrCreateChange returns a promise only
-      change = await Change.findOrCreateChange({ modelName: this.modelName, modelId: this.modelId });
-    });
+      const { modelName, modelId } = this
+      change = await Change.findOrCreateChange(modelName, modelId)
+    })
 
     it('should create a new change with the correct revision', async function() {
-      const updatedChange = await change.rectify();
-      assert.equal(updatedChange.rev, this.revisionForModel);
-    });
+      const updatedChange = await change.rectify()
+      assert.equal(updatedChange.rev, this.revisionForModel)
+    })
 
     it('should merge updates within the same checkpoint', async function() {
-      const originalRev = this.revisionForModel;
-      let cp;
+      const originalRev = this.revisionForModel
 
       // First rectify
-      await change.rectify();
+      await change.rectify()
 
       // Create a checkpoint to obtain a new checkpoint value
-      cp = (await TestModel.checkpoint()).seq;
+      const cp = (await TestModel.checkpoint()).seq;
 
       // Update the underlying model and rectify sequentially
       this.model.name = this.model.name + ' updated';
@@ -167,12 +164,11 @@ describe('Change', function() {
 
   describe('change.currentRevision', function() {
     it('should get the correct revision', async function() {
-      const changeInst = new Change({
-        modelName: this.modelName,
-        modelId: this.modelId,
-      });
-      const rev = await changeInst.currentRevision();
-      assert.equal(rev, this.revisionForModel);
+      const { modelName, modelId } = this
+      const changeInst = new Change({ modelName, modelId })
+      const rev = await changeInst.currentRevision()
+
+      assert.equal(rev, this.revisionForModel)
     });
   });
 });
@@ -189,10 +185,10 @@ describe('Change with custom properties', function() {
     const Checkpoint = loopback.Checkpoint.extend('TestCheckpoint')
     await Checkpoint.attachTo(memory)
 
-    TestModel = loopback.PersistedModel.extend(
+    TestModel = loopback.registry.createModel(
       'ChangeTestModelWithTenant',
       {
-        id: { id: true, type: 'string', defaultFn: 'guid' },
+        id: { type: 'string', id: true },
         tenantId: 'string'
       },
       {
@@ -205,24 +201,35 @@ describe('Change with custom properties', function() {
     // Initialize change model before use
     await TestModel._defineChangeModel()
     await memory.automigrate()
+
+    TestModel.prototype.fillCustomChangeProperties = async function (change) {
+      const { tenantId } = this
+
+      if (tenantId) {
+        change.tenantId = tenantId
+      } else {
+        change.tenantId = null
+      }
+    }
     Change = TestModel.getChangeModel()
   })
 
   describe('change.rectify', function() {
-    const TENANT_ID = '123';
-    let change;
+    const TENANT_ID = '123'
+    let change
+
     beforeEach(async function() {
-      const data = { foo: 'bar', tenantId: TENANT_ID };
-      const model = await TestModel.create(data);
-      change = await Change.findOrCreateChange(TestModel.modelName, model.id);
-    });
+      const data = { foo: 'bar', tenantId: TENANT_ID }
+      const model = await TestModel.create(data)
+      change = await Change.findOrCreateChange(TestModel.modelName, model.id)
+    })
 
     it('stores the custom property in the Change instance', async function() {
-      const ch = await change.rectify();
-      expect(ch.toObject()).to.have.property('tenantId', TENANT_ID);
-    });
-  });
-});
+      const ch = await change.rectify()
+      expect(ch.toObject()).to.have.property('tenantId', TENANT_ID)
+    })
+  })
+})
 
 describe('conflict detection - target deleted', function() {
   beforeEach(async function() {
