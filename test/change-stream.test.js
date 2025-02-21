@@ -23,51 +23,60 @@ describe('PersistedModel.createChangeStream()', function() {
 
     afterEach(verifyObserversRemoval);
 
-    it('should detect create', function(done) {
+    it('should detect create', async function() {
       const Score = this.Score;
-
-      Score.createChangeStream(function(err, changes) {
-        changes.on('data', function(change) {
-          expect(change.type).to.equal('create');
-          changes.destroy();
-          done();
+      const changeStream = await Score.createChangeStream();
+      const createPromise = new Promise((resolve, reject) => {
+        changeStream.on('data', function(change) {
+          try {
+            expect(change.type).to.equal('create');
+            changeStream.destroy();
+            resolve();
+          } catch (err) {
+            reject(err);
+          }
         });
-
-        Score.create({team: 'foo'});
       });
+      await Score.create({team: 'foo'});
+      await createPromise;
     });
 
-    it('should detect update', function(done) {
+    it('should detect update', async function() {
       const Score = this.Score;
-      Score.create({team: 'foo'}, function(err, newScore) {
-        Score.createChangeStream(function(err, changes) {
-          changes.on('data', function(change) {
+      const newScore = await Score.create({team: 'foo'});
+      const changeStream = await Score.createChangeStream();
+      const updatePromise = new Promise((resolve, reject) => {
+        changeStream.on('data', function(change) {
+          try {
             expect(change.type).to.equal('update');
-            changes.destroy();
-
-            done();
-          });
-          newScore.updateAttributes({
-            bat: 'baz',
-          });
+            changeStream.destroy();
+            resolve();
+          } catch (err) {
+            reject(err);
+          }
         });
       });
+      await newScore.updateAttributes({bat: 'baz'});
+      await updatePromise;
     });
 
-    it('should detect delete', function(done) {
+    it('should detect delete', async function() {
       const Score = this.Score;
-      Score.create({team: 'foo'}, function(err, newScore) {
-        Score.createChangeStream(function(err, changes) {
-          changes.on('data', function(change) {
+      const newScore = await Score.create({team: 'foo'});
+      const changeStream = await Score.createChangeStream();
+      const deletePromise = new Promise((resolve, reject) => {
+        changeStream.on('data', function(change) {
+          try {
             expect(change.type).to.equal('remove');
-            changes.destroy();
-
-            done();
-          });
-
-          newScore.remove();
+            changeStream.destroy();
+            resolve();
+          } catch (err) {
+            reject(err);
+          }
         });
       });
+      await newScore.remove();
+      await deletePromise;
     });
 
     it('should apply "where" and "fields" to create events', function() {
@@ -102,24 +111,17 @@ describe('PersistedModel.createChangeStream()', function() {
         });
     });
 
-    it('should not emit changes after destroy', function(done) {
+    it('should not emit changes after destroy', async function() {
       const Score = this.Score;
-
       const spy = sinon.spy();
-
-      Score.createChangeStream(function(err, changes) {
-        changes.on('data', function() {
-          spy();
-          changes.destroy();
-        });
-
-        Score.create({team: 'foo'})
-          .then(() => Score.deleteAll())
-          .then(() => {
-            expect(spy.calledOnce);
-            done();
-          });
+      const changeStream = await Score.createChangeStream();
+      changeStream.on('data', function() {
+        spy();
+        changeStream.destroy();
       });
+      await Score.create({team: 'foo'});
+      await Score.deleteAll();
+      expect(spy.calledOnce).to.be.true;
     });
 
     function verifyObserversRemoval() {
@@ -147,14 +149,15 @@ describe('PersistedModel.createChangeStream()', function() {
       });
     });
 
-    it('should detect a change', function(done) {
+    it('should detect a change', async function() {
       const Score = this.Score;
-
-      Score.createChangeStream(function(err, changes) {
-        changes.on('data', function(change) {
-          done();
+      const changeStream = await Score.createChangeStream();
+      const psPromise = new Promise(resolve => {
+        changeStream.on('data', function(change) {
+          resolve();
         });
       });
+      await psPromise;
     });
   });
 });
