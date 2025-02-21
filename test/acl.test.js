@@ -98,8 +98,8 @@ describe('security scopes', function() {
 describe('security ACLs', function() {
   beforeEach(setupTestModels);
 
-  it('supports checkPermission() returning a promise', function() {
-    return ACL.create({
+  it('supports checkPermission() returning a promise', async function() {
+    await ACL.create({
       principalType: ACL.USER,
       principalId: 'u001',
       model: 'testModel',
@@ -112,14 +112,14 @@ describe('security ACLs', function() {
       })
       .then(function(access) {
         assert(access.permission === ACL.ALLOW);
-      });
-  });
+      })
+  })
 
-  it('supports ACL rules with a wildcard for models', function() {
+  it('supports ACL rules with a wildcard for models', async function() {
     const A_USER_ID = 'a-test-user';
 
     // By default, access is allowed to all users
-    return assertPermission(ACL.ALLOW, 'initial state')
+    await assertPermission(ACL.ALLOW, 'initial state')
       // An ACL rule applying to all models denies access to everybody
       .then(() => ACL.create({
         model: '*',
@@ -141,19 +141,19 @@ describe('security ACLs', function() {
       }))
       .then(() => assertPermission(ACL.ALLOW, 'only a single model allowed'));
 
-    function assertPermission(expectedPermission, msg) {
-      return ACL.checkAccessForContext({
+    async function assertPermission(expectedPermission, msg) {
+      await ACL.checkAccessForContext({
         principals: [{type: ACL.USER, id: A_USER_ID}],
         model: testModel.modelName,
         accessType: ACL.ALL,
       }).then(accessContext => {
         const actual = accessContext.isAllowed() ? ACL.ALLOW : ACL.DENY;
         expect(actual, msg).to.equal(expectedPermission);
-      });
+      })
     }
-  });
+  })
 
-  it('supports checkAccessForContext() returning a promise', function() {
+  it('supports checkAccessForContext() returning a promise', async function() {
     const testModel = ds.createModel('testModel', {
       acls: [
         {principalType: ACL.USER, principalId: 'u001',
@@ -161,7 +161,7 @@ describe('security ACLs', function() {
       ],
     });
 
-    return ACL.checkAccessForContext({
+    await ACL.checkAccessForContext({
       principals: [{type: ACL.USER, id: 'u001'}],
       model: 'testModel',
       accessType: ACL.ALL,
@@ -417,13 +417,13 @@ describe('security ACLs', function() {
       ],
     })
 
-    const perm1 = await ACL.checkPermission(ACL.USER, 'u001', 'Customer', 'name', ACL.WRITE)
-    const perm2 = await ACL.checkPermission(ACL.USER, 'u001', 'Customer', 'name', ACL.READ)
-    const perm3 = await ACL.checkPermission(ACL.USER, 'u001', 'Customer', 'name', ACL.ALL)
-    const perm4 = await ACL.checkPermission(ACL.USER, 'u002', 'Customer', 'name', ACL.READ)
-    const perm5 = await ACL.checkPermission(ACL.USER, 'u003', 'Customer', 'name', ACL.WRITE)
+    const staticPerm1 = await ACL.checkPermission(ACL.USER, 'u001', 'Customer', 'name', ACL.WRITE)
+    const staticPerm2 = await ACL.checkPermission(ACL.USER, 'u001', 'Customer', 'name', ACL.READ)
+    const staticPerm3 = await ACL.checkPermission(ACL.USER, 'u001', 'Customer', 'name', ACL.ALL)
+    const staticPerm4 = await ACL.checkPermission(ACL.USER, 'u002', 'Customer', 'name', ACL.READ)
+    const staticPerm5 = await ACL.checkPermission(ACL.USER, 'u003', 'Customer', 'name', ACL.WRITE)
 
-    assert.deepEqual([perm1.permission, perm2.permission, perm3.permission, perm4.permission, perm5.permission], [
+    assert.deepEqual([staticPerm1.permission, staticPerm2.permission, staticPerm3.permission, staticPerm4.permission, staticPerm5.permission], [
       ACL.DENY,
       ACL.ALLOW,
       ACL.ALLOW,
@@ -559,6 +559,7 @@ describe('access check', function() {
     const MyTestModel = app.registry.createModel('MyTestModel')
     let checkAccessCalled = false
     let beforeHookCalled = false
+    let server
 
     // Set up models and datasources first
     app.dataSource('test', {connector: 'memory'})
@@ -572,9 +573,11 @@ describe('access check', function() {
     app.use(loopback.rest())
     
     // Set up access check
-    MyTestModel.checkAccess = async function() {
+    MyTestModel.checkAccess = function() {
+      const cb = arguments[arguments.length - 1]
       checkAccessCalled = true
-      return true
+      // Call the callback immediately to maintain the ordering
+      cb(null, true)
     }
 
     // Set up before hook
@@ -587,9 +590,9 @@ describe('access check', function() {
       beforeHookCalled = true
     })
 
-    // Wait for app to be ready
-    await new Promise(resolve => {
-      app.listen(0, resolve)
+    // Wait for app to be ready and store server instance
+    server = await new Promise(resolve => {
+      const s = app.listen(0, () => resolve(s))
     })
 
     try {
@@ -601,7 +604,7 @@ describe('access check', function() {
       assert(checkAccessCalled, 'checkAccess should have been called')
     }
     finally {
-      app.close()
+      await new Promise(resolve => server.close(resolve))
     }
   })
 })
