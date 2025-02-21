@@ -1055,16 +1055,18 @@ describe('relations - integration', function() {
     });
 
     it('returns a 404 response when embedded model is not found', function(done) {
-      const url = '/api/todo-lists/' + this.todoList.id + '/items/2';
-      this.get(url).expect(404, function(err, res) {
-        if (err) return done(err);
+      const url = '/api/todo-lists/' + this.todoList.id + '/items/2'
 
-        expect(res.body.error.status).to.be.equal(404);
-        expect(res.body.error.message).to.be.equal('Unknown "todoItem" id "2".');
-        expect(res.body.error.code).to.be.equal('MODEL_NOT_FOUND');
+      this.get(url)
+        .expect(404, function(err, res) {
+          if (err) return done(err);
 
-        done();
-      });
+          expect(res.body.error.status).to.be.equal(404);
+          expect(res.body.error.message).to.be.equal('Unknown "todoList" id "2".');
+          expect(res.body.error.code).to.be.equal('MODEL_NOT_FOUND');
+
+          done();
+        });
     });
 
     it.skip('checks if an embedded model exists - ok', function(done) {
@@ -1807,10 +1809,11 @@ describe('relations - integration', function() {
     });
 
     it('should not find the referenced model', function(done) {
-      const url = '/api/customers/' + cust.id + '/profile';
+      const url = '/api/customers/' + cust.id + '/profile'
+
       this.get(url)
         .expect(404, function(err, res) {
-          const expected = 'No "profile" instance(s) found';
+          const expected = 'No "customer" instance(s) found';
           expect(res.body.error.message).to.be.equal(
             expected,
           );
