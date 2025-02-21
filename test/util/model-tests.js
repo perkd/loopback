@@ -133,155 +133,107 @@ module.exports = function defineModelTestsWithDataSource(options) {
             });
         });
 
-        describe('Model.create([data], [callback])', function () {
+        describe('Model.create([data])', function () {
             it('Create an instance of Model with given data and save to the attached data source',
-                function (done) {
-                    User.create({ first: 'Joe', last: 'Bob' }, function (err, user) {
-                        assert(user instanceof User);
+                async function () {
+                    const user = await User.create({ first: 'Joe', last: 'Bob' })
+                    assert(user instanceof User)
+                })
+        })
 
-                        done();
-                    });
-                });
-        });
-
-        describe('model.save([options], [callback])', function () {
-            it('Save an instance of a Model to the attached data source', function (done) {
+        describe('model.save([options])', function () {
+            it('Save an instance of a Model to the attached data source', async function () {
                 const joe = new User({ first: 'Joe', last: 'Bob' });
-                joe.save(function (err, user) {
-                    assert(user.id);
-                    assert(!err);
-                    assert(!user.errors);
+                await joe.save()
+                assert(joe.id)
+                assert(!joe.errors)
+            })
+        })
 
-                    done();
-                });
-            });
-        });
+        describe('model.updateAttributes(data)', function () {
+            it('Save specified attributes to the attached data source', async function () {
+                const user = await User.create({ first: 'joe', age: 100 })
+                assert(!user.errors)
+                assert.equal(user.first, 'joe')
 
-        describe('model.updateAttributes(data, [callback])', function () {
-            it('Save specified attributes to the attached data source', function (done) {
-                User.create({ first: 'joe', age: 100 }, function (err, user) {
-                    assert(!err);
-                    assert.equal(user.first, 'joe');
+                const updatedUser = await user.updateAttributes({
+                    first: 'updatedFirst',
+                    last: 'updatedLast',
+                })
+                assert(!updatedUser.errors)
+                assert.equal(updatedUser.first, 'updatedFirst')
+                assert.equal(updatedUser.last, 'updatedLast')
+                assert.equal(updatedUser.age, 100)
+            })
+        })
 
-                    user.updateAttributes({
-                        first: 'updatedFirst',
-                        last: 'updatedLast',
-                    }, function (err, updatedUser) {
-                        assert(!err);
-                        assert.equal(updatedUser.first, 'updatedFirst');
-                        assert.equal(updatedUser.last, 'updatedLast');
-                        assert.equal(updatedUser.age, 100);
+        describe('Model.upsert(data)', function () {
+            it('Update when record with id=data.id found, insert otherwise', async function () {
+                const user = await User.upsert({ first: 'joe', id: 7 })
+                assert.equal(user.first, 'joe')
 
-                        done();
-                    });
-                });
-            });
-        });
+                const updatedUser = await User.upsert({ first: 'bob', id: 7 })
+                assert.equal(updatedUser.first, 'bob')
+            })
+        })
 
-        describe('Model.upsert(data, callback)', function () {
-            it('Update when record with id=data.id found, insert otherwise', function (done) {
-                User.upsert({ first: 'joe', id: 7 }, function (err, user) {
-                    assert(!err);
-                    assert.equal(user.first, 'joe');
+        describe('model.destroy()', function () {
+            it('Remove a model from the attached data source', async function () {
+                const user = await User.create({ first: 'joe', last: 'bob' })
+                const foundUser = await User.findById(user.id)
+                assert.equal(user.id, foundUser.id)
+                
+                await User.deleteById(foundUser.id)
+                const found = await User.find({ where: { id: user.id } })
+                assert.equal(found.length, 0)
+            })
+        })
 
-                    User.upsert({ first: 'bob', id: 7 }, function (err, updatedUser) {
-                        assert(!err);
-                        assert.equal(updatedUser.first, 'bob');
+        describe('Model.deleteById(id)', function () {
+            it('Delete a model instance from the attached data source', async function () {
+                const user = await User.create({ first: 'joe', last: 'bob' })
+                await User.deleteById(user.id)
+                const notFound = await User.findById(user.id)
+                assert.equal(notFound, null)
+            })
+        })
 
-                        done();
-                    });
-                });
-            });
-        });
+        describe('Model.exists(id)', function () {
+            it('returns true when the model with the given id exists', async function () {
+                const user = await User.create({ first: 'max' })
+                const exists = await User.exists(user.id)
+                assert.equal(exists, true)
+            })
 
-        describe('model.destroy([callback])', function () {
-            it('Remove a model from the attached data source', function (done) {
-                User.create({ first: 'joe', last: 'bob' }, function (err, user) {
-                    User.findById(user.id, function (err, foundUser) {
-                        if (err) return done(err);
+            it('returns false when there is no model with the given id', async function () {
+                const exists = await User.exists('user-id-does-not-exist')
+                assert.equal(exists, false)
+            })
+        })
 
-                        assert.equal(user.id, foundUser.id);
-                        User.deleteById(foundUser.id, function (err) {
-                            if (err) return done(err);
+        describe('Model.findById(id)', function () {
+            it('Find an instance by id', async function () {
+                const user = await User.create({ first: 'michael', last: 'jordan', id: 23 })
+                const found = await User.findById(user.id)
+                assert.equal(user.id, 23)
+                assert.equal(user.first, 'michael')
+                assert.equal(user.last, 'jordan')
+            })
+        })
 
-                            User.find({ where: { id: user.id } }, function (err, found) {
-                                if (err) return done(err);
-
-                                assert.equal(found.length, 0);
-
-                                done();
-                            });
-                        });
-                    });
-                });
-            });
-        });
-
-        describe('Model.deleteById(id, [callback])', function () {
-            it('Delete a model instance from the attached data source', function (done) {
-                User.create({ first: 'joe', last: 'bob' }, function (err, user) {
-                    User.deleteById(user.id, function (err) {
-                        User.findById(user.id, function (err, notFound) {
-                            assert.equal(notFound, null);
-
-                            done();
-                        });
-                    });
-                });
-            });
-        });
-
-        describe('Model.exists(id, [callback])', function () {
-            it('returns true when the model with the given id exists', function (done) {
-                User.create({ first: 'max' }, function (err, user) {
-                    if (err) return done(err);
-                    User.exists(user.id, function (err, exist) {
-                        if (err) return done(err);
-                        assert.equal(exist, true);
-                        done();
-                    });
-                });
-            });
-
-            it('returns false when there is no model with the given id', function (done) {
-                User.exists('user-id-does-not-exist', function (err, exist) {
-                    if (err) return done(err);
-                    assert.equal(exist, false);
-                    done();
-                });
-            });
-        });
-
-        describe('Model.findById(id, callback)', function () {
-            it('Find an instance by id', function (done) {
-                User.create({ first: 'michael', last: 'jordan', id: 23 }, function () {
-                    User.findById(23, function (err, user) {
-                        assert.equal(user.id, 23);
-                        assert.equal(user.first, 'michael');
-                        assert.equal(user.last, 'jordan');
-
-                        done();
-                    });
-                });
-            });
-        });
-
-        describe('Model.count([query], callback)', function () {
-            it('Query count of Model instances in data source', function (done) {
+        describe('Model.count([query])', function () {
+            it('Query count of Model instances in data source', async function () {
                 (new TaskEmitter())
                     .task(User, 'create', { first: 'jill', age: 100 })
                     .task(User, 'create', { first: 'bob', age: 200 })
                     .task(User, 'create', { first: 'jan' })
                     .task(User, 'create', { first: 'sam' })
                     .task(User, 'create', { first: 'suzy' })
-                    .on('done', function () {
-                        User.count({ age: { gt: 99 } }, function (err, count) {
-                            assert.equal(count, 2);
-
-                            done();
-                        });
-                    });
-            });
-        });
-    });
-};
+                    .on('done', async function () {
+                        const count = await User.count({ age: { gt: 99 } })
+                        assert.equal(count, 2)
+                    })
+            })
+        })
+    })
+}
