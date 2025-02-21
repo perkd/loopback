@@ -32,30 +32,31 @@ module.exports = function(Scope) {
    * @param {String} model The model name
    * @param {String} property The property/method/relation name
    * @param {String} accessType The access type
-   * @callback {Function} callback
    * @param {String|Error} err The error object
    * @param {AccessRequest} result The access permission
    */
-  Scope.checkPermission = function(scope, model, property, accessType, callback) {
-    this.resolveRelatedModels();
-    const aclModel = this.aclModel;
-    assert(aclModel,
-      'ACL model must be defined before Scope.checkPermission is called');
+  Scope.checkPermission = async function(scope, model, property, accessType) {
+    this.resolveRelatedModels()
 
-    this.findOne({where: {name: scope}}, function(err, scopeRecord) {
-      if (err) {
-        if (callback) callback(err);
-      } else if (!scopeRecord) {
-        // Explicitly handle missing scope records
-        const error = new Error('Scope ' + scope + ' not found');
-        error.statusCode = 403;
-        error.code = 'SCOPE_NOT_FOUND';
-        return callback(error);
-      } else {
-        aclModel.checkPermission(
-          aclModel.SCOPE, scopeRecord.id, model, property, accessType, callback,
-        );
-      }
-    });
-  };
-};
+    const { aclModel } = this
+    assert(aclModel, 'ACL model must be defined before Scope.checkPermission is called')
+
+    const scopeRecord = await this.findOne({where: {name: scope}})
+    if (!scopeRecord) {
+      const error = new Error('Scope ' + scope + ' not found');
+      error.statusCode = 403;
+      error.code = 'SCOPE_NOT_FOUND'
+      return error;
+    }
+
+    const permission = await aclModel.checkPermission(
+      aclModel.SCOPE,
+      scopeRecord.id,
+      model,
+      property,
+      accessType
+    )
+
+    return permission
+  }
+}
