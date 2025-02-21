@@ -9,7 +9,6 @@ const loopback = require('../');
 const defineModelTestsWithDataSource = require('./util/model-tests');
 
 describe('RemoteConnector', function() {
-  this.timeout(10000);
 
   let remoteApp, remote;
 
@@ -75,29 +74,25 @@ describe('RemoteConnector', function() {
     });
   });
 
-  it('should support the save method', function(done) {
-    let calledServerCreate = false;
-    const RemoteModel = loopback.PersistedModel.extend('TestModel');
-    RemoteModel.attachTo(this.remote);
+  it('should support the save method', async function() {
+    let calledServerCreate = false
+    const RemoteModel = loopback.PersistedModel.extend('TestModel')
+    RemoteModel.attachTo(this.remote)
 
     const ServerModel = this.ServerModel;
 
-    ServerModel.create = function(data, options, cb) {
-      calledServerCreate = true;
-      data.id = 1;
-      cb(null, data);
-    };
+    ServerModel.create = async function(data, options) {
+      calledServerCreate = true
+      data.id = 1
+      return data
+    }
 
-    ServerModel.setupRemoting();
+    ServerModel.setupRemoting()
 
-    const m = new RemoteModel({foo: 'bar'});
-    m.save(function(err, inst) {
-      if (err) return done(err);
+    const m = new RemoteModel({foo: 'bar'})
+    const inst = await m.save()
 
-      assert(inst instanceof RemoteModel);
-      assert(calledServerCreate);
-
-      done();
-    });
-  });
-});
+    assert(inst instanceof RemoteModel)
+    assert(calledServerCreate)
+  })
+})
