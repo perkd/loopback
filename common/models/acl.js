@@ -213,34 +213,62 @@ module.exports = function(ACL) {
       req.registry = this.registry;
       req = new AccessRequest(req);
     }
+
     // Sort by the matching score in descending order
     acls = acls.sort(function(rule1, rule2) {
       return ACL.getMatchingScore(rule2, req) - ACL.getMatchingScore(rule1, req);
     });
+
     let permission = ACL.DEFAULT;
-    let score = 0;
+    let score = -1;
 
     for (let i = 0; i < acls.length; i++) {
       const candidate = acls[i];
-      score = ACL.getMatchingScore(candidate, req);
-      if (score < 0) {
-        // the highest scored ACL did not match
+      const candidateScore = ACL.getMatchingScore(candidate, req);
+      if (candidateScore < 0) continue;
+
+      if (score === -1) {
+        // First match
+        score = candidateScore;
+        permission = candidate.permission;
+      } else if (candidateScore === score) {
+        // For equal scores:
+        if (candidate.principalType === ACL.ROLE) {
+          // Role-based permissions take precedence
+          if (isStrongerRole(candidate.principalId, acls[i - 1].principalId)) {
+            permission = candidate.permission;
+          }
+        } else if (candidate.accessType === req.accessType) {
+          // Specific access type takes precedence
+          permission = candidate.permission;
+        }
+      } else {
+        // Lower score - stop processing
         break;
       }
+
       if (!req.isWildcard()) {
         // We should stop from the first match for non-wildcard
-        permission = candidate.permission;
         break;
-      } else {
-        if (req.exactlyMatches(candidate)) {
-          permission = candidate.permission;
-          break;
-        }
-        // For wildcard match, find the strongest permission
-        const candidateOrder = AccessContext.permissionOrder[candidate.permission];
-        const permissionOrder = AccessContext.permissionOrder[permission];
-        if (candidateOrder > permissionOrder) {
-          permission = candidate.permission;
+      }
+    }
+
+    // If checking ALL access type, verify all specific types
+    // only if the permission is not explicitly set to DEFAULT
+    if (req.accessType === ACL.ALL && permission === ACL.DEFAULT) {
+      const specificTypes = [ACL.READ, ACL.WRITE, ACL.EXECUTE];
+      for (const type of specificTypes) {
+        const specificReq = new AccessRequest({
+          model: req.model,
+          property: req.property,
+          accessType: type,
+          registry: req.registry
+        });
+
+        // Check permission for the specific access type
+        const typePermission = this.resolvePermission(acls, specificReq).permission;
+        if (typePermission === ACL.DENY) {
+          permission = ACL.DENY;
           break;
         }
       }
@@ -253,6 +281,7 @@ module.exports = function(ACL) {
         debug('with score:', acl.score(req));
       });
     }
+
     const res = new AccessRequest({
       model: req.model,
       property: req.property,
@@ -265,6 +294,23 @@ module.exports = function(ACL) {
 
     return res;
   };
+
+  /**
+   * Check if role1 is stronger than role2
+   * @param {String} role1 First role
+   * @param {String} role2 Second role
+   * @returns {Boolean} true if role1 is stronger
+   */
+  function isStrongerRole(role1, role2) {
+    const roles = {
+      [Role.OWNER]: 4,
+      [Role.RELATED]: 3,
+      [Role.AUTHENTICATED]: 2,
+      [Role.UNAUTHENTICATED]: 2,
+      [Role.EVERYONE]: 1
+    };
+    return (roles[role1] || 5) > (roles[role2] || 5);
+  }
 
   /*!
    * Get the static ACLs from the model definition
