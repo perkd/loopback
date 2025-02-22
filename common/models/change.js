@@ -8,14 +8,13 @@
  */
 
 'use strict';
-const g = require('../../lib/globalize');
-const PersistedModel = require('../../lib/loopback').PersistedModel;
-const loopback = require('../../lib/loopback');
-const crypto = require('crypto');
-const CJSON = {stringify: require('canonical-json')};
-const async = require('async');
-const assert = require('assert');
-const debug = require('debug')('loopback:change');
+const crypto = require('node:crypto')
+const assert = require('node:assert')
+const CJSON = {stringify: require('canonical-json')}
+const debug = require('debug')('loopback:change')
+const loopback = require('../../lib/loopback')
+const { PersistedModel } = loopback
+const g = require('../../lib/globalize')
 
 /**
  * Change list entry.
