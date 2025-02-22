@@ -7,14 +7,9 @@
 const assert = require('assert');
 const expect = require('./helpers/expect');
 const loopback = require('../');
-const Scope = loopback.Scope;
-const ACL = loopback.ACL;
 const request = require('supertest');
 const supertest = require('supertest');
-const Role = loopback.Role;
-const RoleMapping = loopback.RoleMapping;
-const User = loopback.User;
-const async = require('async');
+const { ACL, Scope, Role, RoleMapping, User } = loopback
 
 // Speed up the password hashing algorithm for tests
 User.settings.saltWorkFactor = 4;
@@ -282,14 +277,27 @@ describe('security ACLs', function() {
       property: ACL.ALL,
       accessType: ACL.READ,
       permission: ACL.DENY
-    })
+    });
 
-    const [permRead, permAll] = await Promise.all([
-      ACL.checkPermission(ACL.USER, 'u001', 'User', 'name', ACL.READ),
-      ACL.checkPermission(ACL.USER, 'u001', 'User', 'name', ACL.ALL)
-    ])
+    // Check permissions after both ACLs are created using checkAccessForContext
+    const accessContextRead = await ACL.checkAccessForContext({
+      principals: [{ type: ACL.USER, id: 'u001' }],
+      model: 'User',
+      property: 'name',
+      accessType: ACL.READ,
+    });
 
-    assert.deepEqual([permRead.permission, permAll.permission], [
+    const accessContextAll = await ACL.checkAccessForContext({
+      principals: [{ type: ACL.USER, id: 'u001' }],
+      model: 'User',
+      property: 'name',
+      accessType: ACL.ALL,
+    });
+
+    const permRead = accessContextRead.isAllowed() ? ACL.ALLOW : ACL.DENY;
+    const permAll = accessContextAll.isAllowed() ? ACL.ALLOW : ACL.DENY;
+
+    assert.deepEqual([permRead, permAll], [
       ACL.DENY,
       ACL.DENY
     ])
@@ -323,12 +331,14 @@ describe('security ACLs', function() {
       permission: ACL.ALLOW,
     })
 
-    const perm1 = await ACL.checkPermission(ACL.USER, 'u001', 'testModel', 'name', ACL.READ)
-    const perm2 = await ACL.checkPermission(ACL.USER, 'u001', 'testModel', ACL.ALL, ACL.READ)
-    const perm3 = await ACL.checkPermission(ACL.USER, 'u001', 'testModel', 'name', ACL.WRITE)
-    const perm4 = await ACL.checkPermission(ACL.USER, 'u001', 'testModel', 'name', ACL.ALL)
-    const perm5 = await ACL.checkPermission(ACL.USER, 'u002', 'testModel', 'name', ACL.WRITE)
-    const perm6 = await ACL.checkPermission(ACL.USER, 'u002', 'testModel', 'name', ACL.READ)
+    const [ perm1, perm2, perm3, perm4, perm5, perm6 ] = await Promise.all([
+      ACL.checkPermission(ACL.USER, 'u001', 'testModel', 'name', ACL.READ),
+      ACL.checkPermission(ACL.USER, 'u001', 'testModel', ACL.ALL, ACL.READ),
+      ACL.checkPermission(ACL.USER, 'u001', 'testModel', 'name', ACL.WRITE),
+      ACL.checkPermission(ACL.USER, 'u001', 'testModel', 'name', ACL.ALL),
+      ACL.checkPermission(ACL.USER, 'u002', 'testModel', 'name', ACL.WRITE),
+      ACL.checkPermission(ACL.USER, 'u002', 'testModel', 'name', ACL.READ)
+    ])
 
     assert.deepEqual([perm1.permission, perm2.permission, perm3.permission, perm4.permission, perm5.permission, perm6.permission], [
       ACL.ALLOW,
@@ -741,13 +751,24 @@ describe('authorized roles propagation in RemotingContext', function() {
   }
 });
 
-function setupTestModels() {
+async function setupTestModels() {
   ds = this.ds = loopback.createDataSource({connector: loopback.Memory});
-  testModel = loopback.PersistedModel.extend('testModel');
-  ACL.attachTo(ds);
-  Role.attachTo(ds);
-  RoleMapping.attachTo(ds);
-  User.attachTo(ds);
-  Scope.attachTo(ds);
-  testModel.attachTo(ds);
+
+  // Clear the data source before each test
+  ds.automigrate(function(err) {
+    if (err) throw err;
+
+    testModel = loopback.PersistedModel.extend('testModel');
+    ACL.attachTo(ds);
+    Role.attachTo(ds);
+    RoleMapping.attachTo(ds);
+    User.attachTo(ds);
+    Scope.attachTo(ds);
+    testModel.attachTo(ds);
+
+    // Ensure that the models are attached to the data source before running tests
+    ds.autoupdate(function(err) {
+      if (err) throw err;
+    });
+  });
 }

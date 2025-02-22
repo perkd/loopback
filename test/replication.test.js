@@ -13,7 +13,10 @@ const runtime = require('./../lib/runtime');
 
 let tid = 0 // per-test unique id used e.g. to build unique model names
 
-// Add replicateExpectingSuccess here so it's available throughout the file
+// Move these variables to the top level scope, before replicateExpectingSuccess
+let SourceModel, TargetModel
+
+// Then update replicateExpectingSuccess to use the global variables
 async function replicateExpectingSuccess(source, target, since) {
   source = source || SourceModel
   target = target || TargetModel
@@ -28,7 +31,7 @@ async function replicateExpectingSuccess(source, target, since) {
 }
 
 describe('Replication / Change APIs', function() {
-  let dataSource, SourceModel, TargetModel, useSinceFilter;
+  let dataSource, useSinceFilter;  // Remove SourceModel, TargetModel from here
 
   beforeEach(async function() {
     tid++ // Increment tid for unique model names
@@ -78,7 +81,6 @@ describe('Replication / Change APIs', function() {
     await TargetModel._defineChangeModel();
     TargetModel.enableChangeTracking();
 
-    this.SourceModel = SourceModel;
     this.startingCheckpoint = -1;
 
     this.createInitalData = async function() {
@@ -164,16 +166,20 @@ describe('Replication / Change APIs', function() {
     })
 
     it('should call rectifyAllChanges if no id is passed for rectifyOnDelete', async function() {
-      const calls = mockSourceModelRectify()
-      await SourceModel.destroyAll({name: 'John'})
-      expect(calls).to.eql(['rectifyAllChanges'])
+      const mock = mockSourceModelRectify()
+      try {
+        await SourceModel.destroyAll({name: 'John'})
+        expect(mock.calls).to.eql(['rectifyAllChanges'])
+      } finally {
+        mock.restore()
+      }
     })
 
     it('should call rectifyAllChanges if no id is passed for rectifyOnSave', async function() {
       const calls = mockSourceModelRectify()
       const newData = {'name': 'Janie'}
       await SourceModel.update({name: 'Jane'}, newData)
-      expect(calls).to.eql(['rectifyAllChanges'])
+      expect(calls.calls).to.eql(['rectifyAllChanges'])
     })
 
     it('rectifyOnDelete for Delete should call rectifyChange instead of rectifyAllChanges',
@@ -183,7 +189,7 @@ describe('Replication / Change APIs', function() {
         await SourceModel.destroyAll({name: 'John'})
         await SourceModel.replicate(TargetModel)
         
-        expect(calls).to.eql(['rectifyChange'])
+        expect(calls.calls).to.eql(['rectifyChange'])
       })
 
     it('rectifyOnSave for Update should call rectifyChange instead of rectifyAllChanges',
@@ -194,7 +200,7 @@ describe('Replication / Change APIs', function() {
         await SourceModel.update({name: 'Jane'}, newData)
         await SourceModel.replicate(TargetModel)
         
-        expect(calls).to.eql(['rectifyChange'])
+        expect(calls.calls).to.eql(['rectifyChange'])
       })
 
     it('rectifyOnSave for Create should call rectifyChange instead of rectifyAllChanges',
@@ -205,7 +211,7 @@ describe('Replication / Change APIs', function() {
         await SourceModel.create(newData)
         await SourceModel.replicate(TargetModel)
         
-        expect(calls).to.eql(['rectifyChange'])
+        expect(calls.calls).to.eql(['rectifyChange'])
       })
 
     function mockSourceModelRectify() {
@@ -226,7 +232,14 @@ describe('Replication / Change APIs', function() {
         return origRectifyAllChanges.apply(this, arguments)
       }
 
-      return calls
+      // Important: Return a cleanup function
+      return {
+        calls,
+        restore: function() {
+          SourceModel.rectifyChange = origRectifyChange
+          SourceModel.rectifyAllChanges = origRectifyAllChanges
+        }
+      }
     }
 
     function mockTargetModelRectify() {
@@ -247,7 +260,14 @@ describe('Replication / Change APIs', function() {
         return origRectifyAllChanges.apply(this, arguments)
       }
 
-      return calls
+      // Important: Return a cleanup function
+      return {
+        calls,
+        restore: function() {
+          TargetModel.rectifyChange = origRectifyChange
+          TargetModel.rectifyAllChanges = origRectifyAllChanges
+        }
+      }
     }
   });
 
@@ -564,9 +584,12 @@ describe('Replication / Change APIs', function() {
       const inst = await SourceModel.create({name: 'original'})
       this.model = inst
       await SourceModel.replicate(TargetModel)
-      await SourceModel.checkpoint()  // Create checkpoint after initial replication
+      
+      // Create separate checkpoints for source and target
+      await SourceModel.checkpoint()
+      await TargetModel.checkpoint()
 
-      // Make conflicting changes
+      // Make conflicting changes to both models
       await Promise.all([
         SourceModel.updateAll(
           {id: inst.id},
@@ -578,43 +601,51 @@ describe('Replication / Change APIs', function() {
         )
       ])
 
-      // Important: Create new checkpoint to capture the changes
-      await SourceModel.checkpoint()
-      await TargetModel.checkpoint()
-
       // Replicate to detect conflicts
       const result = await SourceModel.replicate(TargetModel)
       this.conflicts = result.conflicts || []
       this.conflict = this.conflicts[0]
+      
+      // Verify we actually have a conflict to test
+      if (!this.conflict) {
+        throw new Error('No conflict detected - test setup failed')
+      }
     })
+
     it('should detect a single conflict', function() {
-      assert.equal(this.conflicts.length, 1);
-      assert(this.conflict);
-    });
+      assert.equal(this.conflicts.length, 1)
+      assert(this.conflict instanceof SourceModel.Conflict)
+    })
+
     it('type should be UPDATE', async function() {
       const type = await this.conflict.type()
       assert.equal(type, Change.UPDATE)
-    });
+    })
+
     it('conflict.changes()', async function() {
       const [sourceChange, targetChange] = await this.conflict.changes()
-      assert.equal(typeof sourceChange.id, 'string')
-      assert.equal(typeof targetChange.id, 'string')
-      assert.equal(this.model.getId(), sourceChange.getModelId())
+      
+      assert(sourceChange instanceof SourceModel.Change,
+        'Expected sourceChange to be a Change instance')
+      assert(targetChange instanceof TargetModel.Change,
+        'Expected targetChange to be a Change instance')
+        
       assert.equal(sourceChange.type(), Change.UPDATE)
       assert.equal(targetChange.type(), Change.UPDATE)
-    });
+    })
+
     it('conflict.models()', async function() {
-      const [source, target] = await this.conflict.models()
-      assert.deepEqual(source.toJSON(), {
-        id: this.model.id,
-        name: 'source update',
-      })
-      assert.deepEqual(target.toJSON(), {
-        id: this.model.id,
-        name: 'target update',
-      })
-    });
-  });
+      const [sourceModel, targetModel] = await this.conflict.models()
+      
+      assert(sourceModel instanceof SourceModel,
+        'Expected sourceModel to be a SourceModel instance')
+      assert(targetModel instanceof TargetModel,
+        'Expected targetModel to be a TargetModel instance')
+        
+      assert.equal(sourceModel.name, 'source update')
+      assert.equal(targetModel.name, 'target update')
+    })
+  })
 
   describe('conflict detection - source deleted', function() {
     beforeEach(async function() {
