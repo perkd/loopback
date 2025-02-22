@@ -10,6 +10,10 @@ const describe = require('./util/describe');
 const loopback = require('../');
 const expect = require('./helpers/expect');
 
+// Capture the original built-in models before other tests have a chance to modify them.
+const originalUser = loopback.User
+const originalApplication = loopback.Application
+
 describe('loopback', function() {
   let nameCounter = 0;
   let uniqueModelName;
@@ -257,37 +261,33 @@ describe('loopback', function() {
 
   describe('loopback.createModel(config)', function() {
     it('creates the model', function() {
-      const app = loopback({localRegistry: true, loadBuiltinModels: true})
       const model = loopback.createModel({
-        name: uniqueModelName
+        name: uniqueModelName,
       })
-      app.model(model)
       expect(model.prototype).to.be.instanceof(loopback.Model)
     })
 
     it('interprets extra first-level keys as options', function() {
-      const app = loopback({localRegistry: true, loadBuiltinModels: true})
       const model = loopback.createModel({
         name: uniqueModelName,
-        base: 'User'
+        base: 'User',
       })
-      app.model(model)
-      expect(model.prototype).to.be.instanceof(loopback.User)
+
+      expect(originalUser.prototype.isPrototypeOf(model.prototype)).to.be.true
     })
 
     it('prefers config.options.key over config.key', function() {
-      const app = loopback({localRegistry: true, loadBuiltinModels: true});
       const model = loopback.createModel({
         name: uniqueModelName,
         base: 'User',
         options: {
           base: 'Application',
         },
-      });
+      })
 
-      expect(model.prototype).to.be.instanceof(loopback.Application);
-    });
-  });
+      expect(originalApplication.prototype.isPrototypeOf(model.prototype)).to.be.true
+    })
+  })
 
   describe('loopback.configureModel(ModelCtor, config)', function() {
     it('adds new relations', function() {
