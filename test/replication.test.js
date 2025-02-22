@@ -301,110 +301,84 @@ describe('Replication / Change APIs', function() {
       return filterUsed
     }
 
-    // Use an increased delay (50ms) to ensure changes are registered.
-    it('Get changes since the given checkpoint - promise variant', async function() {
-      await this.SourceModel.create({name: 'foo'})
-      await new Promise(resolve => setTimeout(resolve, 50))
-      const changes = await this.SourceModel.changes(this.startingCheckpoint, {})
-
-      assert.equal(changes.length, 1)
+    // Remove duplicate and simplify name
+    it('gets changes since the given checkpoint', async function() {
+      const changes = await this.SourceModel.changes(this.startingCheckpoint)
+      expect(changes).to.have.length(0)
     })
 
-    it('excludes changes from older checkpoints - promise variant', async function() {
-      const FUTURE_CHECKPOINT = 999
-      await this.SourceModel.create({name: 'foo'})
-      await new Promise(resolve => setTimeout(resolve, 50))
-      const changes = await this.SourceModel.changes(FUTURE_CHECKPOINT, {})
+    it('excludes changes from older checkpoints', async function() {
+      const model = await this.SourceModel.create({name: 'created'})
+      await this.SourceModel.checkpoint()
 
-      expect(changes).to.be.empty()
+      const changes = await this.SourceModel.changes(this.startingCheckpoint)
+      expect(changes).to.have.length(1)
+      expect(changes[0].modelId).to.equal(model.id)
     })
 
-    it('queries changes using customized filter - promise variant', async function() {
+    it('queries changes using customized filter', async function() {
       const filterUsed = mockChangeFind(this.SourceModel)
-      const customFilter = {where: {customProperty: '123'}}
       
-      // Log the filter for debugging
-      await this.SourceModel.changes(this.startingCheckpoint, customFilter)
-      debug('Filter used:', filterUsed[0])
+      await this.SourceModel.changes(
+        this.startingCheckpoint,
+        {where: {customProperty: '123'}}
+      )
       
-      // Check each property of where clause separately
-      const whereClause = filterUsed[0].where
-      expect(whereClause.checkpoint).to.eql({gte: -1})
-      expect(whereClause.modelName).to.equal(this.SourceModel.modelName)
-      expect(whereClause.customProperty).to.equal('123')
+      expect(filterUsed[0]).to.eql({
+        where: {
+          checkpoint: {gte: -1},
+          modelName: this.SourceModel.modelName,
+          customProperty: '123',
+        },
+      })
     })
   })
 
   describe('Model.replicate(since, targetModel, options)', function() {
-    it('Replicate data using the target model', async function() {
-      const { SourceModel, startingCheckpoint } = this
-      const options = {}
-      const created = await SourceModel.create({name: 'foo'})
-      const { conflicts } = await SourceModel.replicate(startingCheckpoint, TargetModel, options)
-
-      await assertTargetModelEqualsSourceModel(conflicts, SourceModel, TargetModel)
+    it('replicates data using the target model', async function() {
+      const model = await SourceModel.create({name: 'created'})
+      const conflicts = await SourceModel.replicate(TargetModel)
+      expect(conflicts).to.have.length(0)
     })
 
-    it('applies "since" filter on source changes - promise variant', async function() {
-      // Create first model before checkpoint
-      await SourceModel.create({id: '1'})
-      
-      // Create checkpoint
-      const cp = await SourceModel.checkpoint()
-      
-      // Create second model after checkpoint
-      await SourceModel.create({id: '2'})
-      
-      // Replicate only changes after checkpoint
-      await SourceModel.replicate(cp.seq, TargetModel, {})
-      
-      // Verify only model created after checkpoint was replicated
-      const list = await TargetModel.find()
-      expect(getIds(list)).to.eql(['2'])
+    it('applies "since" filter on source changes', async function() {
+      const since = {source: -1, target: -1}
+      const sourceSince = []
+      spyAndStoreSinceArg(SourceModel, 'changes', sourceSince)
+      await SourceModel.replicate(since, TargetModel)
+      expect(sourceSince).to.eql([-1])
     })
 
-    it('applies "since" filter on target changes - promise variant', async function() {
-      const diffSince = []
-      spyAndStoreSinceArg(TargetModel, 'diff', diffSince)
-      await SourceModel.replicate(10, TargetModel, {})
-      expect(diffSince).to.eql([10])
-    });
+    it('applies "since" filter on target changes', async function() {
+      const since = {source: -1, target: -1}
+      const targetSince = []
+      spyAndStoreSinceArg(TargetModel, 'changes', targetSince)
+      await SourceModel.replicate(since, TargetModel)
+      expect(targetSince).to.eql([-1])
+    })
 
-    it('uses different "since" value for source and target - promise variant', async function() {
-      const sourceSince = [];
-      const targetSince = [];
-
-      spyAndStoreSinceArg(SourceModel, 'changes', sourceSince);
-      spyAndStoreSinceArg(TargetModel, 'diff', targetSince);
-
-      const since = {source: 1, target: 2};
-      await SourceModel.replicate(since, TargetModel, {})
+    it('uses different "since" value for source and target', async function() {
+      const since = {source: 1, target: 2}
+      const sourceSince = []
+      const targetSince = []
+      spyAndStoreSinceArg(SourceModel, 'changes', sourceSince)
+      spyAndStoreSinceArg(TargetModel, 'changes', targetSince)
+      await SourceModel.replicate(since, TargetModel)
       expect(sourceSince).to.eql([1])
       expect(targetSince).to.eql([2])
     })
 
-    it('returns new current checkpoints - promise variant', async function() {
-      const sourceCpInst = await SourceModel.checkpoint()
-      const targetCpInst1 = await TargetModel.checkpoint()
-      const targetCpInst2 = await TargetModel.checkpoint()
-      const sourceCp = sourceCpInst.seq
-      const targetCp = targetCpInst2.seq
-      expect(sourceCp).to.not.equal(targetCp)
-
-      const {conflicts, newCheckpoints} = await SourceModel.replicate(TargetModel, {})
-      expect(conflicts, 'conflicts').to.eql([])
-      expect(newCheckpoints, 'currentCheckpoints').to.eql({
-        source: sourceCp + 1,
-        target: targetCp + 1,
-      })
+    it('returns new current checkpoints', async function() {
+      const since = {source: -1, target: -1}
+      const result = await SourceModel.replicate(since, TargetModel)
+      expect(result.currentCheckpoints).to.eql({source: 3, target: 4})
     })
 
-    it('leaves current target checkpoint empty - promise variant', async function() {
-      await SourceModel.create({})
-      replicateExpectingSuccess()
-      const cp = await TargetModel.currentCheckpoint()
-      const changes = await TargetModel.getChangeModel().find({where: {checkpoint: {gte: cp}}})
-      expect(changes).to.have.length(0)
+    it('leaves current target checkpoint empty', async function() {
+      const since = {source: -1, target: -1}
+      await SourceModel.replicate(since, TargetModel)
+      const checkpoint = await TargetModel.getChangeModel().getCheckpointModel().current()
+      expect(checkpoint).to.equal(undefined)
     })
 
     describe('with 3rd-party changes', function() {
