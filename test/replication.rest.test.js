@@ -595,16 +595,14 @@ describe('Replication over REST', function() {
   async function seedConflict() {
     const server = await LocalCar.replicate(ServerCar)
     const { conflicts: serverConflicts } = server
-
     if (serverConflicts.length) return conflictError(serverConflicts)
 
     const local = await ServerCar.replicate(LocalCar)
     const { conflicts: localConflicts } = local
-
     if (localConflicts.length) return conflictError(localConflicts)
 
     // Hard-coded, see the seed data above
-    conflictedCarId = 'Ford-Mustang';
+    conflictedCarId = 'Ford-Mustang'
 
     await new LocalCar({id: conflictedCarId})
         .updateAttributes({model: 'Client'})
