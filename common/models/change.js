@@ -549,8 +549,28 @@ module.exports = function(Change) {
   Change.prototype.conflictsWith = function(change) {
     if (!change) return false;
     if (this.equals(change)) return false;
-    if (Change.bothDeleted(this, change)) return false;
-    if (this.isBasedOn(change)) return false;
+
+    const thisType = this.type();
+    const thatType = change.type();
+
+    // Both deletes should not conflict
+    if (thisType === Change.DELETE && thatType === Change.DELETE) {
+      return false;
+    }
+
+    // If either change is a delete, it conflicts
+    if (thisType === Change.DELETE || thatType === Change.DELETE) {
+      return true;
+    }
+
+    // For updates, check if they're based on each other
+    if (thisType === Change.UPDATE && thatType === Change.UPDATE) {
+      const isBasedOnThis = change.prev === this.rev;
+      const isBasedOnThat = this.prev === change.rev;
+      return !isBasedOnThis && !isBasedOnThat;
+    }
+
+    // Otherwise, they conflict
     return true;
   };
 
@@ -573,6 +593,7 @@ module.exports = function(Change) {
    */
 
   Change.prototype.isBasedOn = function(change) {
+    if (!change) return false;
     return this.prev === change.rev;
   };
 
@@ -632,26 +653,27 @@ module.exports = function(Change) {
     const conflicts = [];
     const localModelIds = [];
 
-    const localChanges = allLocalChanges.filter(function(c) {
-      return c.checkpoint >= since;
-    });
-
-    localChanges.forEach(function(localChange) {
+    // Process all local changes
+    allLocalChanges.forEach(function(localChange) {
       localChange = new Change(localChange);
       localModelIds.push(localChange.modelId);
       const remoteChange = remoteChangeIndex[localChange.modelId];
-      if (remoteChange && !localChange.equals(remoteChange)) {
-        if (remoteChange.conflictsWith(localChange)) {
+      
+      if (remoteChange) {
+        // Check for conflicts
+        if (localChange.conflictsWith(remoteChange)) {
           remoteChange.debug('remote conflict');
           localChange.debug('local conflict');
           conflicts.push(localChange);
-        } else {
+        } else if (localChange.checkpoint >= since) {
+          // Only include non-conflicting changes after checkpoint
           remoteChange.debug('remote delta');
           deltas.push(remoteChange);
         }
       }
     });
 
+    // Handle remote changes for models not present locally
     modelIds.forEach(function(id) {
       if (localModelIds.indexOf(id) !== -1) return;
 
