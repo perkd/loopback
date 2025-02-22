@@ -13,6 +13,20 @@ const runtime = require('./../lib/runtime');
 
 let tid = 0 // per-test unique id used e.g. to build unique model names
 
+// Add replicateExpectingSuccess here so it's available throughout the file
+async function replicateExpectingSuccess(source, target, since) {
+  source = source || SourceModel
+  target = target || TargetModel
+  
+  const result = await source.replicate(since, target)
+  
+  if (result.conflicts && result.conflicts.length) {
+    throw new Error('Unexpected conflicts\n' + 
+      result.conflicts.map(JSON.stringify).join('\n'))
+  }
+  return result
+}
+
 describe('Replication / Change APIs', function() {
   let dataSource, SourceModel, TargetModel, useSinceFilter;
 
@@ -197,22 +211,19 @@ describe('Replication / Change APIs', function() {
     function mockSourceModelRectify() {
       const calls = []
       
-      // Store original functions
+      // Store original functions before replacing them
       const origRectifyChange = SourceModel.rectifyChange
       const origRectifyAllChanges = SourceModel.rectifyAllChanges
 
-      SourceModel.rectifyChange = async function(id) {
+      // Replace with mocked versions that track calls
+      SourceModel.rectifyChange = function(id) {
         calls.push('rectifyChange')
-        if (origRectifyChange) {
-          return origRectifyChange.apply(this, arguments)
-        }
+        return origRectifyChange.apply(this, arguments)
       }
 
-      SourceModel.rectifyAllChanges = async function() {
+      SourceModel.rectifyAllChanges = function() {
         calls.push('rectifyAllChanges')
-        if (origRectifyAllChanges) {
-          return origRectifyAllChanges.apply(this, arguments)
-        }
+        return origRectifyAllChanges.apply(this, arguments)
       }
 
       return calls
@@ -221,22 +232,19 @@ describe('Replication / Change APIs', function() {
     function mockTargetModelRectify() {
       const calls = []
       
-      // Store original functions
+      // Store original functions before replacing them
       const origRectifyChange = TargetModel.rectifyChange
       const origRectifyAllChanges = TargetModel.rectifyAllChanges
 
-      TargetModel.rectifyChange = async function(id) {
+      // Replace with mocked versions that track calls
+      TargetModel.rectifyChange = function(id) {
         calls.push('rectifyChange')
-        if (origRectifyChange) {
-          return origRectifyChange.apply(this, arguments)
-        }
+        return origRectifyChange.apply(this, arguments)
       }
 
-      TargetModel.rectifyAllChanges = async function() {
+      TargetModel.rectifyAllChanges = function() {
         calls.push('rectifyAllChanges')
-        if (origRectifyAllChanges) {
-          return origRectifyAllChanges.apply(this, arguments)
-        }
+        return origRectifyAllChanges.apply(this, arguments)
       }
 
       return calls
@@ -582,8 +590,9 @@ describe('Replication / Change APIs', function() {
       const inst = await SourceModel.create({name: 'original'})
       this.model = inst
       await SourceModel.replicate(TargetModel)
+      await SourceModel.checkpoint()  // Create checkpoint after initial replication
 
-      // Simulate real-world scenario: concurrent updates to same record
+      // Make conflicting changes
       await Promise.all([
         SourceModel.updateAll(
           {id: inst.id},
@@ -595,10 +604,14 @@ describe('Replication / Change APIs', function() {
         )
       ])
 
-      // Replicate to detect conflicts between concurrent updates
+      // Important: Create new checkpoint to capture the changes
+      await SourceModel.checkpoint()
+      await TargetModel.checkpoint()
+
+      // Replicate to detect conflicts
       const result = await SourceModel.replicate(TargetModel)
-      this.conflicts = result.conflicts
-      this.conflict = result.conflicts[0]
+      this.conflicts = result.conflicts || []
+      this.conflict = this.conflicts[0]
     })
     it('should detect a single conflict', function() {
       assert.equal(this.conflicts.length, 1);
@@ -1219,18 +1232,6 @@ describe('Replication / Change APIs', function() {
     return await Model.create(data)
   }
 
-  async function replicateExpectingSuccess(source, target, since) {
-    source = source || SourceModel
-    target = target || TargetModel
-    
-    const {conflicts} = await source.replicate(since, target)
-    
-    if (conflicts.length) {
-      throw new Error('Unexpected conflicts\n' + 
-        conflicts.map(JSON.stringify).join('\n'))
-    }
-  }
-
   function spyAndStoreSinceArg(Model, methodName, store) {
     const orig = Model[methodName]
     Model[methodName] = async function(since, ...args) {
@@ -1262,8 +1263,6 @@ describe('Replication / Change APIs', function() {
 });
 
 describe('Replication / Change APIs with custom change properties', function() {
-  this.timeout(10000) // Restore original timeout setting
-
   let dataSource, SourceModel, TargetModel, startingCheckpoint
 
   beforeEach(async function() {
