@@ -84,17 +84,14 @@ module.exports = function(Change) {
       try {
         const change = await Change.findOrCreateChange(modelName, id)
         await change.rectify()
+      } catch (err) {
+        err.modelName = modelName
+        err.modelId = id
+        errors.push(err)
+        // Always throw to surface errors
+        throw err
       }
-      catch (err) {
-        err.modelName = modelName;
-        err.modelId = id;
-        errors.push(err);
-        // Only continue if ignoreErrors is true
-        if (!Change.settings.ignoreErrors) {
-          throw err;
-        }
-      }
-    });
+    })
 
     await Promise.all(tasks)
 
