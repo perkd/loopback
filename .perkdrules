@@ -1,3 +1,21 @@
+# Perkd Rules
+
+# Coding
+1. be concise, use as few lines of code as possible for the given logic
+2. after substantial code changes, review and optimise by reducing code
+
+# Tools
+- use yarn, not npm
+
+# Debugging
+- when fix attempts result in more failed tests, consider regressing to the previous working state, and create/add to debug-journal
+- when tests fail, explain and confirm with me before modifying test logic 
+- for complex situations:
+ 1. create a new debug-journal (journal) to track learnings and fails/success
+ 2. add console.logs (logs) to trace runtime values
+- when debug run completes, such as passing all tests:
+ 1. clean up any logs added and review/summarise journal if used
+- adding complex code during debugging could lead to more bugs
 
 # Migration Guidelines
 - use the `enhancements.md` file to guide the migration
@@ -5,7 +23,7 @@
 - files in the 'original' folder are not modified, only used for reference
 - use async/await where possible when using native promises
 
-# Test Scripts
+# Tests
 - do not modify test scripts to pass tests, unless it is verifed that test script is incorrect
 - use promises by default unless explicitly testing callback functionality
 - when explicitly migrating test scripts from callback to promises:
