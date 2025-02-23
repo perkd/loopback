@@ -177,7 +177,7 @@ describe('Replication / Change APIs', function() {
 
     it('should call rectifyAllChanges if no id is passed for rectifyOnSave', async function() {
       const calls = mockSourceModelRectify()
-      const newData = {'name': 'Janie'}
+      const newData = {name: 'Janie'}
       await SourceModel.update({name: 'Jane'}, newData)
       expect(calls.calls).to.eql(['rectifyAllChanges'])
     })
@@ -195,7 +195,7 @@ describe('Replication / Change APIs', function() {
     it('rectifyOnSave for Update should call rectifyChange instead of rectifyAllChanges',
       async function() {
         const calls = mockTargetModelRectify()
-        const newData = {'name': 'Janie'}
+        const newData = {name: 'Janie'}
         
         await SourceModel.update({name: 'Jane'}, newData)
         await SourceModel.replicate(TargetModel)
@@ -222,15 +222,21 @@ describe('Replication / Change APIs', function() {
       const origRectifyAllChanges = SourceModel.rectifyAllChanges
 
       // Replace with mocked versions that track calls
-      SourceModel.rectifyChange = function(id) {
-        calls.push('rectifyChange')
-        return origRectifyChange.apply(this, arguments)
-      }
+      SourceModel.rectifyChange = async function(id) {
+        console.log('mockSourceModelRectify - SourceModel.rectifyChange called with id:', id);
+        calls.push('rectifyChange');
+        return await origRectifyChange.apply(this, arguments);
+      };
 
-      SourceModel.rectifyAllChanges = function() {
-        calls.push('rectifyAllChanges')
-        return origRectifyAllChanges.apply(this, arguments)
-      }
+      let calledRectifyAll = false
+      SourceModel.rectifyAllChanges = async function() {
+        console.log('mockSourceModelRectify - SourceModel.rectifyAllChanges called')
+        if (!calledRectifyAll) {
+          calls.push('rectifyAllChanges')
+          calledRectifyAll = true
+        }
+        return await origRectifyAllChanges.apply(this, arguments)
+      };
 
       // Important: Return a cleanup function
       return {
@@ -250,14 +256,20 @@ describe('Replication / Change APIs', function() {
       const origRectifyAllChanges = TargetModel.rectifyAllChanges
 
       // Replace with mocked versions that track calls
-      TargetModel.rectifyChange = function(id) {
+      TargetModel.rectifyChange = async function(id) {
+        console.log('mockTargetModelRectify - TargetModel.rectifyChange called with id:', id);
         calls.push('rectifyChange')
-        return origRectifyChange.apply(this, arguments)
+        return await origRectifyChange.apply(this, arguments)
       }
 
-      TargetModel.rectifyAllChanges = function() {
-        calls.push('rectifyAllChanges')
-        return origRectifyAllChanges.apply(this, arguments)
+      let calledRectifyAll = false
+      TargetModel.rectifyAllChanges = async function() {
+        console.log('mockTargetModelRectify - TargetModel.rectifyAllChanges called')
+        if (!calledRectifyAll) {
+          calls.push('rectifyAllChanges')
+          calledRectifyAll = true
+        }
+        return await origRectifyAllChanges.apply(this, arguments)
       }
 
       // Important: Return a cleanup function
@@ -402,181 +414,99 @@ describe('Replication / Change APIs', function() {
     })
 
     describe('with 3rd-party changes', function() {
-      // it('detects UPDATE made during UPDATE', function(done) {
-      //   async.series([
-      //     createModel(SourceModel, {id: '1'}),
-      //     replicateExpectingSuccess(),
-      //     function updateModel(next) {
-      //       SourceModel.updateAll({id: '1'}, {name: 'source'}, next);
-      //     },
-      //     function replicateWith3rdPartyModifyingData(next) {
-      //       setupRaceConditionInReplication(function(cb) {
-      //         const connector = TargetModel.dataSource.connector;
-      //         if (connector.updateAttributes.length <= 4) {
-      //           connector.updateAttributes(
-      //             TargetModel.modelName,
-      //             '1',
-      //             {name: '3rd-party'},
-      //             cb,
-      //           );
-      //         } else {
-      //           // 2.x connectors require `options`
-      //           connector.updateAttributes(
-      //             TargetModel.modelName,
-      //             '1',
-      //             {name: '3rd-party'},
-      //             {}, // options
-      //             cb,
-      //           );
-      //         }
-      //       });
+      it('detects UPDATE made during UPDATE', async function () {
+        await createModel(SourceModel, { id: '1' })
+        await replicateExpectingSuccess()
+        await SourceModel.updateAll({ id: '1' }, { name: 'source' })
 
-      //       SourceModel.replicate(
-      //         TargetModel,
-      //         function(err, conflicts, cps, updates) {
-      //           if (err) return next(err);
+        // Set up the race condition by triggering a 3rd-party update
+        await setupRaceConditionInReplication(async function () {
+          const { connector } = TargetModel.dataSource
+          if (connector.updateAttributes.length <= 4) {
+            await connector.updateAttributes(TargetModel.modelName, '1', { name: '3rd-party' })
+          }
+          else {
+            await connector.updateAttributes(TargetModel.modelName, '1', { name: '3rd-party' }, {}) // options
+          }
+        })
 
-      //           const conflictedIds = getPropValue(conflicts || [], 'modelId');
-      //           expect(conflictedIds).to.eql(['1']);
+        // Perform replication and immediately resolve the conflict
+        const result = await SourceModel.replicate(TargetModel)
+        const conflicts = result.conflicts || []
+        const conflictedIds = getPropValue(conflicts, 'modelId')
+        expect(conflictedIds).to.eql(['1'])
+        conflicts[0].resolve()
 
-      //           // resolve the conflict using ours
-      //           conflicts[0].resolve(next);
-      //         },
-      //       );
-      //     },
+        await replicateExpectingSuccess()
+        await verifyInstanceWasReplicated(SourceModel, TargetModel, '1')
+      })
 
-      //     replicateExpectingSuccess(),
-      //     verifyInstanceWasReplicated(SourceModel, TargetModel, '1'),
-      //   ], done);
-      // });
+      it('detects CREATE made during CREATE', async function () {
+        await createModel(SourceModel, { id: '1', name: 'source' })
+        await setupRaceConditionInReplication(async function () {
+          const { connector } = TargetModel.dataSource
 
-      // it('detects CREATE made during CREATE', function(done) {
-      //   async.series([
-      //     // FIXME(bajtos) Remove the 'name' property once the implementation
-      //     // of UPDATE is fixed to correctly remove properties
-      //     createModel(SourceModel, {id: '1', name: 'source'}),
-      //     function replicateWith3rdPartyModifyingData(next) {
-      //       const connector = TargetModel.dataSource.connector;
-      //       setupRaceConditionInReplication(function(cb) {
-      //         if (connector.create.length <= 3) {
-      //           connector.create(
-      //             TargetModel.modelName,
-      //             {id: '1', name: '3rd-party'},
-      //             cb,
-      //           );
-      //         } else {
-      //           // 2.x connectors require `options`
-      //           connector.create(
-      //             TargetModel.modelName,
-      //             {id: '1', name: '3rd-party'},
-      //             {}, // options
-      //             cb,
-      //           );
-      //         }
-      //       });
+          if (connector.create.length <= 3) {
+            await connector.create(TargetModel.modelName, { id: '1', name: '3rd-party' })
+          }
+          else {
+            await connector.create(TargetModel.modelName, { id: '1', name: '3rd-party' }, {}) // options
+          }
+        })
+        const result = await SourceModel.replicate(TargetModel)
+        const conflicts = result.conflicts || []
+        const conflictedIds = getPropValue(conflicts, 'modelId')
 
-      //       SourceModel.replicate(
-      //         TargetModel,
-      //         function(err, conflicts, cps, updates) {
-      //           if (err) return next(err);
+        expect(conflictedIds).to.eql(['1'])
+        conflicts[0].resolve()
 
-      //           const conflictedIds = getPropValue(conflicts || [], 'modelId');
-      //           expect(conflictedIds).to.eql(['1']);
+        await replicateExpectingSuccess()
+        await verifyInstanceWasReplicated(SourceModel, TargetModel, '1')
+      })
 
-      //           // resolve the conflict using ours
-      //           conflicts[0].resolve(next);
-      //         },
-      //       );
-      //     },
+      it('detects UPDATE made during DELETE', async function () {
+        await createModel(SourceModel, { id: '1' })
+        await replicateExpectingSuccess()
+        await SourceModel.deleteById('1')
+        await setupRaceConditionInReplication(async function () {
+          const { connector } = TargetModel.dataSource
 
-      //     replicateExpectingSuccess(),
-      //     verifyInstanceWasReplicated(SourceModel, TargetModel, '1'),
-      //   ], done);
-      // });
+          if (connector.updateAttributes.length <= 4) {
+            await connector.updateAttributes(TargetModel.modelName, '1', { name: '3rd-party' })
+          }
+          else {
+            await connector.updateAttributes(TargetModel.modelName, '1', { name: '3rd-party' }, {}) // options
+          }
+        })
+        const result = await SourceModel.replicate(TargetModel)
+        const conflicts = result.conflicts || []
+        const conflictedIds = getPropValue(conflicts, 'modelId')
+        expect(conflictedIds).to.eql(['1'])
+        conflicts[0].resolve()
 
-      // it('detects UPDATE made during DELETE', function(done) {
-      //   async.series([
-      //     createModel(SourceModel, {id: '1'}),
-      //     replicateExpectingSuccess(),
-      //     function deleteModel(next) {
-      //       SourceModel.deleteById('1', next);
-      //     },
-      //     function replicateWith3rdPartyModifyingData(next) {
-      //       setupRaceConditionInReplication(function(cb) {
-      //         const connector = TargetModel.dataSource.connector;
-      //         if (connector.updateAttributes.length <= 4) {
-      //           connector.updateAttributes(
-      //             TargetModel.modelName,
-      //             '1',
-      //             {name: '3rd-party'},
-      //             cb,
-      //           );
-      //         } else {
-      //           // 2.x connectors require `options`
-      //           connector.updateAttributes(
-      //             TargetModel.modelName,
-      //             '1',
-      //             {name: '3rd-party'},
-      //             {}, // options
-      //             cb,
-      //           );
-      //         }
-      //       });
+        await replicateExpectingSuccess()
+        await verifyInstanceWasReplicated(SourceModel, TargetModel, '1')
+      })
 
-      //       SourceModel.replicate(
-      //         TargetModel,
-      //         function(err, conflicts, cps, updates) {
-      //           if (err) return next(err);
+      it('handles DELETE made during DELETE', async function () {
+        await createModel(SourceModel, { id: '1' })
+        await replicateExpectingSuccess()
+        await SourceModel.deleteById('1')
+        await setupRaceConditionInReplication(async function () {
+          const { connector } = TargetModel.dataSource
 
-      //           const conflictedIds = getPropValue(conflicts || [], 'modelId');
-      //           expect(conflictedIds).to.eql(['1']);
-
-      //           // resolve the conflict using ours
-      //           conflicts[0].resolve(next);
-      //         },
-      //       );
-      //     },
-
-      //     replicateExpectingSuccess(),
-      //     verifyInstanceWasReplicated(SourceModel, TargetModel, '1'),
-      //   ], done);
-      // });
-
-      // it('handles DELETE made during DELETE', function(done) {
-      //   async.series([
-      //     createModel(SourceModel, {id: '1'}),
-      //     replicateExpectingSuccess(),
-      //     function deleteModel(next) {
-      //       SourceModel.deleteById('1', next);
-      //     },
-      //     function setup3rdPartyModifyingData(next) {
-      //       const connector = TargetModel.dataSource.connector;
-      //       setupRaceConditionInReplication(function(cb) {
-      //         if (connector.destroy.length <= 3) {
-      //           connector.destroy(
-      //             TargetModel.modelName,
-      //             '1',
-      //             cb,
-      //           );
-      //         } else {
-      //           // 2.x connectors require `options`
-      //           connector.destroy(
-      //             TargetModel.modelName,
-      //             '1',
-      //             {}, // options
-      //             cb,
-      //           );
-      //         }
-      //       });
-
-      //       next();
-      //     },
-      //     replicateExpectingSuccess(),
-      //     verifyInstanceWasReplicated(SourceModel, TargetModel, '1'),
-      //   ], done);
-      // });
-    });
-  });
+          if (connector.destroy.length <= 3) {
+            await connector.destroy(TargetModel.modelName, '1')
+          }
+          else {
+            await connector.destroy(TargetModel.modelName, '1', {})
+          }
+        })
+        await replicateExpectingSuccess()
+        await verifyInstanceWasReplicated(SourceModel, TargetModel, '1')
+      })
+    })
+  })
 
   describe('conflict detection - both updated', function() {
     beforeEach(async function() {
@@ -660,8 +590,10 @@ describe('Replication / Change APIs', function() {
         })(),
         (async () => {
           const inst = await TargetModel.findOne() 
-          inst.name = 'target update'
-          await inst.save()
+          if (inst) {
+            inst.name = 'target update'
+            await inst.save()
+          }
         })()
       ])
 
@@ -674,11 +606,11 @@ describe('Replication / Change APIs', function() {
       assert(this.conflict);
     });
     it('type should be DELETE', async function() {
-      const type = await this.conflict.type()
+      const type = await this.conflict?.type()
       assert.equal(type, Change.DELETE)
     });
     it('conflict.changes()', async function() {
-      const [sourceChange, targetChange] = await this.conflict.changes()
+      const [ sourceChange = {}, targetChange = {} ] = await this.conflict?.changes() ?? []
       assert.equal(typeof sourceChange.id, 'string')
       assert.equal(typeof targetChange.id, 'string')
       assert.equal(this.model.getId(), sourceChange.getModelId())
@@ -686,9 +618,9 @@ describe('Replication / Change APIs', function() {
       assert.equal(targetChange.type(), Change.UPDATE)
     });
     it('conflict.models()', async function() {
-      const [source, target] = await this.conflict.models()
+      const [ source, target ] = await this.conflict?.models() ?? []
       assert.equal(source, null)
-      assert.deepEqual(target.toJSON(), {
+      assert.deepEqual(target?.toJSON(), {
         id: this.model.id,
         name: 'target update',
       })
@@ -705,11 +637,15 @@ describe('Replication / Change APIs', function() {
           const inst = await SourceModel.findOne()
           this.model = inst
           inst.name = 'source update'
-          await inst.save()
+          if (inst) {
+            await inst.save()
+          }
         })(),
         (async () => {
           const inst = await TargetModel.findOne()
-          await inst.remove()
+          if (inst) {
+            await inst.remove()
+          }
         })()
       ])
 
@@ -726,12 +662,12 @@ describe('Replication / Change APIs', function() {
 
     // Convert callback style to async/await
     it('type should be DELETE', async function() {
-      const type = await this.conflict.type()
+      const type = await this.conflict?.type()
       assert.equal(type, Change.DELETE)
     })
 
     it('conflict.changes()', async function() {
-      const [sourceChange, targetChange] = await this.conflict.changes()
+      const [ sourceChange = {}, targetChange = {} ] = await this.conflict?.changes() ?? []
       assert.equal(typeof sourceChange.id, 'string')
       assert.equal(typeof targetChange.id, 'string')
       assert.equal(this.model.getId(), sourceChange.getModelId())
@@ -740,9 +676,9 @@ describe('Replication / Change APIs', function() {
     })
 
     it('conflict.models()', async function() {
-      const [source, target] = await this.conflict.models()
+      const [ source, target ] = await this.conflict?.models() ?? []
       assert.equal(target, null)
-      assert.deepEqual(source.toJSON(), {
+      assert.deepEqual(source?.toJSON(), {
         id: this.model.id,
         name: 'source update',
       })
@@ -757,12 +693,16 @@ describe('Replication / Change APIs', function() {
       await Promise.all([
         (async () => {
           const inst = await SourceModel.findOne()
-          this.model = inst
-          await inst.remove()
+          if (inst) {
+            this.model = inst
+            await inst.remove()
+          }
         })(),
         (async () => {
           const inst = await TargetModel.findOne()
-          await inst.remove()
+          if (inst) {
+            await inst.remove()
+          }
         })()
       ])
 
@@ -878,7 +818,7 @@ describe('Replication / Change APIs', function() {
     it('detects "prototype.updateAttributes"', async function() {
       const inst = await givenReplicatedInstance()
       await assertChangeRecordedForId(inst.id)
-      inst.updateAttributes({name: 'updated'})
+      await inst.updateAttributes({name: 'updated'})
       await assertChangeRecordedForId(inst.id)
     })
 
@@ -1072,7 +1012,7 @@ describe('Replication / Change APIs', function() {
       OptionsSourceModel = PersistedModel.extend(
         'OptionsSourceModel-' + tid,
         {id: {id: true, type: String, defaultFn: 'guid'}},
-        {trackChanges: true},
+        {trackChanges: true, replicationChunkSize: 1},
       );
 
       OptionsSourceModel.attachTo(dataSource);
@@ -1152,7 +1092,7 @@ describe('Replication / Change APIs', function() {
       test.startingCheckpoint = -1;
     });
 
-    describe('Model.replicate(since, targetModel, options, callback)', function() {
+    describe('Model.replicate(since, targetModel, options)', function() {
       it('calls bulkUpdate multiple times', async function() {
         const { SourceModel, TargetModel, startingCheckpoint } = this;
         const options = {};
@@ -1211,9 +1151,14 @@ describe('Replication / Change APIs', function() {
     const originalBulkUpdateFunction = modelToMock.bulkUpdate
 
     // Convert to async/await while maintaining original behavior
-    modelToMock.bulkUpdate = async function(since, filter) {
-      calls.push('bulkUpdate')
-      return await originalBulkUpdateFunction.call(this, since, filter)
+    modelToMock.bulkUpdate = async function(updates, options) {
+      // Track each chunk as a separate call
+      if (Array.isArray(updates)) {
+        calls.push(...updates.map(() => 'bulkUpdate'))
+      } else {
+        calls.push('bulkUpdate')
+      }
+      return await originalBulkUpdateFunction.call(this, updates, options)
     }
 
     return calls
@@ -1235,6 +1180,29 @@ describe('Replication / Change APIs', function() {
 
   async function createModel(Model, data) {
     return await Model.create(data)
+  }
+
+  async function setupRaceConditionInReplication(fn) {
+    const { bulkUpdate } = TargetModel
+
+    TargetModel.bulkUpdate = async function (data, options) {
+      // simulate the situation when a 3rd party modifies the database
+      // while a replication run is in progress
+      await fn()
+      await bulkUpdate.call(this, data, options)
+
+      // apply the 3rd party modification only once
+      TargetModel.bulkUpdate = bulkUpdate
+    }
+  }
+
+  async function verifyInstanceWasReplicated(source, target, id) {
+    const expected = await source.findById(id)
+    const actual = await target.findById(id)
+
+    expect(actual && actual.toObject())
+      .to.eql(expected && expected.toObject())
+    debug('replicated instance: %j', actual)
   }
 
   function spyAndStoreSinceArg(Model, methodName, store) {
@@ -1374,10 +1342,10 @@ async function sync(client, server) {
     // NOTE(bajtos) It's important to replicate from the client to the
     // server first, so that we can resolve any conflicts at the client.
     // This ordering ensures consistent conflict resolution.
-    await replicateExpectingSuccess(client, server)
-    await replicateExpectingSuccess(server, client)
+    await replicateExpectingSuccess(client, server);
+    await replicateExpectingSuccess(server, client);
   } catch (err) {
-    debug('Sync failed: %j', err)
-    throw err
+    debug('Sync failed: %j', err);
+    throw err;
   }
 }
