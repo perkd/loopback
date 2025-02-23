@@ -5720,9 +5720,9 @@ __metadata:
   languageName: node
   linkType: hard
 
-"loopback-datasource-juggler@npm:5.1.5":
+"loopback-datasource-juggler@github:perkd/loopback-datasource-juggler#semver:5.1.5":
   version: 5.1.5
-  resolution: "loopback-datasource-juggler@npm:5.1.5"
+  resolution: "loopback-datasource-juggler@https://github.com/perkd/loopback-datasource-juggler.git#commit=ea61ec1f8a3690750989ec8a77ff9852814296bb"
   dependencies:
     async: "npm:^3.2.6"
     change-case: "npm:^4.1.2"
@@ -5838,7 +5838,7 @@ __metadata:
     loopback-boot: "npm:2.28.0"
     loopback-connector-remote: "npm:^3.4.1"
     loopback-context: "npm:3.5.2"
-    loopback-datasource-juggler: "npm:5.1.5"
+    loopback-datasource-juggler: "github:perkd/loopback-datasource-juggler#semver:5.1.5"
     loopback-filters: "npm:^1.1.1"
     loopback-phase: "npm:3.4.0"
     mocha: "npm:^11.1.0"
