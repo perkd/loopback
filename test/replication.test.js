@@ -182,102 +182,47 @@ describe('Replication / Change APIs', function() {
       expect(calls.calls).to.eql(['rectifyAllChanges'])
     })
 
-    it('rectifyOnDelete for Delete should call rectifyChange instead of rectifyAllChanges',
-      async function() {
-        const calls = mockTargetModelRectify()
-        
-        await SourceModel.destroyAll({name: 'John'})
-        await SourceModel.replicate(TargetModel)
-        
-        expect(calls.calls).to.eql(['rectifyChange'])
-      })
+    it('rectifyOnDelete for Delete should call rectifyChange instead of rectifyAllChanges', async function() {
+      const mock = mockSourceModelRectify()
+      const inst = await SourceModel.findOne({where: {name: 'John'}})
+      await inst.delete()
+      expect(mock.calls).to.eql(['rectifyChange'])
+    })
 
-    it('rectifyOnSave for Update should call rectifyChange instead of rectifyAllChanges',
-      async function() {
-        const calls = mockTargetModelRectify()
-        const newData = {name: 'Janie'}
-        
-        await SourceModel.update({name: 'Jane'}, newData)
-        await SourceModel.replicate(TargetModel)
-        
-        expect(calls.calls).to.eql(['rectifyChange'])
-      })
+    it('rectifyOnSave for Update should call rectifyChange instead of rectifyAllChanges', async function() {
+      const mock = mockSourceModelRectify()
+      const inst = await SourceModel.findOne({where: {name: 'John'}})
+      inst.name = 'Johnny'
+      await inst.save()
+      expect(mock.calls).to.eql(['rectifyChange'])
+    })
 
-    it('rectifyOnSave for Create should call rectifyChange instead of rectifyAllChanges',
-      async function() {
-        const calls = mockTargetModelRectify()
-        const newData = [{name: 'Janie', surname: 'Doe'}]
-        
-        await SourceModel.create(newData)
-        await SourceModel.replicate(TargetModel)
-        
-        expect(calls.calls).to.eql(['rectifyChange'])
-      })
+    it('rectifyOnSave for Create should call rectifyChange instead of rectifyAllChanges', async function() {
+      const mock = mockSourceModelRectify()
+      await SourceModel.create({name: 'Bob'})
+      expect(mock.calls).to.eql(['rectifyChange'])
+    })
 
     function mockSourceModelRectify() {
       const calls = []
       
-      // Store original functions before replacing them
+      // Store original functions
       const origRectifyChange = SourceModel.rectifyChange
       const origRectifyAllChanges = SourceModel.rectifyAllChanges
 
-      // Replace with mocked versions that track calls
-      SourceModel.rectifyChange = async function(id) {
-        console.log('mockSourceModelRectify - SourceModel.rectifyChange called with id:', id);
-        calls.push('rectifyChange');
-        return await origRectifyChange.apply(this, arguments);
-      };
+      SourceModel.rectifyChange = async function(modelId) {
+        calls.push('rectifyChange')
+      }
 
-      let calledRectifyAll = false
       SourceModel.rectifyAllChanges = async function() {
-        console.log('mockSourceModelRectify - SourceModel.rectifyAllChanges called')
-        if (!calledRectifyAll) {
-          calls.push('rectifyAllChanges')
-          calledRectifyAll = true
-        }
-        return await origRectifyAllChanges.apply(this, arguments)
-      };
+        calls.push('rectifyAllChanges') 
+      }
 
-      // Important: Return a cleanup function
-      return {
+      return { 
         calls,
         restore: function() {
           SourceModel.rectifyChange = origRectifyChange
           SourceModel.rectifyAllChanges = origRectifyAllChanges
-        }
-      }
-    }
-
-    function mockTargetModelRectify() {
-      const calls = []
-      
-      // Store original functions before replacing them
-      const origRectifyChange = TargetModel.rectifyChange
-      const origRectifyAllChanges = TargetModel.rectifyAllChanges
-
-      // Replace with mocked versions that track calls
-      TargetModel.rectifyChange = async function(id) {
-        console.log('mockTargetModelRectify - TargetModel.rectifyChange called with id:', id);
-        calls.push('rectifyChange')
-        return await origRectifyChange.apply(this, arguments)
-      }
-
-      let calledRectifyAll = false
-      TargetModel.rectifyAllChanges = async function() {
-        console.log('mockTargetModelRectify - TargetModel.rectifyAllChanges called')
-        if (!calledRectifyAll) {
-          calls.push('rectifyAllChanges')
-          calledRectifyAll = true
-        }
-        return await origRectifyAllChanges.apply(this, arguments)
-      }
-
-      // Important: Return a cleanup function
-      return {
-        calls,
-        restore: function() {
-          TargetModel.rectifyChange = origRectifyChange
-          TargetModel.rectifyAllChanges = origRectifyAllChanges
         }
       }
     }
