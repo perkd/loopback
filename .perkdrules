@@ -8,19 +8,22 @@
 - use yarn, not npm
 
 # Debugging
-- when fix attempts result in more failed tests, consider regressing to the previous working state, and create/add to debug-journal
+- always fix the simplest and foundational issues first
+- adding complex code during debugging could lead to more bugs
+- after a few failed attempts to fix, take a step back, we may be missing something obvious and simple
+- when stuck:
+   1. create a new debug-journal (journal) to track learnings and fails/success
+   2. add console.logs (logs) to trace runtime values
+   3. add debug statements to the code to trace logic
+- when fix attempts result in more failed tests, consider regressing to the previous working state, and log to debug-journal
 - when tests fail, explain and confirm with me before modifying test logic 
-- for complex situations:
- 1. create a new debug-journal (journal) to track learnings and fails/success
- 2. add console.logs (logs) to trace runtime values
 - when debug run completes, such as passing all tests:
  1. clean up any logs added and review/summarise journal if used
-- adding complex code during debugging could lead to more bugs
 
 # Migration Guidelines
 - use the `enhancements.md` file to guide the migration
-- always verify changes against original logic in the corresponding file (with '-org' suffix) in the 'original' folder where available
-- files in the 'original' folder are not modified, only used for reference
+- always verify changes against original logic in the corresponding file (with '-org' suffix) in the `original` folder where available
+- do not modify files in the `original` folder, only use for reference
 - use async/await where possible when using native promises
 
 # Tests
