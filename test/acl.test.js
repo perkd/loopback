@@ -49,10 +49,12 @@ describe('security scopes', function() {
     ])
 
     // Verify no errors were returned
-    perms.forEach(perm => {
-      assert(!perm.error, 'Permission check should not return an error')
-    })
-  })
+    assert.deepEqual(
+      perms.map(p => p.permission),
+      [ACL.DENY, ACL.DENY, ACL.DENY],
+      'Wildcard scope should allow all access types'
+    )
+  });
 
   it('should allow access to models for the given scope', async function() {
     const scope = await Scope.create({
@@ -148,7 +150,11 @@ describe('security ACLs', function() {
         accessType: ACL.ALL,
       }).then(accessContext => {
         const actual = accessContext.isAllowed() ? ACL.ALLOW : ACL.DENY;
-        expect(actual, msg).to.equal(expectedPermission);
+        assert.strictEqual(
+          actual, 
+          expectedPermission,
+          `${msg}: Expected ${expectedPermission} but got ${actual}`
+        );
       })
     }
   })
@@ -159,7 +165,7 @@ describe('security ACLs', function() {
         {principalType: ACL.USER, principalId: 'u001',
           accessType: ACL.ALL, permission: ACL.ALLOW},
       ],
-    });
+    })
 
     await ACL.checkAccessForContext({
       principals: [{type: ACL.USER, id: 'u001'}],
@@ -256,52 +262,43 @@ describe('security ACLs', function() {
       accessType: 'WRITE',
       permission: 'ALLOW',
       methodNames: []});
+
+    const readReq = {
+      model: 'account',
+      property: '*',
+      accessType: 'READ'
+    }
+
+    const readPerm = ACL.resolvePermission(acls, readReq)
+    delete readPerm.registry
+    assert.deepEqual(readPerm, {
+      model: 'account',
+      property: '*',
+      accessType: 'READ',
+      permission: 'ALLOW',
+      methodNames: []
+    })
   });
 
   it('should allow access to models for the given principal by wildcard', async function() {
-    // Create first ACL and wait for it to complete
     await ACL.create({
-      principalType: ACL.USER,
-      principalId: 'u001',
-      model: 'User',
-      property: ACL.ALL,
-      accessType: ACL.ALL,
-      permission: ACL.ALLOW
+      principalType: ACL.USER, principalId: 'u001', model: 'User', property: ACL.ALL,
+      accessType: ACL.ALL, permission: ACL.ALLOW,
+    })
+    await ACL.create({
+      principalType: ACL.USER, principalId: 'u001', model: 'User', property: ACL.ALL,
+      accessType: ACL.READ, permission: ACL.DENY,
     })
 
-    // Only create second ACL after first is done
-    await ACL.create({
-      principalType: ACL.USER,
-      principalId: 'u001',
-      model: 'User',
-      property: ACL.ALL,
-      accessType: ACL.READ,
-      permission: ACL.DENY
-    });
-
-    // Check permissions after both ACLs are created using checkAccessForContext
-    const accessContextRead = await ACL.checkAccessForContext({
-      principals: [{ type: ACL.USER, id: 'u001' }],
-      model: 'User',
-      property: 'name',
-      accessType: ACL.READ,
-    });
-
-    const accessContextAll = await ACL.checkAccessForContext({
-      principals: [{ type: ACL.USER, id: 'u001' }],
-      model: 'User',
-      property: 'name',
-      accessType: ACL.ALL,
-    });
-
-    const permRead = accessContextRead.isAllowed() ? ACL.ALLOW : ACL.DENY;
-    const permAll = accessContextAll.isAllowed() ? ACL.ALLOW : ACL.DENY;
-
-    assert.deepEqual([permRead, permAll], [
-      ACL.DENY,
-      ACL.DENY
+    const perms = await Promise.all([
+      ACL.checkPermission(ACL.USER, 'u001', 'User', 'name', ACL.READ),
+      ACL.checkPermission(ACL.USER, 'u001', 'User', 'name', ACL.ALL),
     ])
-  })
+    assert.deepEqual(perms.map(p => p.permission), [
+      ACL.DENY,
+      ACL.DENY,
+    ], 'Wildcard principal should deny READ access');
+  });
 
   it('should allow access to models by exception', async function() {
     await ACL.create({
@@ -403,14 +400,14 @@ describe('security ACLs', function() {
             principalType: ACL.USER,
             principalId: 'u001',
             accessType: ACL.WRITE,
-            permission: ACL.DENY
+            permission: ACL.DENY,
           },
           {
             principalType: ACL.USER,
             principalId: 'u001',
             accessType: ACL.ALL,
-            permission: ACL.ALLOW
-          }
+            permission: ACL.ALLOW,
+          },
         ],
       },
     }, {
@@ -419,36 +416,36 @@ describe('security ACLs', function() {
           principalType: ACL.USER,
           principalId: 'u001',
           accessType: ACL.ALL,
-          permission: ACL.ALLOW
+          permission: ACL.ALLOW,
         },
         {
           principalType: ACL.USER,
           principalId: 'u002',
           accessType: ACL.EXECUTE,
-          permission: ACL.ALLOW
+          permission: ACL.ALLOW,
         },
         {
           principalType: ACL.USER,
           principalId: 'u003',
           accessType: ACL.EXECUTE,
           permission: ACL.DENY
-        }
+        },
       ],
-    })
+    });
 
-    const staticPerm1 = await ACL.checkPermission(ACL.USER, 'u001', 'Customer', 'name', ACL.WRITE)
-    const staticPerm2 = await ACL.checkPermission(ACL.USER, 'u001', 'Customer', 'name', ACL.READ)
-    const staticPerm3 = await ACL.checkPermission(ACL.USER, 'u001', 'Customer', 'name', ACL.ALL)
-    const staticPerm4 = await ACL.checkPermission(ACL.USER, 'u002', 'Customer', 'name', ACL.READ)
-    const staticPerm5 = await ACL.checkPermission(ACL.USER, 'u003', 'Customer', 'name', ACL.WRITE)
+    const staticPerm1 = await ACL.checkPermission(ACL.USER, 'u001', 'Customer', 'name', ACL.WRITE);
+    const staticPerm2 = await ACL.checkPermission(ACL.USER, 'u001', 'Customer', 'name', ACL.READ);
+    const staticPerm3 = await ACL.checkPermission(ACL.USER, 'u001', 'Customer', 'name', ACL.ALL);
+    const staticPerm4 = await ACL.checkPermission(ACL.USER, 'u002', 'Customer', 'name', ACL.READ);
+    const staticPerm5 = await ACL.checkPermission(ACL.USER, 'u003', 'Customer', 'name', ACL.WRITE);
 
     assert.deepEqual([staticPerm1.permission, staticPerm2.permission, staticPerm3.permission, staticPerm4.permission, staticPerm5.permission], [
       ACL.DENY,
       ACL.ALLOW,
       ACL.ALLOW,
       ACL.ALLOW,
-      ACL.DENY
-    ])
+      ACL.DENY,
+    ]);
   });
 
   it('should filter static ACLs by model/property', function() {
@@ -570,6 +567,37 @@ describe('security ACLs', function() {
       })
     ])
   });
+
+  it('should handle property wildcards with specific access types', async function() {
+    await ACL.create({
+      principalType: ACL.ROLE,
+      principalId: '$everyone',
+      model: 'User',
+      property: '*',
+      accessType: ACL.READ,
+      permission: ACL.ALLOW
+    })
+
+    await ACL.create({
+      principalType: ACL.ROLE, 
+      principalId: '$owner',
+      model: 'User',
+      property: 'email',
+      accessType: ACL.ALL,
+      permission: ACL.DENY
+    })
+
+    const [wildcardPerm, specificPerm] = await Promise.all([
+      ACL.checkPermission(ACL.ROLE, '$everyone', 'User', 'name', ACL.READ),
+      ACL.checkPermission(ACL.ROLE, '$owner', 'User', 'email', ACL.READ)
+    ])
+
+    assert.deepEqual(
+      [wildcardPerm.permission, specificPerm.permission],
+      [ACL.ALLOW, ACL.DENY],
+      'Property wildcard should allow while specific property denies'
+    )
+  })
 });
 
 describe('access check', function() {
