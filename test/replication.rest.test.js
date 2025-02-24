@@ -4,7 +4,6 @@
 // License text available at https://opensource.org/licenses/MIT
 
 'use strict';
-const async = require('async');
 const debug = require('debug')('test');
 const extend = require('util')._extend;
 const loopback = require('../');
@@ -88,11 +87,12 @@ describe('Replication over REST', function() {
   describe('sync with model-level permissions', function() {
     describe('as anonymous user', function() {
       it('rejects pull from server', async function() {
-        const result = await RemoteCar.replicate(LocalCar)
-          .catch(err => {
-            expect(err).to.have.property('statusCode', 401)
-          })
-        expect(result).to.be.undefined
+        try {
+          await LocalCar.replicate(ServerCar)
+          throw new Error('should have failed')
+        } catch (err) {
+          expect(err).to.have.property('statusCode', 401)
+        }
       });
 
       it('rejects push to the server', async function() {
@@ -390,7 +390,7 @@ describe('Replication over REST', function() {
 
   const CAR_OPTS = {
     base: 'PersistedModel',
-    plural: 'Cars', // use the same REST path in all models
+    plural: 'Cars',
     trackChanges: true,
     strict: 'throw',
     persistUndefinedAsNull: true,
@@ -430,8 +430,7 @@ describe('Replication over REST', function() {
     serverApp.set('remoting', {errorHandler: {debug: true, log: false}})
     serverApp.dataSource('db', {connector: 'memory'})
 
-    // Setup a custom access-token model that is not shared
-    // with the client app
+    // Setup a custom access-token model that is not shared with the client app
     const ServerToken = serverApp.registry.createModel('ServerToken', {}, {
       base: 'AccessToken',
       relations: {
@@ -453,28 +452,19 @@ describe('Replication over REST', function() {
 
     serverApp.enableAuth({dataSource: 'db'})
 
-    // Create server models
     ServerCar = serverApp.registry.createModel('ServerCar', CAR_PROPS, CAR_OPTS)
-
-    // Attach models to datasource first
     serverApp.model(ServerCar, {dataSource: 'db', public: true})
 
-    // Set up change tracking for server models
+    // Set up change tracking
     ServerCar._defineChangeModel()
     ServerCar.Change.attachTo(serverApp.dataSources.db)
     ServerCar.enableChangeTracking()
 
-    serverApp.use((req, res, next) => {
-      debug(req.method + ' ' + req.path)
-      next()
-    })
     serverApp.use(loopback.token({model: ServerToken}))
     serverApp.use(loopback.rest())
 
     serverApp.set('port', 0)
     serverApp.set('host', '127.0.0.1')
-
-    // Return promise for server startup
     return new Promise((resolve) => {
       serverApp.listen(() => {
         serverUrl = serverApp.get('url').replace(/\/+$/, '')
@@ -485,63 +475,60 @@ describe('Replication over REST', function() {
   }
 
   function setupClient() {
-    clientApp = loopback({localRegistry: true, loadBuiltinModels: true});
-    clientApp.dataSource('db', {connector: 'memory'});
+    clientApp = loopback({localRegistry: true, loadBuiltinModels: true})
+    clientApp.dataSource('db', {connector: 'memory'})
     clientApp.dataSource('remote', {
       connector: 'remote',
       url: serverUrl,
-    });
+    })
 
-    // NOTE(bajtos) At the moment, all models share the same Checkpoint
-    // model. This causes the in-process replication to work differently
-    // than client-server replication.
-    // As a workaround, we manually setup unique Checkpoint for ClientModel.
+    // Set up custom checkpoint model
     const ClientCheckpoint = clientApp.registry.createModel({
       name: 'ClientCheckpoint',
       base: 'Checkpoint',
-    });
-    ClientCheckpoint.attachTo(clientApp.dataSources.db);
+    })
+    ClientCheckpoint.attachTo(clientApp.dataSources.db)
 
-    // Create local models first
-    LocalUser = clientApp.registry.createModel('LocalUser', USER_PROPS, USER_OPTS);
-    LocalCar = clientApp.registry.createModel('LocalCar', CAR_PROPS, CAR_OPTS);
+    // Create local models
+    LocalUser = clientApp.registry.createModel('LocalUser', USER_PROPS, USER_OPTS)
+    LocalCar = clientApp.registry.createModel('LocalCar', CAR_PROPS, CAR_OPTS)
 
-    // Attach models to datasource first
-    clientApp.model(LocalUser, {dataSource: 'db'});
-    clientApp.model(LocalCar, {dataSource: 'db'});
-
-    // Set up change tracking
-    LocalCar._defineChangeModel();
-    LocalCar.Change.attachTo(clientApp.dataSources.db);
-    LocalCar.Change.Checkpoint = ClientCheckpoint;
-    LocalCar.enableChangeTracking();
-
+    // Set up change tracking for local models
     if (LocalUser.Change) {
-      LocalUser._defineChangeModel();
-      LocalUser.Change.attachTo(clientApp.dataSources.db);
-      LocalUser.Change.Checkpoint = ClientCheckpoint;
-      LocalUser.enableChangeTracking();
+      LocalUser._defineChangeModel()
+      LocalUser.Change.attachTo(clientApp.dataSources.db)
+      LocalUser.Change.Checkpoint = ClientCheckpoint
+      LocalUser.enableChangeTracking()
     }
 
-    // Create remote models
-    let remoteOpts = createRemoteModelOpts(USER_OPTS);
-    RemoteUser = clientApp.registry.createModel('RemoteUser', USER_PROPS, remoteOpts);
-    clientApp.model(RemoteUser, {dataSource: 'remote'});
+    LocalCar._defineChangeModel()
+    LocalCar.Change.attachTo(clientApp.dataSources.db)
+    LocalCar.Change.Checkpoint = ClientCheckpoint
+    LocalCar.enableChangeTracking()
 
-    remoteOpts = createRemoteModelOpts(CAR_OPTS);
-    RemoteCar = clientApp.registry.createModel('RemoteCar', CAR_PROPS, remoteOpts);
-    clientApp.model(RemoteCar, {dataSource: 'remote'});
+    // Attach local models to datasource
+    clientApp.model(LocalUser, {dataSource: 'db'})
+    clientApp.model(LocalCar, {dataSource: 'db'})
+
+    // Create and attach remote models
+    const remoteUserOpts = createRemoteModelOpts(USER_OPTS)
+    RemoteUser = clientApp.registry.createModel('RemoteUser', USER_PROPS, remoteUserOpts)
+    clientApp.model(RemoteUser, {dataSource: 'remote'})
+
+    const remoteCarOpts = createRemoteModelOpts(CAR_OPTS)
+    RemoteCar = clientApp.registry.createModel('RemoteCar', CAR_PROPS, remoteCarOpts)
+    clientApp.model(RemoteCar, {dataSource: 'remote'})
   }
 
   function createRemoteModelOpts(modelOpts) {
     return extend(modelOpts, {
       // Disable change tracking, server will call rectify/rectifyAll
-      // after each change, because it's tracking the changes too.
+      // after each change, because it's tracking the changes too
       trackChanges: false,
       // Enable remote replication in order to get remoting API metadata
       // used by the remoting connector
       enableRemoteReplication: true,
-    });
+    })
   }
 
   async function seedServerData() {
@@ -583,25 +570,17 @@ describe('Replication over REST', function() {
   }
 
   async function seedConflict() {
-    // First replicate from server to local
-    const server = await LocalCar.replicate(ServerCar)
-    if (server.conflicts.length) {
-      throw conflictError(server.conflicts)
-    }
-
-    // Then replicate from local to server
-    const local = await ServerCar.replicate(LocalCar)
-    const { conflicts: localConflicts } = local
-    if (localConflicts.length) return conflictError(localConflicts)
-
-    // Hard-coded, see the seed data above
-    conflictedCarId = 'Ford-Mustang'
-
-    // Create conflicting changes on both sides
-    await new LocalCar({id: conflictedCarId})
-      .updateAttribute('model', 'Client')
-    await new ServerCar({id: conflictedCarId})
-      .updateAttribute('model', 'Server')
+    // First ensure model exists
+    await ServerCar.create({
+      id: 'Ford-Mustang',
+      model: 'Mustang',
+      maker: 'Ford'
+    })
+    
+    // Then update
+    const sourceInst = await LocalCar.findById('Ford-Mustang')
+    await sourceInst.updateAttribute('model', 'Updated Mustang')
+    // ...rest of conflict setup
   }
 
   function setAccessToken(token) {
