@@ -17,6 +17,176 @@ const { PersistedModel } = loopback
 const g = require('../../lib/globalize')
 
 /**
+ * When two changes conflict a conflict is created.
+ *
+ * **Note**: call `conflict.fetch()` to get the `target` and `source` models.
+ *
+ * @param {*} modelId
+ * @param {PersistedModel} SourceModel
+ * @param {PersistedModel} TargetModel
+ * @property {ModelClass} source The source model instance
+ * @property {ModelClass} target The target model instance
+ * @class Change.Conflict
+ */
+
+class Conflict {
+  constructor(id, SourceModel, TargetModel) {
+    this.modelId = id
+    this.SourceModel = SourceModel
+    this.TargetModel = TargetModel
+  }
+
+  /**
+   * Fetch the conflicting models.
+   * @returns {Promise<[PersistedModel, PersistedModel]>}
+   */
+
+  async models() {
+    const conflict = this
+    const SourceModel = this.SourceModel
+    const TargetModel = this.TargetModel
+
+    const [source, target] = await Promise.all([
+      SourceModel.findById(conflict.modelId),
+      TargetModel.findById(conflict.modelId)
+    ])
+
+    return [source, target]
+  }
+
+  /**
+   * Get the conflicting changes.
+   *
+   * @callback {Function} callback
+   * @param {Error} err
+   * @param {Change} sourceChange
+   * @param {Change} targetChange
+   */
+
+  async changes() {
+    const conflict = this
+    const SourceModel = conflict.SourceModel
+    const TargetModel = conflict.TargetModel
+
+    const [sourceChange, targetChange] = await Promise.all([
+      SourceModel.findLastChange(conflict.modelId),
+      TargetModel.findLastChange(conflict.modelId)
+    ])
+
+    return [sourceChange, targetChange]
+  }
+
+  /**
+   * Resolve the conflict.
+   *
+   * Set the source change's previous revision to the current revision of the
+   * (conflicting) target change. Since the changes are no longer conflicting
+   * and appear as if the source change was based on the target, they will be
+   * replicated normally as part of the next replicate() call.
+   *
+   * This is effectively resolving the conflict using the source version.
+   */
+
+  async resolve() {
+    const { rev } = await this.TargetModel.findLastChange(this.modelId)
+    await this.SourceModel.updateLastChange(this.modelId, { prev: rev })
+  }
+
+  /**
+   * Resolve the conflict using the instance data in the source model
+   */
+  async resolveUsingSource() {
+    // don't forward any cb arguments from resolve()
+    await this.resolve()
+
+    // FIXME Ensure models are available
+    // if (!this.SourceModel || !this.TargetModel) {
+    //   throw new Error('Both source and target models must be available for resolution')
+    // }
+    // Use stored models for replication
+    // return this.SourceModel.replicate(this.TargetModel, -1)
+  }
+
+  /**
+   * Resolve the conflict using the instance data in the target model.
+   */
+  async resolveUsingTarget() {
+    const [source, target] = await this.models()
+
+    if (target === null) {
+      await this.SourceModel.deleteById(this.modelId)
+      return
+    }
+
+    const inst = new this.SourceModel(target.toObject(), { persisted: true })
+    await inst.save()
+  }
+
+  /**
+   * Resolve the conflict using the supplied instance data.
+   *
+   * @param {Object} data The set of changes to apply on the model
+   * instance. Use `null` value to delete the source instance instead.
+   */
+
+  async resolveManually(data) {
+    if (!data) {
+      await this.SourceModel.deleteById(this.modelId)
+      return
+    }
+
+    const [source, target] = await this.models()
+    const inst = source || new this.SourceModel(target)
+    inst.setAttributes(data)
+    await inst.save()
+    await this.resolve()
+  }
+
+  /**
+   * Return a new Conflict instance with swapped Source and Target models.
+   *
+   * This is useful when resolving a conflict in one-way
+   * replication, where the source data must not be changed:
+   *
+   * ```js
+   * conflict.swapParties().resolveUsingTarget(cb);
+   * ```
+   *
+   * @returns {Conflict} A new Conflict instance.
+   */
+  swapParties() {
+    const Ctor = this.constructor;
+    return new Ctor(this.modelId, this.TargetModel, this.SourceModel)
+  }
+
+  /**
+   * Determine the conflict type.
+   *
+   * Possible results are
+   *
+   *  - `Change.UPDATE`: Source and target models were updated.
+   *  - `Change.DELETE`: Source and or target model was deleted.
+   *  - `Change.UNKNOWN`: the conflict type is uknown or due to an error.
+   *
+   * @returns {Promise<String>} The conflict type.
+   */
+
+  async type() {
+    const [sourceChange, targetChange] = await this.changes()
+    const sourceChangeType = sourceChange.type()
+    const targetChangeType = targetChange.type()
+
+    if (sourceChangeType === Change.UPDATE && targetChangeType === Change.UPDATE) {
+      return Change.UPDATE
+    }
+    if (sourceChangeType === Change.DELETE || targetChangeType === Change.DELETE) {
+      return Change.DELETE
+    }
+    return Change.UNKNOWN
+  }
+}
+
+/**
  * Change list entry.
  *
  * @property {String} id Hash of the modelName and ID.
@@ -302,187 +472,6 @@ module.exports = function(Change) {
     const Model = this.constructor.settings.trackModel;
     const id = this.getModelId();
     Model.findById(id, callback);
-  };
-
-  /**
-   * When two changes conflict a conflict is created.
-   *
-   * **Note**: call `conflict.fetch()` to get the `target` and `source` models.
-   *
-   * @param {*} modelId
-   * @param {PersistedModel} SourceModel
-   * @param {PersistedModel} TargetModel
-   * @property {ModelClass} source The source model instance
-   * @property {ModelClass} target The target model instance
-   * @class Change.Conflict
-   */
-
-  function Conflict(modelId, SourceModel, TargetModel) {
-    this.SourceModel = SourceModel;
-    this.TargetModel = TargetModel;
-    this.SourceChange = SourceModel.getChangeModel();
-    this.TargetChange = TargetModel.getChangeModel();
-    this.modelId = modelId;
-  }
-
-  /**
-   * Fetch the conflicting models.
-   *
-   * @callback {Function} callback
-   * @param {Error} err
-   * @param {PersistedModel} source
-   * @param {PersistedModel} target
-   */
-
-  Conflict.prototype.models = async function() {
-    const conflict = this;
-    const SourceModel = this.SourceModel;
-    const TargetModel = this.TargetModel;
-
-    const [source, target] = await Promise.all([
-      SourceModel.findById(conflict.modelId),
-      TargetModel.findById(conflict.modelId)
-    ]);
-
-    return [source, target];
-  };
-
-  /**
-   * Get the conflicting changes.
-   *
-   * @callback {Function} callback
-   * @param {Error} err
-   * @param {Change} sourceChange
-   * @param {Change} targetChange
-   */
-
-  Conflict.prototype.changes = async function() {
-    const conflict = this;
-    const SourceModel = conflict.SourceModel;
-    const TargetModel = conflict.TargetModel;
-
-    const [sourceChange, targetChange] = await Promise.all([
-      SourceModel.findLastChange(conflict.modelId),
-      TargetModel.findLastChange(conflict.modelId)
-    ]);
-
-    return [sourceChange, targetChange];
-  };
-
-  /**
-   * Resolve the conflict.
-   *
-   * Set the source change's previous revision to the current revision of the
-   * (conflicting) target change. Since the changes are no longer conflicting
-   * and appear as if the source change was based on the target, they will be
-   * replicated normally as part of the next replicate() call.
-   *
-   * This is effectively resolving the conflict using the source version.
-   *
-   * @callback {Function} callback
-   * @param {Error} err
-   */
-
-  Conflict.prototype.resolve = async function() {
-    const targetChange = await this.TargetModel.findLastChange(this.modelId);
-    await this.SourceModel.updateLastChange(this.modelId, {
-      prev: targetChange.rev
-    });
-  };
-
-  /**
-   * Resolve the conflict using the instance data in the source model.
-   *
-   * @callback {Function} callback
-   * @param {Error} err
-   */
-  Conflict.prototype.resolveUsingSource = async function() {
-    await this.resolve();
-  };
-
-  /**
-   * Resolve the conflict using the instance data in the target model.
-   *
-   * @callback {Function} callback
-   * @param {Error} err
-   */
-  Conflict.prototype.resolveUsingTarget = async function() {
-    const [source, target] = await this.models();
-    
-    if (target === null) {
-      await this.SourceModel.deleteById(this.modelId);
-      return;
-    }
-
-    const inst = new this.SourceModel(target.toObject(), {persisted: true});
-    await inst.save();
-  };
-
-  /**
-   * Return a new Conflict instance with swapped Source and Target models.
-   *
-   * This is useful when resolving a conflict in one-way
-   * replication, where the source data must not be changed:
-   *
-   * ```js
-   * conflict.swapParties().resolveUsingTarget(cb);
-   * ```
-   *
-   * @returns {Conflict} A new Conflict instance.
-   */
-  Conflict.prototype.swapParties = function() {
-    const Ctor = this.constructor;
-    return new Ctor(this.modelId, this.TargetModel, this.SourceModel);
-  };
-
-  /**
-   * Resolve the conflict using the supplied instance data.
-   *
-   * @param {Object} data The set of changes to apply on the model
-   * instance. Use `null` value to delete the source instance instead.
-   * @callback {Function} callback
-   * @param {Error} err
-   */
-
-  Conflict.prototype.resolveManually = async function(data) {
-    if (!data) {
-      await this.SourceModel.deleteById(this.modelId);
-      return;
-    }
-
-    const [source, target] = await this.models();
-    const inst = source || new this.SourceModel(target);
-    inst.setAttributes(data);
-    await inst.save();
-    await this.resolve();
-  };
-
-  /**
-   * Determine the conflict type.
-   *
-   * Possible results are
-   *
-   *  - `Change.UPDATE`: Source and target models were updated.
-   *  - `Change.DELETE`: Source and or target model was deleted.
-   *  - `Change.UNKNOWN`: the conflict type is uknown or due to an error.
-   *
-   * @callback {Function} callback
-   * @param {Error} err
-   * @param {String} type The conflict type.
-   */
-
-  Conflict.prototype.type = async function() {
-    const [sourceChange, targetChange] = await this.changes();
-    const sourceChangeType = sourceChange.type();
-    const targetChangeType = targetChange.type();
-
-    if (sourceChangeType === Change.UPDATE && targetChangeType === Change.UPDATE) {
-      return Change.UPDATE;
-    }
-    if (sourceChangeType === Change.DELETE || targetChangeType === Change.DELETE) {
-      return Change.DELETE;
-    }
-    return Change.UNKNOWN;
   };
 
   /**
