@@ -147,71 +147,80 @@ module.exports = function(Change) {
    */
 
   Change.prototype.rectify = async function() {
-    const change = this
-    const currentRev = this.rev
-
-    change.debug('rectify change')
-
-    const model = this.getModelCtor()
-    const id = this.getModelId()
-
     try {
-      const inst = await model.findById(id)
-      let rev = null
+      const model = this.getModelCtor()
+      if (!model) {
+        throw new Error('Model not found: ' + this.modelName)
+      }
 
+      const change = this
+      const currentRev = this.rev
+      debug('rectify change %s', this.modelName)
+
+      // Get the model instance first
+      const id = this.getModelId()
+      const inst = await model.findById(id)
+      
+      // Get revision and check match
+      let newRev = null
       if (inst) {
+        newRev = Change.revisionForInst(inst)
+        if (currentRev === newRev) {
+          debug('rev and prev are equal (not updating anything) %s', this.modelName)
+          return change  // Early return, no updates
+        }
+        // Handle custom properties after revision check
         if (typeof inst.fillCustomChangeProperties === 'function') {
           await inst.fillCustomChangeProperties(change)
         }
-        rev = Change.revisionForInst(inst)
       }
 
-      // avoid setting rev and prev to the same value
-      if (currentRev === rev) {
-        change.debug('rev and prev are equal (not updating anything)')
-        return change
-      }
-
+      // Get checkpoint only if we need to make updates
       const checkpoint = await change.constructor.getCheckpointModel().current()
 
-      if (rev) {
-        if (currentRev === rev) {
-          change.debug('ASSERTION FAILED: Change currentRev==rev should have been already handled')
-          return change
-        }
-        change.rev = rev
-        change.debug('updated revision (was ' + currentRev + ')')
-        if (change.checkpoint !== checkpoint) {
+      // Handle revision updates
+      if (newRev) {
+        change.rev = newRev
+        debug('updated revision (was %s) %s', currentRev, this.modelName)
+        
+        // Only update prev when crossing checkpoint boundaries
+        if (change.checkpoint !== checkpoint && currentRev) {
           change.prev = currentRev
-          change.debug('updated prev')
+          debug('updated prev %s', this.modelName)
         }
       } else {
         change.rev = null
-        change.debug('updated revision (was ' + currentRev + ')')
+        debug('updated revision (was %s) %s', currentRev, this.modelName)
+        
+        // Handle deletion case
         if (change.checkpoint !== checkpoint) {
           if (currentRev) {
             change.prev = currentRev
           } else if (!change.prev) {
-            change.debug('ERROR - could not determine prev')
+            debug('ERROR - could not determine prev %s', this.modelName)
             change.prev = Change.UNKNOWN
           }
-          change.debug('updated prev')
+          debug('updated prev %s', this.modelName)
         }
       }
 
+      // Update checkpoint last
       if (change.checkpoint !== checkpoint) {
-        change.debug('update checkpoint to', checkpoint)
+        debug('update checkpoint to %s %s', checkpoint, this.modelName)
         change.checkpoint = checkpoint
       }
 
+      // Special case: remove unknown changes
       if (change.prev === Change.UNKNOWN) {
-        await change.remove()
-        return null
-      } else {
-        return await change.save()
+        return await change.remove()
       }
+
+      return await change.save()
     } catch (err) {
-      throw err
+      if (!this.constructor.settings.ignoreErrors) {
+        throw err
+      }
+      debug('Error rectifying change: %s', err)
     }
   }
 
@@ -515,15 +524,15 @@ module.exports = function(Change) {
 
   Change.prototype.type = function() {
     if (this.rev && this.prev) {
-      return Change.UPDATE;
+      return Change.UPDATE
     }
     if (this.rev && !this.prev) {
-      return Change.CREATE;
+      return Change.CREATE
     }
     if (!this.rev && this.prev) {
-      return Change.DELETE;
+      return Change.DELETE
     }
-    return Change.UNKNOWN;
+    return Change.UNKNOWN
   };
 
   /**
