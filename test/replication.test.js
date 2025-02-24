@@ -70,7 +70,27 @@ describe('Replication / Change APIs', function() {
     // Important: Set up change tracking for target
     const TargetChange = TargetModel.Change;
     TargetChange.Checkpoint = Checkpoint; // Share the same checkpoint model
+    if (!TargetModel.Change) TargetModel._defineChangeModel() // Ensure Change model is defined
+    if (!SourceModel.Change) SourceModel._defineChangeModel() // Ensure Change model is defined for source too, just in case
     TargetModel.enableChangeTracking();
+    SourceModel.enableChangeTracking(); // Enable for source too, just in case
+
+    // --- ADDED DEBUG LOGGING AND CHECKS ---
+    debug('--- beforeEach START ---')
+    debug('SourceModel.modelName:', SourceModel.modelName)
+    debug('TargetModel.modelName:', TargetModel.modelName)
+    debug('typeof SourceModel._defineChangeModel:', typeof SourceModel._defineChangeModel)
+    debug('typeof TargetModel._defineChangeModel:', typeof TargetModel._defineChangeModel)
+    debug('SourceModel.Change:', SourceModel.Change)
+    debug('TargetModel.Change:', TargetModel.Change)
+    if (typeof TargetModel._defineChangeModel !== 'function') {
+      console.error('ERROR: TargetModel._defineChangeModel is NOT a function')
+    }
+    if (!TargetModel.Change) {
+      console.error('ERROR: TargetModel.Change is not defined AFTER _defineChangeModel() and enableChangeTracking()')
+    }
+    debug('--- beforeEach END ---')
+    // --- END ADDED DEBUG LOGGING AND CHECKS ---
 
     this.startingCheckpoint = -1;
 
@@ -85,6 +105,7 @@ describe('Replication / Change APIs', function() {
     describe('when no changeCleanupInterval set', function() {
       it('should call rectifyAllChanges if running on server', function() {
         const calls = mockRectifyAllChanges(SourceModel);
+        if (!SourceModel.Change) SourceModel._defineChangeModel() // Ensure Change model is defined
         SourceModel.enableChangeTracking();
 
         if (runtime.isServer) {
@@ -105,10 +126,12 @@ describe('Replication / Change APIs', function() {
         );
 
         Model.attachTo(dataSource);
+        if (!Model.Change) Model._defineChangeModel() // Ensure Change model is defined
       });
 
       it('should not call rectifyAllChanges', function() {
         const calls = mockRectifyAllChanges(Model)
+        if (!Model.Change) Model._defineChangeModel() // Ensure Change model is defined
         Model.enableChangeTracking()
         expect(calls).to.eql([])
       })
@@ -124,11 +147,13 @@ describe('Replication / Change APIs', function() {
         );
 
         Model.attachTo(dataSource);
+        if (!Model.Change) Model._defineChangeModel() // Ensure Change model is defined
       });
 
       it('should call rectifyAllChanges if running on server', function() {
         const calls = mockRectifyAllChanges(Model);
-        Model.enableChangeTracking();
+        if (!SourceModel.Change) SourceModel._defineChangeModel() // Ensure Change model is defined
+        SourceModel.enableChangeTracking();
         if (runtime.isServer) {
           expect(calls).to.eql(['rectifyAllChanges'])
         } else {
@@ -1229,19 +1254,17 @@ describe('Replication / Change APIs with custom change properties', function() {
       expect(changes[0]).to.have.property('customProperty', '123')
     })
   })
-
-  function mockChangeFind(Model) {
-    // Create an array to capture filters used.
-    const filterUsed = []
-    const changeModel = Model.getChangeModel()
-    const originalFind = changeModel.find
-
-    // Patch the find function to record the filter argument.
-    changeModel.find = function (filter) {
-      filterUsed.push(filter)
-      return originalFind.call(this, filter) // no need for await here
-    }
-
-    return filterUsed
-  }
 })
+
+
+function mockChangeFind(Model) {
+  const filtersUsed = []
+  // Save the original find function of the Change model.
+  const originalFind = Model.getChangeModel().find
+  // Override the find function.
+  Model.getChangeModel().find = function (filter) {
+    filtersUsed.push(filter)
+    return originalFind.call(this, filter)
+  }
+  return filtersUsed
+}
