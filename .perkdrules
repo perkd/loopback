@@ -9,9 +9,11 @@
 
 # Debugging
 - always fix the simplest and foundational issues first
+- always try to reduce code, more code than necessary leads to more bugs
+- always trace the call chain to find the root cause of issues
 - adding complex code during debugging could lead to more bugs
-- after a few failed attempts to fix, take a step back, we may be missing something obvious and simple
-- when stuck:
+- after a few failed attempts to fix, ask yourself: "take a step back, am I missing something simple and obvious??"
+- debug methodically for difficult issues:
    1. create a new debug-journal (journal) to track learnings and fails/success
    2. add console.logs (logs) to trace runtime values
    3. add debug statements to the code to trace logic
