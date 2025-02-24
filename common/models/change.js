@@ -88,7 +88,8 @@ class Conflict {
    */
 
   async resolve() {
-    const { rev } = await this.TargetModel.findLastChange(this.modelId)
+    const targetChange = await this.TargetModel.findLastChange(this.modelId)
+    const rev = targetChange ? targetChange.rev : null
     await this.SourceModel.updateLastChange(this.modelId, { prev: rev })
   }
 
@@ -98,13 +99,6 @@ class Conflict {
   async resolveUsingSource() {
     // don't forward any cb arguments from resolve()
     await this.resolve()
-
-    // FIXME Ensure models are available
-    // if (!this.SourceModel || !this.TargetModel) {
-    //   throw new Error('Both source and target models must be available for resolution')
-    // }
-    // Use stored models for replication
-    // return this.SourceModel.replicate(this.TargetModel, -1)
   }
 
   /**
@@ -624,70 +618,88 @@ module.exports = function(Change) {
    * @param {Object} result See above.
    */
 
-  Change.diff = async function(modelName, since, remoteChanges) {
-    if (!Array.isArray(remoteChanges) || remoteChanges.length === 0) {
-      return {deltas: [], conflicts: []};
+  Change.diff = function(TargetChange, since, sourceChanges, callback) {
+    const Change = this
+    let targetChanges
+    let sourceChangesById
+
+    // Replace async.waterfall with Promise chain
+    getTargetChanges()
+      .then(indexSourceChanges)
+      .then(compareChanges)
+      .then(done)
+      .catch(done)
+
+    async function getTargetChanges() {
+      debug('\tChange.diff: getTargetChanges - TargetChange:', TargetChange.modelName, 'since:', since) // ADDED LOG
+      return new Promise((resolve, reject) => {
+        TargetChange.changes(since, {}, function(err, results) {
+          if (err) {
+            return reject(err) // Reject promise on error
+          }
+          targetChanges = results
+          debug('\tChange.diff: getTargetChanges - targetChanges count:', targetChanges.length) // ADDED LOG
+          resolve() // Resolve promise on success
+        })
+      })
     }
 
-    const remoteChangeIndex = {};
-    const modelIds = [];
-    remoteChanges.forEach(function(ch) {
-      modelIds.push(ch.modelId);
-      remoteChangeIndex[ch.modelId] = new Change(ch);
-    });
+    async function indexSourceChanges() {
+      debug('\tChange.diff: indexSourceChanges - sourceChanges count:', sourceChanges.length) // ADDED LOG
+      sourceChangesById = utils.indexById(sourceChanges)
+    }
 
-    // normalize `since`
-    since = Number(since) || 0;
-    
-    const allLocalChanges = await this.find({
-      where: {
-        modelName: modelName,
-        modelId: {inq: modelIds},
-      },
-    });
+    async function compareChanges() {
+      debug('\tChange.diff: compareChanges - targetChanges count:', targetChanges.length, 'sourceChanges count:', sourceChanges.length) // ADDED LOG
+      const deltas = []
+      const conflicts = []
+      const targetChangesById = utils.indexById(targetChanges)
 
-    const deltas = [];
-    const conflicts = [];
-    const localModelIds = [];
+      for (const targetChange of targetChanges) {
+        const id = targetChange.modelId
+        const sourceChange = sourceChangesById[id]
 
-    // Process all local changes
-    allLocalChanges.forEach(function(localChange) {
-      localChange = new Change(localChange);
-      localModelIds.push(localChange.modelId);
-      const remoteChange = remoteChangeIndex[localChange.modelId];
-      
-      if (remoteChange) {
-        // Check for conflicts
-        if (localChange.conflictsWith(remoteChange)) {
-          remoteChange.debug('remote conflict');
-          localChange.debug('local conflict');
-          conflicts.push(localChange);
-        } else if (localChange.checkpoint >= since) {
-          // Only include non-conflicting changes after checkpoint
-          remoteChange.debug('remote delta');
-          deltas.push(remoteChange);
+        if (!sourceChange) {
+          // target has changes, source doesn't, delta is delete
+          deltas.push({
+            type: Change.DELETE,
+            change: targetChange,
+          })
+          continue // Use continue instead of return in for loop to skip to next iteration
+        }
+
+        delete sourceChangesById[id] // consume the source change
+
+        const delta = Change.compareRevisions(sourceChange, targetChange)
+        if (delta) {
+          deltas.push(delta)
+        } else {
+          // No delta, check for conflict
+          const conflict = Change.detectConflict(sourceChange, targetChange)
+          if (conflict) {
+            conflicts.push(conflict)
+          }
         }
       }
-    });
 
-    // Handle remote changes for models not present locally
-    modelIds.forEach(function(id) {
-      if (localModelIds.indexOf(id) !== -1) return;
+      // Any remaining source changes are new
+      Object.keys(sourceChangesById).forEach(function(id) {
+        deltas.push({
+          type: Change.CREATE,
+          change: sourceChangesById[id],
+        })
+      })
+      debug('\tChange.diff: compareChanges - deltas count:', deltas.length, 'conflicts count:', conflicts.length) // ADDED LOG
 
-      const d = remoteChangeIndex[id];
-      const oldChange = allLocalChanges.filter(function(c) {
-        return c.modelId === id;
-      })[0];
+      return {deltas, conflicts} // Implicitly return a resolved Promise
+    }
 
-      if (oldChange) {
-        d.prev = oldChange.rev;
-      } else {
-        d.prev = null;
+    function done(result, err) { // Note: result is first arg in .then, err in .catch
+      debug('\tChange.diff: done - err:', err, 'deltas count:', result && result.deltas.length, 'conflicts count:', result && result.conflicts.length) // ADDED LOG
+      if (err) {
+        return callback(err) // Pass error to final callback
       }
-
-      deltas.push(d);
-    });
-
-    return {deltas, conflicts};
-  };
+      callback(null, result)
+    }
+  }
 };
