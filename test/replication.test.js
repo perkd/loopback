@@ -21,7 +21,7 @@ async function replicateExpectingSuccess(source, target, since) {
   source = source || SourceModel
   target = target || TargetModel
   
-  const result = await source.replicate(since, target)
+  const result = await source.replicate(target, since)
   
   if (result.conflicts && result.conflicts.length) {
     throw new Error('Unexpected conflicts\n' + 
@@ -42,43 +42,34 @@ describe('Replication / Change APIs', function() {
       connector: loopback.Memory,
     });
 
-    // Create and attach a unique Checkpoint model first
+    // Create base models first
     const Checkpoint = loopback.Checkpoint.extend('SourceCheckpoint-' + tid);
     await Checkpoint.attachTo(dataSource);
 
-    // Create SourceModel with change tracking enabled – include custom change properties if needed
+    // Create source model
     SourceModel = PersistedModel.extend(
       'SourceModel-' + tid,
       {id: {id: true, type: String, defaultFn: 'guid'}},
-      {trackChanges: true, additionalChangeModelProperties: { customProperty: { type: String } } }
+      {trackChanges: true}
     );
     await SourceModel.attachTo(dataSource);
-    await SourceModel._defineChangeModel();
-    // Register change observers so changes are recorded
+    
+    // Important: Set up change tracking properly
+    const SourceChange = SourceModel._defineChangeModel();
+    SourceChange.Checkpoint = Checkpoint;
     SourceModel.enableChangeTracking();
 
-    const SourceChange = SourceModel.getChangeModel();
-    // Set up the Checkpoint model to be used by the change model
-    SourceChange.Checkpoint = Checkpoint;
-
-    // Create and attach TargetModel similarly
+    // Create target model with similar setup
     TargetModel = PersistedModel.extend(
       'TargetModel-' + tid,
       {id: {id: true, type: String, defaultFn: 'guid'}},
-      {trackChanges: true},
+      {trackChanges: true}
     );
     await TargetModel.attachTo(dataSource);
-
-    // Add this important note and setup from original
-    // NOTE(bajtos) At the moment, all models share the same Checkpoint
-    // model. This causes the in-process replication to work differently
-    // than client-server replication.
-    // As a workaround, we manually setup unique Checkpoint for TargetModel.
-    const TargetChange = TargetModel.Change;
-    TargetChange.Checkpoint = loopback.Checkpoint.extend('TargetCheckpoint');
-    await TargetChange.Checkpoint.attachTo(dataSource);
-
-    await TargetModel._defineChangeModel();
+    
+    // Important: Set up change tracking for target
+    const TargetChange = TargetModel._defineChangeModel();
+    TargetChange.Checkpoint = Checkpoint; // Share the same checkpoint model
     TargetModel.enableChangeTracking();
 
     this.startingCheckpoint = -1;
@@ -1112,7 +1103,7 @@ describe('Replication / Change APIs', function() {
   const _since = {};
   async function replicate(source, target, since) {
     try {
-      const result = await source.replicate(since, target)
+      const result = await source.replicate(target, since)
       await Promise.all(result.conflicts.map(c => 
         source.rectifyChange(c.resolvedId)
       ))
