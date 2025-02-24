@@ -27,7 +27,7 @@ describe('Replication', function () {
   it('should replicate local data to the remote', async function () {
     const RANDOM = Math.random(),
       local = await LocalTestModel.create({ n: RANDOM }),
-      res = await LocalTestModel.replicate(0, TestModel),
+      res = await LocalTestModel.replicate(TestModel, 0),
       found = await TestModel.findOne({ n: RANDOM })
 
     assert.equal(local.id, found.id)

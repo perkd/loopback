@@ -302,7 +302,7 @@ describe('Replication / Change APIs', function() {
     })
   })
 
-  describe('Model.replicate(since, targetModel, options)', function() {
+  describe('Model.replicate(targetModel, since, options)', function() {
     it('replicates data using the target model', async function() {
       const model = await SourceModel.create({name: 'created'})
       const conflicts = await SourceModel.replicate(TargetModel)
@@ -338,13 +338,13 @@ describe('Replication / Change APIs', function() {
 
     it('returns new current checkpoints', async function() {
       const since = {source: -1, target: -1}
-      const result = await SourceModel.replicate(since, TargetModel)
+      const result = await SourceModel.replicate(TargetModel, since)
       expect(result.currentCheckpoints).to.eql({source: 3, target: 4})
     })
 
     it('leaves current target checkpoint empty', async function() {
       const since = {source: -1, target: -1}
-      await SourceModel.replicate(since, TargetModel)
+      await SourceModel.replicate(TargetModel, since)
       const checkpoint = await TargetModel.getChangeModel().getCheckpointModel().current()
       expect(checkpoint).to.equal(undefined)
     })
@@ -1028,13 +1028,13 @@ describe('Replication / Change APIs', function() {
       test.startingCheckpoint = -1;
     });
 
-    describe('Model.replicate(since, targetModel, options)', function() {
+    describe('Model.replicate(targetModel, since, options)', function() {
       it('calls bulkUpdate multiple times', async function() {
         const { SourceModel, TargetModel, startingCheckpoint } = this;
         const options = {};
         const calls = mockBulkUpdate(TargetModel)
         const created = await SourceModel.create([{name: 'foo'}, {name: 'bar'}])
-        const { conflicts } = await SourceModel.replicate(startingCheckpoint, TargetModel, options)
+        const { conflicts } = await SourceModel.replicate(TargetModel, startingCheckpoint, options)
 
         await assertTargetModelEqualsSourceModel(conflicts, SourceModel, TargetModel)
         expect(calls.length).to.eql(2)
@@ -1068,13 +1068,13 @@ describe('Replication / Change APIs', function() {
       test.startingCheckpoint = -1;
     });
 
-    describe('Model.replicate(since, targetModel, options, callback)', function() {
+    describe('Model.replicate(targetModel, since, options)', function() {
       it('calls bulkUpdate only once', async function() {
         const { SourceModel, TargetModel, startingCheckpoint } = this;
         const options = {};
         const calls = mockBulkUpdate(TargetModel);
         const created = await SourceModel.create([{name: 'foo'}, {name: 'bar'}])
-        const { conflicts } = await SourceModel.replicate(startingCheckpoint, TargetModel, options)
+        const { conflicts } = await SourceModel.replicate(TargetModel, startingCheckpoint, options)
 
         await assertTargetModelEqualsSourceModel(conflicts, SourceModel, TargetModel)
         expect(calls.length).to.eql(1)
@@ -1098,20 +1098,6 @@ describe('Replication / Change APIs', function() {
     }
 
     return calls
-  }
-
-  const _since = {};
-  async function replicate(source, target, since) {
-    try {
-      const result = await source.replicate(target, since)
-      await Promise.all(result.conflicts.map(c => 
-        source.rectifyChange(c.resolvedId)
-      ))
-      return result
-    } catch (err) {
-      debug('Replication failed: %j', err)
-      throw err
-    }
   }
 
   async function createModel(Model, data) {
