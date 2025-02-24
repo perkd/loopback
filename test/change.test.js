@@ -152,13 +152,21 @@ describe('Change', function() {
     });
 
     it('should not change checkpoint when rev is the same', async function() {
-      const originalCheckpoint = change.checkpoint;
-      const originalRev = change.rev;
-      // Trigger a new checkpoint (if required)
-      await TestModel.checkpoint();
-      const updatedChange = await change.rectify();
-      assert.equal(updatedChange.rev, originalRev);
-      assert.equal(updatedChange.checkpoint, originalCheckpoint);
+      // First get the model instance and compute its revision
+      const inst = await TestModel.findById(this.modelId)
+      const computedRev = Change.revisionForInst(inst)
+      
+      // Set up change with computed revision
+      change.rev = computedRev
+      change.checkpoint = 1
+      
+      // Trigger checkpoint but don't modify model
+      await TestModel.checkpoint()
+      
+      // Now rectify - should preserve state
+      const updatedChange = await change.rectify()
+      assert.equal(updatedChange.rev, computedRev)
+      assert.equal(updatedChange.checkpoint, 1)
     });
   });
 

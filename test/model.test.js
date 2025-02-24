@@ -167,7 +167,7 @@ describe.onServer('Remote Methods', function() {
   });
 
   describe('Model.create(data, callback)', function() {
-    it('creates model', function() {
+    it('creates model', async function() {
       const anObject = {first: 'June'}
       return request(app)
         .post('/users')
@@ -275,13 +275,13 @@ describe.onServer('Remote Methods', function() {
     });
   });
 
-  describe('Model.upsertWithWhere(where, data, callback)', function() {
-    it('Updates when a Model instance exists', function() {
-      return User.create({first: 'jill', second: 'pill'})
-        .then(() => User.upsertWithWhere({second: 'pill'}, {second: 'jones'}))
-        .then(user => User.findById(user.id))
-        .then(updated => assert.equal(updated.second, 'jones'))
-    });
+  describe('Model.upsertWithWhere(where, data)', function() {
+    it('Updates when a Model instance exists', async function() {
+      await User.create({first: 'jill', second: 'pill'})
+      const user = await User.upsertWithWhere({second: 'pill'}, {second: 'jones'})
+      const updated = await User.findById(user.id)
+      assert.equal(updated.second, 'jones')
+    })
 
     it('Creates when no Model instance exists', function() {
       return User.upsertWithWhere({first: 'somers'}, {first: 'Simon'})
@@ -715,10 +715,13 @@ describe.onServer('Remote Methods', function() {
     });
   });
 
-  describe('Model.getSourceId()', function() {
-    it('Get the Source Id', async function() {
-      const id = await User.getSourceId()
-      assert.equal('memory-user', id)
+  describe('Model.getSourceId() [callback]', function() {
+    it('Get the Source Id', function(done) {
+      User.getSourceId(function(err, id) {
+        if (err) return done(err)
+        assert.equal('memory-user', id)
+        done()
+      })
     })
   })
 
