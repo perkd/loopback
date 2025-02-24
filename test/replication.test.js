@@ -65,10 +65,10 @@ describe('Replication / Change APIs', function() {
       {id: {id: true, type: String, defaultFn: 'guid'}},
       {trackChanges: true}
     );
-    await TargetModel.attachTo(dataSource);
+    TargetModel.attachTo(dataSource);
     
     // Important: Set up change tracking for target
-    const TargetChange = TargetModel._defineChangeModel();
+    const TargetChange = TargetModel.Change;
     TargetChange.Checkpoint = Checkpoint; // Share the same checkpoint model
     TargetModel.enableChangeTracking();
 
@@ -227,47 +227,6 @@ describe('Replication / Change APIs', function() {
       // Initialize change tracking system
       await this.SourceModel.checkpoint()
     })
-
-    // Define mockChangeFind here so that it's in scope for these tests.
-    const mockChangeFind = function(Model) {
-      const filterUsed = []
-      Model.getChangeModel().find = function(filter, cb) {
-        filterUsed.push(filter)
-        // Simulate dummy results based on the filter value:
-        let results = []
-        if (filter && filter.where && typeof filter.where.checkpoint === 'object' && typeof filter.where.checkpoint.gte === 'number') {
-          if (filter.where.checkpoint.gte >= 999) {
-            results = []  // for high checkpoint values, no changes
-          } else {
-            results = [{
-              id: 'change1',
-              modelId: '1',
-              modelName: Model.modelName,
-              getModelId: function() { return this.modelId },
-              type: function() { return Change.UPDATE },
-              getId: function() { return this.id },
-              toObject: function() { return this },
-              checkpoint: filter.where.checkpoint.gte || -1,
-              rev: '1-abcd'
-            }]
-          }
-        } else {
-          results = [{
-            id: 'change1',
-            modelId: '1', 
-            modelName: Model.modelName,
-            getModelId: function() { return this.modelId },
-            type: function() { return Change.UPDATE },
-            getId: function() { return this.id },
-            toObject: function() { return this },
-            checkpoint: -1
-          }]
-        }
-        if (cb) process.nextTick(() => cb(null, results))
-        return results
-      }
-      return filterUsed
-    }
 
     // Remove duplicate and simplify name
     it('gets changes since the given checkpoint', async function() {
@@ -920,6 +879,19 @@ describe('Replication / Change APIs', function() {
           await sync(ClientB, Server)
         })
       })
+
+      async function sync(client, server) {
+        try {
+          // NOTE(bajtos) It's important to replicate from the client to the
+          // server first, so that we can resolve any conflicts at the client.
+          // This ordering ensures consistent conflict resolution.
+          await replicateExpectingSuccess(client, server);
+          await replicateExpectingSuccess(server, client);
+        } catch (err) {
+          debug('Sync failed: %j', err);
+          throw err;
+        }
+      }
     })
 
     async function updateSourceInstanceNameTo(value) {
@@ -1019,11 +991,11 @@ describe('Replication / Change APIs', function() {
         {trackChanges: true, replicationChunkSize: 1},
       );
 
+      TargetModel.attachTo(dataSource);
+
       const TargetChange = TargetModel.Change;
       TargetChange.Checkpoint = loopback.Checkpoint.extend('TargetCheckpoint');
       TargetChange.Checkpoint.attachTo(dataSource);
-
-      TargetModel.attachTo(dataSource);
 
       test.startingCheckpoint = -1;
     });
@@ -1059,11 +1031,11 @@ describe('Replication / Change APIs', function() {
         {trackChanges: true},
       );
 
+      TargetModel.attachTo(dataSource);
+
       const TargetChange = TargetModel.Change;
       TargetChange.Checkpoint = loopback.Checkpoint.extend('TargetCheckpoint');
       TargetChange.Checkpoint.attachTo(dataSource);
-
-      TargetModel.attachTo(dataSource);
 
       test.startingCheckpoint = -1;
     });
@@ -1086,15 +1058,15 @@ describe('Replication / Change APIs', function() {
     const calls = []
     const originalBulkUpdateFunction = modelToMock.bulkUpdate
 
-    // Convert to async/await while maintaining original behavior
-    modelToMock.bulkUpdate = async function(updates, options) {
+    modelToMock.bulkUpdate = function(updates, options, callback) {
       // Track each chunk as a separate call
       if (Array.isArray(updates)) {
         calls.push(...updates.map(() => 'bulkUpdate'))
       } else {
         calls.push('bulkUpdate')
       }
-      return await originalBulkUpdateFunction.call(this, updates, options)
+      // Call originalBulkUpdateFunction with callback
+      originalBulkUpdateFunction.call(this, updates, options, callback)
     }
 
     return calls
@@ -1257,17 +1229,19 @@ describe('Replication / Change APIs with custom change properties', function() {
       expect(changes[0]).to.have.property('customProperty', '123')
     })
   })
-});
 
-async function sync(client, server) {
-  try {
-    // NOTE(bajtos) It's important to replicate from the client to the
-    // server first, so that we can resolve any conflicts at the client.
-    // This ordering ensures consistent conflict resolution.
-    await replicateExpectingSuccess(client, server);
-    await replicateExpectingSuccess(server, client);
-  } catch (err) {
-    debug('Sync failed: %j', err);
-    throw err;
+  function mockChangeFind(Model) {
+    // Create an array to capture filters used.
+    const filterUsed = []
+    const changeModel = Model.getChangeModel()
+    const originalFind = changeModel.find
+
+    // Patch the find function to record the filter argument.
+    changeModel.find = function (filter) {
+      filterUsed.push(filter)
+      return originalFind.call(this, filter) // no need for await here
+    }
+
+    return filterUsed
   }
-}
+})

@@ -139,6 +139,30 @@ describe('Replication over REST', function() {
           })
         expect(result).to.be.undefined
       })
+
+      it('allows reverse resolve() on the client', async function() {
+        setAccessToken(aliceToken)
+        
+        // Get conflicts through replication
+        const result = await RemoteCar.replicate(LocalCar, -1)
+        const { conflicts } = result
+        expect(conflicts).to.have.length(1)
+        
+        const conflict = conflicts[0]
+        
+        // Ensure models are properly bound before swapping
+        conflict.sourceModel = RemoteCar
+        conflict.targetModel = LocalCar
+        
+        // Now swap and resolve
+        await conflict
+          .swapParties()
+          .resolveUsingTarget()
+        
+        // Verify resolution worked
+        const finalResult = await RemoteCar.replicate(LocalCar, -1)
+        expect(finalResult.conflicts).to.have.length(0)
+      })
     })
 
     describe('as user with READ and WRITE permissions', function() {
@@ -182,8 +206,8 @@ describe('Replication over REST', function() {
     let LocalConflict, RemoteConflict;
 
     before(function setupConflictModels() {
-      LocalConflict = LocalCar.getChangeModel().Conflict;
-      RemoteConflict = RemoteCar.getChangeModel().Conflict;
+      LocalConflict = LocalCar.Change.Conflict;
+      RemoteConflict = RemoteCar.Change.Conflict;
     })
 
     beforeEach(async function() {
@@ -246,19 +270,27 @@ describe('Replication over REST', function() {
       })
 
       it('allows reverse resolve() on the client', async function() {
+        setAccessToken(aliceToken)
+        
+        // Get conflicts through replication
         const result = await RemoteCar.replicate(LocalCar, -1)
         const { conflicts } = result
-        expect(conflicts, 'conflicts').to.have.length(1)
-
-        // Await the resolution after swapping parties
-        await conflicts[0].swapParties().resolveUsingTarget()
-
-        const local = await RemoteCar.replicate(LocalCar, -1)
-        const { conflicts: localConflicts } = local
-        expect(localConflicts, 'localConflicts').to.have.length(0)
-
-        //await localConflicts[0].resolveUsingSource()
-        //if (localConflicts.length) throw conflictError(localConflicts)
+        expect(conflicts).to.have.length(1)
+        
+        const conflict = conflicts[0]
+        
+        // Ensure models are properly bound before swapping
+        conflict.sourceModel = RemoteCar
+        conflict.targetModel = LocalCar
+        
+        // Now swap and resolve
+        await conflict
+          .swapParties()
+          .resolveUsingTarget()
+        
+        // Verify resolution worked
+        const finalResult = await RemoteCar.replicate(LocalCar, -1)
+        expect(finalResult.conflicts).to.have.length(0)
       })
 
       it('rejects resolve() on the server', async function() {
@@ -526,21 +558,33 @@ describe('Replication over REST', function() {
     // Create and attach remote models - using new app.model API
     const remoteUserOpts = createRemoteModelOpts(USER_OPTS)
     console.log('remoteUserOpts:', remoteUserOpts)
-    RemoteUser = clientApp.registry.createModel('RemoteUser', USER_PROPS, remoteUserOpts) // Create model definition
-    clientApp.model(RemoteUser, {dataSource: 'remote'}) // Attach to datasource
+    RemoteUser = clientApp.registry.createModel('RemoteUser', USER_PROPS, remoteUserOpts)
+    clientApp.model(RemoteUser, {dataSource: 'remote'})
     console.log('RemoteUser defined')
 
     const remoteCarOpts = createRemoteModelOpts(CAR_OPTS)
-    console.log('remoteCarOpts:', remoteCarOpts)
-    RemoteCar = clientApp.registry.createModel('RemoteCar', CAR_PROPS, remoteCarOpts) // Create model definition
-    clientApp.model(RemoteCar, {dataSource: 'remote'}) // Attach to datasource
-    console.log('RemoteCar defined')
+    RemoteCar = clientApp.registry.createModel('RemoteCar', CAR_PROPS, remoteCarOpts)
 
-    // Override the default HTTP path so that replication calls use the server endpoint.
-    // We want the path to be based on the plural defined in CAR_OPTS, which is "Cars".
+    // Ensure proper model binding configuration
     RemoteCar.settings.plural = CAR_OPTS.plural
-    RemoteCar.sharedClass.http.path = '/' + CAR_OPTS.plural
-    console.log('Updated RemoteCar.sharedClass.http.path to', RemoteCar.sharedClass.http.path)
+    RemoteCar.settings.targetModel = LocalCar // Add reference to target
+
+    // Configure shared method metadata
+    RemoteCar.sharedClass.find('replicate', true).returns = [
+      {arg: 'result', type: 'object', root: true}
+    ]
+
+    clientApp.model(RemoteCar, {
+      dataSource: 'remote',
+      public: true
+    })
+
+    // ========= Fix 1: Initialize RemoteCar Change Model =========
+    RemoteCar._defineChangeModel()
+    RemoteCar.Change.attachTo(clientApp.dataSources.db)
+    RemoteCar.Change.Checkpoint = ClientCheckpoint
+    RemoteCar.enableChangeTracking()
+    // =============================================================
 
     // Log the types of replicate methods - moved to the end
     console.log('LocalCar.replicate type:', typeof LocalCar.replicate)
@@ -548,16 +592,13 @@ describe('Replication over REST', function() {
   }
 
   function createRemoteModelOpts(modelOpts) {
-    console.log('createRemoteModelOpts input:', modelOpts)
-    return extend(modelOpts, {
-      // Disable change tracking, server will call rectify/rectifyAll
-      // after each change, because it's tracking the changes too
-      trackChanges: false,
-      // Enable remote replication in order to get remoting API metadata
-      // used by the remoting connector
+    return {
+      ...modelOpts,
+      trackChanges: false, // Disable change tracking on remote
       enableRemoteReplication: true,
-      remoteModelName: modelOpts.plural
-    })
+      plural: modelOpts.plural, // Ensure plural is preserved
+      remoteModelName: modelOpts.plural // Add explicit remote model name
+    }
   }
 
   async function seedServerData() {
