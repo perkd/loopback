@@ -575,31 +575,18 @@ describe('Replication over REST', function() {
     LocalCar.Change.Checkpoint = ClientCheckpoint
     LocalCar.enableChangeTracking()
 
-    // Create and attach remote models - using new app.model API
+    // Create and attach remote models on the client
     const remoteUserOpts = createRemoteModelOpts(USER_OPTS)
-    console.log('remoteUserOpts:', remoteUserOpts)
     RemoteUser = clientApp.registry.createModel('RemoteUser', USER_PROPS, remoteUserOpts)
     clientApp.model(RemoteUser, {dataSource: 'remote'})
     console.log('RemoteUser defined')
 
     const remoteCarOpts = createRemoteModelOpts(CAR_OPTS)
     RemoteCar = clientApp.registry.createModel('RemoteCar', CAR_PROPS, remoteCarOpts)
-
-    // Ensure proper model binding configuration
+    // Attach RemoteCar to remote datasource and explicitly set its target model to LocalCar to enforce data separation
+    clientApp.model(RemoteCar, {dataSource: 'remote'})
     RemoteCar.settings.plural = CAR_OPTS.plural
-    RemoteCar.settings.targetModel = LocalCar // Add reference to target
-
-    clientApp.model(RemoteCar, {
-      dataSource: 'remote',
-      public: true
-    })
-
-    // ========= Fix 1: Initialize RemoteCar Change Model =========
-    RemoteCar._defineChangeModel()
-    RemoteCar.Change.attachTo(clientApp.dataSources.db)
-    RemoteCar.Change.Checkpoint = ClientCheckpoint
-    RemoteCar.enableChangeTracking()
-    // =============================================================
+    RemoteCar.settings.targetModel = LocalCar
 
     // Fix 2: Use getChangeModel() instead of direct Change property
     console.log('LocalCar.replicate type:', typeof LocalCar.replicate)

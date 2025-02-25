@@ -99,6 +99,14 @@ describe('Replication / Change APIs', function() {
       this.model = inst;
       await SourceModel.replicate(TargetModel);
     };
+
+    // Create remote models
+    RemoteUser = clientApp.registry.createModel('RemoteUser', USER_PROPS, remoteUserOpts);
+    clientApp.model(RemoteUser, {dataSource: 'remote'});
+
+    RemoteCar = clientApp.registry.createModel('RemoteCar', CAR_PROPS, remoteCarOpts);
+    clientApp.model(RemoteCar, {dataSource: 'remote'});
+    RemoteCar.settings.targetModel = LocalCar;
   });
 
   describe('cleanup check for enableChangeTracking', function() {
@@ -416,8 +424,10 @@ describe('Replication / Change APIs', function() {
                 if (err) reject(err)
                 else resolve()
               })
-            })          }
+            })
+          }
         })
+
         const result = await SourceModel.replicate(TargetModel)
         const conflicts = result.conflicts || []
         const conflictedIds = getPropValue(conflicts, 'modelId')
