@@ -15,3 +15,4 @@ node_modules
 dist
 *xunit.xml
 .nyc_output/
+.yarn/install-state.gz
