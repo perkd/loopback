@@ -159,19 +159,10 @@ describe('Replication / Change APIs', function() {
     clientApp.model(RemoteCar, { dataSource: 'remote' })
     RemoteCar.settings.targetModel = LocalCar
 
-    // Add to constructor
-    TargetModel.checkpoint = async function() {
-      return await this.getChangeModel().getCheckpointModel().current();
-    };
-
-    // Add to prototype
-    TargetModel.prototype.checkpoint = async function() {
-      return await this.constructor.getChangeModel().getCheckpointModel().current();
-    };
-
-    TargetChange = TargetModel.Change; // Assign, not declare
-    TargetChange.Checkpoint = loopback.Checkpoint.extend('TargetCheckpoint');
-    TargetChange.Checkpoint.attachTo(dataSource);
+    // --- Apply original approach: define separate checkpoint for TargetModel ---
+    const TargetCheckpoint = loopback.Checkpoint.extend('TargetCheckpoint-' + tid);
+    await TargetCheckpoint.attachTo(dataSource);
+    TargetModel.Change.Checkpoint = TargetCheckpoint;
   });
 
   describe('cleanup check for enableChangeTracking', function() {
@@ -385,7 +376,7 @@ describe('Replication / Change APIs', function() {
       const since = {source: -1, target: -1}
       const sourceSince = []
       spyAndStoreSinceArg(SourceModel, 'changes', sourceSince)
-      await SourceModel.replicate(since, TargetModel)
+      await SourceModel.replicate(TargetModel, since)
       expect(sourceSince).to.eql([-1])
     })
 
@@ -393,7 +384,7 @@ describe('Replication / Change APIs', function() {
       const since = {source: -1, target: -1}
       const targetSince = []
       spyAndStoreSinceArg(TargetModel, 'changes', targetSince)
-      await SourceModel.replicate(since, TargetModel)
+      await SourceModel.replicate(TargetModel, since)
       expect(targetSince).to.eql([-1])
     })
 
@@ -403,7 +394,7 @@ describe('Replication / Change APIs', function() {
       const targetSince = []
       spyAndStoreSinceArg(SourceModel, 'changes', sourceSince)
       spyAndStoreSinceArg(TargetModel, 'changes', targetSince)
-      await SourceModel.replicate(since, TargetModel)
+      await SourceModel.replicate(TargetModel, since)
       expect(sourceSince).to.eql([1])
       expect(targetSince).to.eql([2])
     })
