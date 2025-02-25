@@ -19,7 +19,7 @@ const filterNodes = require('loopback-filters');
 
 const REPLICATION_CHUNK_SIZE = -1;
 
-module.exports = function(registry) {
+module.exports = function (registry) {
   const Model = registry.getModel('Model');
 
   /**
@@ -53,7 +53,7 @@ module.exports = function(registry) {
     // enable change tracking (usually for replication)
     if (this.settings.trackChanges) {
       PersistedModel._defineChangeModel();
-      PersistedModel.once('dataSourceAttached', function() {
+      PersistedModel.once('dataSourceAttached', function () {
         PersistedModel.enableChangeTracking();
       });
     } else if (this.settings.enableRemoteReplication) {
@@ -70,9 +70,9 @@ module.exports = function(registry) {
   function throwNotAttached(modelName, methodName) {
     throw new Error(
       g.f('Cannot call %s.%s().' +
-      ' The %s method has not been setup.' +
-      ' The {{PersistedModel}} has not been correctly attached to a {{DataSource}}!',
-      modelName, methodName, methodName),
+        ' The %s method has not been setup.' +
+        ' The {{PersistedModel}} has not been correctly attached to a {{DataSource}}!',
+        modelName, methodName, methodName),
     );
   }
 
@@ -104,7 +104,7 @@ module.exports = function(registry) {
    * @param {Object} models Model instances or null.
    */
 
-  PersistedModel.create = function(data, callback) {
+  PersistedModel.create = function (data, callback) {
     throwNotAttached(this.modelName, 'create');
   };
 
@@ -117,9 +117,9 @@ module.exports = function(registry) {
    */
 
   PersistedModel.upsert = PersistedModel.updateOrCreate = PersistedModel.patchOrCreate =
-  function upsert(data, callback) {
-    throwNotAttached(this.modelName, 'upsert');
-  };
+    function upsert(data, callback) {
+      throwNotAttached(this.modelName, 'upsert');
+    };
 
   /**
    * Update or insert a model instance based on the search criteria.
@@ -139,9 +139,9 @@ module.exports = function(registry) {
    */
 
   PersistedModel.upsertWithWhere =
-  PersistedModel.patchOrCreateWithWhere = function upsertWithWhere(where, data, callback) {
-    throwNotAttached(this.modelName, 'upsertWithWhere');
-  };
+    PersistedModel.patchOrCreateWithWhere = function upsertWithWhere(where, data, callback) {
+      throwNotAttached(this.modelName, 'upsertWithWhere');
+    };
 
   /**
    * Replace or insert a model instance; replace existing record if one is found,
@@ -386,7 +386,7 @@ module.exports = function(registry) {
    * @param {Number} count Number of instances.
    */
 
-  PersistedModel.count = function(where, cb) {
+  PersistedModel.count = function (where, cb) {
     throwNotAttached(this.modelName, 'count');
   };
 
@@ -402,7 +402,7 @@ module.exports = function(registry) {
    * @param {Object} instance Model instance saved or created.
    */
 
-  PersistedModel.prototype.save = function(options, callback) {
+  PersistedModel.prototype.save = function (options, callback) {
     const Model = this.constructor;
 
     if (typeof options == 'function') {
@@ -410,7 +410,7 @@ module.exports = function(registry) {
       options = {};
     }
 
-    callback = callback || function() {
+    callback = callback || function () {
     };
     options = options || {};
 
@@ -434,7 +434,7 @@ module.exports = function(registry) {
       return save();
     }
 
-    inst.isValid(function(valid) {
+    inst.isValid(function (valid) {
       if (valid) {
         save();
       } else {
@@ -449,12 +449,12 @@ module.exports = function(registry) {
 
     // then save
     function save() {
-      inst.trigger('save', function(saveDone) {
-        inst.trigger('update', function(updateDone) {
-          Model.upsert(inst, function(err) {
+      inst.trigger('save', function (saveDone) {
+        inst.trigger('update', function (updateDone) {
+          Model.upsert(inst, function (err) {
             inst._initProperties(data);
-            updateDone.call(inst, function() {
-              saveDone.call(inst, function() {
+            updateDone.call(inst, function () {
+              saveDone.call(inst, function () {
                 callback(err, inst);
               });
             });
@@ -469,7 +469,7 @@ module.exports = function(registry) {
    * @returns {Boolean} Returns true if the data model is new; false otherwise.
    */
 
-  PersistedModel.prototype.isNewRecord = function() {
+  PersistedModel.prototype.isNewRecord = function () {
     throwNotAttached(this.constructor.modelName, 'isNewRecord');
   };
 
@@ -479,7 +479,7 @@ module.exports = function(registry) {
    * @param {Function} callback Callback function.
    */
 
-  PersistedModel.prototype.destroy = function(cb) {
+  PersistedModel.prototype.destroy = function (cb) {
     throwNotAttached(this.constructor.modelName, 'destroy');
   };
 
@@ -523,9 +523,9 @@ module.exports = function(registry) {
    */
 
   PersistedModel.prototype.updateAttributes = PersistedModel.prototype.patchAttributes =
-  function updateAttributes(data, cb) {
-    throwNotAttached(this.modelName, 'updateAttributes');
-  };
+    function updateAttributes(data, cb) {
+      throwNotAttached(this.modelName, 'updateAttributes');
+    };
 
   /**
    * Replace attributes for a model instance and persist it into the datasource.
@@ -580,7 +580,7 @@ module.exports = function(registry) {
    * @param {*} val The `id` value. Will be converted to the type that the `id` property specifies.
    */
 
-  PersistedModel.prototype.setId = function(val) {
+  PersistedModel.prototype.setId = function (val) {
     const ds = this.getDataSource();
     this[this.getIdName()] = val;
   };
@@ -591,7 +591,7 @@ module.exports = function(registry) {
    * @returns {*} The `id` value
    */
 
-  PersistedModel.prototype.getId = function() {
+  PersistedModel.prototype.getId = function () {
     const data = this.toObject();
     if (!data) return;
     return data[this.getIdName()];
@@ -603,7 +603,7 @@ module.exports = function(registry) {
    * @returns {String} The `id` property name
    */
 
-  PersistedModel.prototype.getIdName = function() {
+  PersistedModel.prototype.getIdName = function () {
     return this.constructor.getIdName();
   };
 
@@ -613,7 +613,7 @@ module.exports = function(registry) {
    * @returns {String} The `id` property name
    */
 
-  PersistedModel.getIdName = function() {
+  PersistedModel.getIdName = function () {
     const Model = this;
     const ds = Model.getDataSource();
 
@@ -624,7 +624,7 @@ module.exports = function(registry) {
     }
   };
 
-  PersistedModel.setupRemoting = function() {
+  PersistedModel.setupRemoting = function () {
     const PersistedModel = this;
     const typeName = PersistedModel.modelName;
     const options = PersistedModel.settings;
@@ -654,12 +654,12 @@ module.exports = function(registry) {
           arg: 'data', type: 'object', model: typeName, allowArray: true,
           createOnlyInstance: hasUpdateOnlyProps,
           description: 'Model instance data',
-          http: {source: 'body'},
+          http: { source: 'body' },
         },
-        {arg: 'options', type: 'object', http: 'optionsFromRequest'},
+        { arg: 'options', type: 'object', http: 'optionsFromRequest' },
       ],
-      returns: {arg: 'data', type: typeName, root: true},
-      http: {verb: 'post', path: '/'},
+      returns: { arg: 'data', type: typeName, root: true },
+      http: { verb: 'post', path: '/' },
     });
 
     const upsertOptions = {
@@ -669,17 +669,17 @@ module.exports = function(registry) {
       accessType: 'WRITE',
       accepts: [
         {
-          arg: 'data', type: 'object', model: typeName, http: {source: 'body'},
+          arg: 'data', type: 'object', model: typeName, http: { source: 'body' },
           description: 'Model instance data',
         },
-        {arg: 'options', type: 'object', http: 'optionsFromRequest'},
+        { arg: 'options', type: 'object', http: 'optionsFromRequest' },
       ],
-      returns: {arg: 'data', type: typeName, root: true},
-      http: [{verb: 'patch', path: '/'}],
+      returns: { arg: 'data', type: typeName, root: true },
+      http: [{ verb: 'patch', path: '/' }],
     };
 
     if (!options.replaceOnPUT) {
-      upsertOptions.http.unshift({verb: 'put', path: '/'});
+      upsertOptions.http.unshift({ verb: 'put', path: '/' });
     }
     setRemoting(PersistedModel, 'patchOrCreate', upsertOptions);
 
@@ -689,17 +689,17 @@ module.exports = function(registry) {
       accepts: [
         {
           arg: 'data', type: 'object', model: typeName,
-          http: {source: 'body'},
+          http: { source: 'body' },
           description: 'Model instance data',
         },
-        {arg: 'options', type: 'object', http: 'optionsFromRequest'},
+        { arg: 'options', type: 'object', http: 'optionsFromRequest' },
       ],
-      returns: {arg: 'data', type: typeName, root: true},
-      http: [{verb: 'post', path: '/replaceOrCreate'}],
+      returns: { arg: 'data', type: typeName, root: true },
+      http: [{ verb: 'post', path: '/replaceOrCreate' }],
     };
 
     if (options.replaceOnPUT) {
-      replaceOrCreateOptions.http.push({verb: 'put', path: '/'});
+      replaceOrCreateOptions.http.push({ verb: 'put', path: '/' });
     }
 
     setRemoting(PersistedModel, 'replaceOrCreate', replaceOrCreateOptions);
@@ -710,32 +710,38 @@ module.exports = function(registry) {
         'the data source based on the where criteria.',
       accessType: 'WRITE',
       accepts: [
-        {arg: 'where', type: 'object', http: {source: 'query'},
-          description: 'Criteria to match model instances'},
-        {arg: 'data', type: 'object', model: typeName, http: {source: 'body'},
-          description: 'An object of model property name/value pairs'},
-        {arg: 'options', type: 'object', http: 'optionsFromRequest'},
+        {
+          arg: 'where', type: 'object', http: { source: 'query' },
+          description: 'Criteria to match model instances'
+        },
+        {
+          arg: 'data', type: 'object', model: typeName, http: { source: 'body' },
+          description: 'An object of model property name/value pairs'
+        },
+        { arg: 'options', type: 'object', http: 'optionsFromRequest' },
       ],
-      returns: {arg: 'data', type: typeName, root: true},
-      http: {verb: 'post', path: '/upsertWithWhere'},
+      returns: { arg: 'data', type: typeName, root: true },
+      http: { verb: 'post', path: '/upsertWithWhere' },
     });
 
     setRemoting(PersistedModel, 'exists', {
       description: 'Check whether a model instance exists in the data source.',
       accessType: 'READ',
       accepts: [
-        {arg: 'id', type: 'any', description: 'Model id', required: true,
-          http: {source: 'path'}},
-        {arg: 'options', type: 'object', http: 'optionsFromRequest'},
+        {
+          arg: 'id', type: 'any', description: 'Model id', required: true,
+          http: { source: 'path' }
+        },
+        { arg: 'options', type: 'object', http: 'optionsFromRequest' },
       ],
-      returns: {arg: 'exists', type: 'boolean'},
+      returns: { arg: 'exists', type: 'boolean' },
       http: [
-        {verb: 'get', path: '/:id/exists'},
-        {verb: 'head', path: '/:id'},
+        { verb: 'get', path: '/:id/exists' },
+        { verb: 'head', path: '/:id' },
       ],
       rest: {
         // After hook to map exists to 200/404 for HEAD
-        after: function(ctx, cb) {
+        after: function (ctx, cb) {
           if (ctx.req.method === 'GET') {
             // For GET, return {exists: true|false} as is
             return cb();
@@ -759,35 +765,43 @@ module.exports = function(registry) {
       description: 'Find a model instance by {{id}} from the data source.',
       accessType: 'READ',
       accepts: [
-        {arg: 'id', type: 'any', description: 'Model id', required: true,
-          http: {source: 'path'}},
-        {arg: 'filter', type: 'object',
+        {
+          arg: 'id', type: 'any', description: 'Model id', required: true,
+          http: { source: 'path' }
+        },
+        {
+          arg: 'filter', type: 'object',
           description:
-          'Filter defining fields and include - must be a JSON-encoded string (' +
-          '{"something":"value"})'},
-        {arg: 'options', type: 'object', http: 'optionsFromRequest'},
+            'Filter defining fields and include - must be a JSON-encoded string (' +
+            '{"something":"value"})'
+        },
+        { arg: 'options', type: 'object', http: 'optionsFromRequest' },
       ],
-      returns: {arg: 'data', type: typeName, root: true},
-      http: {verb: 'get', path: '/:id'},
-      rest: {after: convertNullToNotFoundError},
+      returns: { arg: 'data', type: typeName, root: true },
+      http: { verb: 'get', path: '/:id' },
+      rest: { after: convertNullToNotFoundError },
     });
 
     const replaceByIdOptions = {
       description: 'Replace attributes for a model instance and persist it into the data source.',
       accessType: 'WRITE',
       accepts: [
-        {arg: 'id', type: 'any', description: 'Model id', required: true,
-          http: {source: 'path'}},
-        {arg: 'data', type: 'object', model: typeName, http: {source: 'body'}, description:
-          'Model instance data'},
-        {arg: 'options', type: 'object', http: 'optionsFromRequest'},
+        {
+          arg: 'id', type: 'any', description: 'Model id', required: true,
+          http: { source: 'path' }
+        },
+        {
+          arg: 'data', type: 'object', model: typeName, http: { source: 'body' }, description:
+            'Model instance data'
+        },
+        { arg: 'options', type: 'object', http: 'optionsFromRequest' },
       ],
-      returns: {arg: 'data', type: typeName, root: true},
-      http: [{verb: 'post', path: '/:id/replace'}],
+      returns: { arg: 'data', type: typeName, root: true },
+      http: [{ verb: 'post', path: '/:id/replace' }],
     };
 
     if (options.replaceOnPUT) {
-      replaceByIdOptions.http.push({verb: 'put', path: '/:id'});
+      replaceByIdOptions.http.push({ verb: 'put', path: '/:id' });
     }
 
     setRemoting(PersistedModel, 'replaceById', replaceByIdOptions);
@@ -796,39 +810,43 @@ module.exports = function(registry) {
       description: 'Find all instances of the model matched by filter from the data source.',
       accessType: 'READ',
       accepts: [
-        {arg: 'filter', type: 'object', description:
-        'Filter defining fields, where, include, order, offset, and limit - must be a ' +
-        'JSON-encoded string (`{"where":{"something":"value"}}`).  ' +
-        'See https://loopback.io/doc/en/lb3/Querying-data.html#using-stringified-json-in-rest-queries ' +
-        'for more details.'},
-        {arg: 'options', type: 'object', http: 'optionsFromRequest'},
+        {
+          arg: 'filter', type: 'object', description:
+            'Filter defining fields, where, include, order, offset, and limit - must be a ' +
+            'JSON-encoded string (`{"where":{"something":"value"}}`).  ' +
+            'See https://loopback.io/doc/en/lb3/Querying-data.html#using-stringified-json-in-rest-queries ' +
+            'for more details.'
+        },
+        { arg: 'options', type: 'object', http: 'optionsFromRequest' },
       ],
-      returns: {arg: 'data', type: [typeName], root: true},
-      http: {verb: 'get', path: '/'},
+      returns: { arg: 'data', type: [typeName], root: true },
+      http: { verb: 'get', path: '/' },
     });
 
     setRemoting(PersistedModel, 'findOne', {
       description: 'Find first instance of the model matched by filter from the data source.',
       accessType: 'READ',
       accepts: [
-        {arg: 'filter', type: 'object', description:
-        'Filter defining fields, where, include, order, offset, and limit - must be a ' +
-        'JSON-encoded string (`{"where":{"something":"value"}}`).  ' +
-        'See https://loopback.io/doc/en/lb3/Querying-data.html#using-stringified-json-in-rest-queries ' +
-        'for more details.'},
-        {arg: 'options', type: 'object', http: 'optionsFromRequest'},
+        {
+          arg: 'filter', type: 'object', description:
+            'Filter defining fields, where, include, order, offset, and limit - must be a ' +
+            'JSON-encoded string (`{"where":{"something":"value"}}`).  ' +
+            'See https://loopback.io/doc/en/lb3/Querying-data.html#using-stringified-json-in-rest-queries ' +
+            'for more details.'
+        },
+        { arg: 'options', type: 'object', http: 'optionsFromRequest' },
       ],
-      returns: {arg: 'data', type: typeName, root: true},
-      http: {verb: 'get', path: '/findOne'},
-      rest: {after: convertNullToNotFoundError},
+      returns: { arg: 'data', type: typeName, root: true },
+      http: { verb: 'get', path: '/findOne' },
+      rest: { after: convertNullToNotFoundError },
     });
 
     setRemoting(PersistedModel, 'destroyAll', {
       description: 'Delete all matching records.',
       accessType: 'WRITE',
       accepts: [
-        {arg: 'where', type: 'object', description: 'filter.where object'},
-        {arg: 'options', type: 'object', http: 'optionsFromRequest'},
+        { arg: 'where', type: 'object', description: 'filter.where object' },
+        { arg: 'options', type: 'object', http: 'optionsFromRequest' },
       ],
       returns: {
         arg: 'count',
@@ -836,7 +854,7 @@ module.exports = function(registry) {
         description: 'The number of instances deleted',
         root: true,
       },
-      http: {verb: 'del', path: '/'},
+      http: { verb: 'del', path: '/' },
       shared: false,
     });
 
@@ -845,11 +863,15 @@ module.exports = function(registry) {
       description: 'Update instances of the model matched by {{where}} from the data source.',
       accessType: 'WRITE',
       accepts: [
-        {arg: 'where', type: 'object', http: {source: 'query'},
-          description: 'Criteria to match model instances'},
-        {arg: 'data', type: 'object', model: typeName, http: {source: 'body'},
-          description: 'An object of model property name/value pairs'},
-        {arg: 'options', type: 'object', http: 'optionsFromRequest'},
+        {
+          arg: 'where', type: 'object', http: { source: 'query' },
+          description: 'Criteria to match model instances'
+        },
+        {
+          arg: 'data', type: 'object', model: typeName, http: { source: 'body' },
+          description: 'An object of model property name/value pairs'
+        },
+        { arg: 'options', type: 'object', http: 'optionsFromRequest' },
       ],
       returns: {
         arg: 'info',
@@ -862,7 +884,7 @@ module.exports = function(registry) {
         },
         root: true,
       },
-      http: {verb: 'post', path: '/update'},
+      http: { verb: 'post', path: '/update' },
     });
 
     setRemoting(PersistedModel, 'deleteById', {
@@ -870,23 +892,25 @@ module.exports = function(registry) {
       description: 'Delete a model instance by {{id}} from the data source.',
       accessType: 'WRITE',
       accepts: [
-        {arg: 'id', type: 'any', description: 'Model id', required: true,
-          http: {source: 'path'}},
-        {arg: 'options', type: 'object', http: 'optionsFromRequest'},
+        {
+          arg: 'id', type: 'any', description: 'Model id', required: true,
+          http: { source: 'path' }
+        },
+        { arg: 'options', type: 'object', http: 'optionsFromRequest' },
       ],
-      http: {verb: 'del', path: '/:id'},
-      returns: {arg: 'count', type: 'object', root: true},
+      http: { verb: 'del', path: '/:id' },
+      returns: { arg: 'count', type: 'object', root: true },
     });
 
     setRemoting(PersistedModel, 'count', {
       description: 'Count instances of the model matched by where from the data source.',
       accessType: 'READ',
       accepts: [
-        {arg: 'where', type: 'object', description: 'Criteria to match model instances'},
-        {arg: 'options', type: 'object', http: 'optionsFromRequest'},
+        { arg: 'where', type: 'object', description: 'Criteria to match model instances' },
+        { arg: 'options', type: 'object', http: 'optionsFromRequest' },
       ],
-      returns: {arg: 'count', type: 'number'},
-      http: {verb: 'get', path: '/count'},
+      returns: { arg: 'count', type: 'number' },
+      http: { verb: 'get', path: '/count' },
     });
 
     const updateAttributesOptions = {
@@ -897,19 +921,19 @@ module.exports = function(registry) {
       accepts: [
         {
           arg: 'data', type: 'object', model: typeName,
-          http: {source: 'body'},
+          http: { source: 'body' },
           description: 'An object of model property name/value pairs',
         },
-        {arg: 'options', type: 'object', http: 'optionsFromRequest'},
+        { arg: 'options', type: 'object', http: 'optionsFromRequest' },
       ],
-      returns: {arg: 'data', type: typeName, root: true},
-      http: [{verb: 'patch', path: '/'}],
+      returns: { arg: 'data', type: typeName, root: true },
+      http: [{ verb: 'patch', path: '/' }],
     };
 
     setRemoting(PersistedModel.prototype, 'patchAttributes', updateAttributesOptions);
 
     if (!options.replaceOnPUT) {
-      updateAttributesOptions.http.unshift({verb: 'put', path: '/'});
+      updateAttributesOptions.http.unshift({ verb: 'put', path: '/' });
     }
 
     if (options.trackChanges || options.enableRemoteReplication) {
@@ -917,12 +941,14 @@ module.exports = function(registry) {
         description: 'Get a set of deltas and conflicts since the given checkpoint.',
         accessType: 'READ',
         accepts: [
-          {arg: 'since', type: 'number', description: 'Find deltas since this checkpoint'},
-          {arg: 'remoteChanges', type: 'array', description: 'an array of change objects',
-            http: {source: 'body'}},
+          { arg: 'since', type: 'number', description: 'Find deltas since this checkpoint' },
+          {
+            arg: 'remoteChanges', type: 'array', description: 'an array of change objects',
+            http: { source: 'body' }
+          },
         ],
-        returns: {arg: 'result', type: 'object', root: true},
-        http: {verb: 'post', path: '/diff'},
+        returns: { arg: 'result', type: 'object', root: true },
+        http: { verb: 'post', path: '/diff' },
       });
 
       setRemoting(PersistedModel, 'changes', {
@@ -930,13 +956,17 @@ module.exports = function(registry) {
           'Provide a filter object to reduce the number of results returned.',
         accessType: 'READ',
         accepts: [
-          {arg: 'since', type: 'number', description:
-            'Only return changes since this checkpoint'},
-          {arg: 'filter', type: 'object', description:
-            'Only include changes that match this filter'},
+          {
+            arg: 'since', type: 'number', description:
+              'Only return changes since this checkpoint'
+          },
+          {
+            arg: 'filter', type: 'object', description:
+              'Only include changes that match this filter'
+          },
         ],
-        returns: {arg: 'changes', type: 'array', root: true},
-        http: {verb: 'get', path: '/changes'},
+        returns: { arg: 'changes', type: 'array', root: true },
+        http: { verb: 'get', path: '/changes' },
       });
 
       setRemoting(PersistedModel, 'checkpoint', {
@@ -946,15 +976,15 @@ module.exports = function(registry) {
         // We need to allow this method for users that don't have full
         // WRITE permissions.
         accessType: 'REPLICATE',
-        returns: {arg: 'checkpoint', type: 'object', root: true},
-        http: {verb: 'post', path: '/checkpoint'},
+        returns: { arg: 'checkpoint', type: 'object', root: true },
+        http: { verb: 'post', path: '/checkpoint' },
       });
 
       setRemoting(PersistedModel, 'currentCheckpoint', {
         description: 'Get the current checkpoint.',
         accessType: 'READ',
-        returns: {arg: 'checkpoint', type: 'object', root: true},
-        http: {verb: 'get', path: '/checkpoint'},
+        returns: { arg: 'checkpoint', type: 'object', root: true },
+        http: { verb: 'get', path: '/checkpoint' },
       });
 
       setRemoting(PersistedModel, 'createUpdates', {
@@ -963,27 +993,27 @@ module.exports = function(registry) {
         // It is called by the replication algorithm to compile a list
         // of changes to apply on the target.
         accessType: 'READ',
-        accepts: {arg: 'deltas', type: 'array', http: {source: 'body'}},
-        returns: {arg: 'updates', type: 'array', root: true},
-        http: {verb: 'post', path: '/create-updates'},
+        accepts: { arg: 'deltas', type: 'array', http: { source: 'body' } },
+        returns: { arg: 'updates', type: 'array', root: true },
+        http: { verb: 'post', path: '/create-updates' },
       });
 
       setRemoting(PersistedModel, 'bulkUpdate', {
         description: 'Run multiple updates at once. Note: this is not atomic.',
         accessType: 'WRITE',
-        accepts: {arg: 'updates', type: 'array'},
-        http: {verb: 'post', path: '/bulk-update'},
+        accepts: { arg: 'updates', type: 'array' },
+        http: { verb: 'post', path: '/bulk-update' },
       });
 
       setRemoting(PersistedModel, 'findLastChange', {
         description: 'Get the most recent change record for this instance.',
         accessType: 'READ',
         accepts: {
-          arg: 'id', type: 'any', required: true, http: {source: 'path'},
+          arg: 'id', type: 'any', required: true, http: { source: 'path' },
           description: 'Model id',
         },
-        returns: {arg: 'result', type: this.Change.modelName, root: true},
-        http: {verb: 'get', path: '/:id/changes/last'},
+        returns: { arg: 'result', type: this.Change.modelName, root: true },
+        http: { verb: 'get', path: '/:id/changes/last' },
       });
 
       setRemoting(PersistedModel, 'updateLastChange', {
@@ -993,16 +1023,16 @@ module.exports = function(registry) {
         accessType: 'WRITE',
         accepts: [
           {
-            arg: 'id', type: 'any', required: true, http: {source: 'path'},
+            arg: 'id', type: 'any', required: true, http: { source: 'path' },
             description: 'Model id',
           },
           {
-            arg: 'data', type: 'object', model: typeName, http: {source: 'body'},
+            arg: 'data', type: 'object', model: typeName, http: { source: 'body' },
             description: 'An object of Change property name/value pairs',
           },
         ],
-        returns: {arg: 'result', type: this.Change.modelName, root: true},
-        http: {verb: 'put', path: '/:id/changes/last'},
+        returns: { arg: 'result', type: this.Change.modelName, root: true },
+        http: { verb: 'put', path: '/:id/changes/last' },
       });
     }
 
@@ -1010,8 +1040,8 @@ module.exports = function(registry) {
       description: 'Create a change stream.',
       accessType: 'READ',
       http: [
-        {verb: 'post', path: '/change-stream'},
-        {verb: 'get', path: '/change-stream'},
+        { verb: 'post', path: '/change-stream' },
+        { verb: 'get', path: '/change-stream' },
       ],
       accepts: {
         arg: 'options',
@@ -1037,7 +1067,7 @@ module.exports = function(registry) {
    * @param {Object} result Object with `deltas` and `conflicts` properties; see [Change.diff()](#change-diff) for details.
    */
 
-  PersistedModel.diff = function(since, remoteChanges, callback) {
+  PersistedModel.diff = function (since, remoteChanges, callback) {
     const Change = this.getChangeModel();
     Change.diff(this.modelName, since, remoteChanges, callback);
   };
@@ -1052,7 +1082,7 @@ module.exports = function(registry) {
    * @param {Array} changes An array of [Change](#change) objects.
    */
 
-  PersistedModel.changes = function(since, filter, callback) {
+  PersistedModel.changes = function (since, filter, callback) {
     if (typeof since === 'function') {
       filter = {};
       callback = since;
@@ -1075,19 +1105,19 @@ module.exports = function(registry) {
     filter.fields[idName] = true;
 
     // TODO(ritch) this whole thing could be optimized a bit more
-    Change.find(changeFilter, function(err, changes) {
+    Change.find(changeFilter, function (err, changes) {
       if (err) return callback(err);
       if (!Array.isArray(changes) || changes.length === 0) return callback(null, []);
-      const ids = changes.map(function(change) {
+      const ids = changes.map(function (change) {
         return change.getModelId();
       });
-      filter.where[idName] = {inq: ids};
-      model.find(filter, function(err, models) {
+      filter.where[idName] = { inq: ids };
+      model.find(filter, function (err, models) {
         if (err) return callback(err);
-        const modelIds = models.map(function(m) {
+        const modelIds = models.map(function (m) {
           return m[idName].toString();
         });
-        callback(null, changes.filter(function(ch) {
+        callback(null, changes.filter(function (ch) {
           if (ch.type() === Change.DELETE) return true;
           return modelIds.indexOf(ch.modelId) > -1;
         }));
@@ -1101,7 +1131,7 @@ module.exports = function(registry) {
    * @param  {Function} callback
    */
 
-  PersistedModel.checkpoint = function(cb) {
+  PersistedModel.checkpoint = function (cb) {
     const Checkpoint = this.getChangeModel().getCheckpointModel();
     Checkpoint.bumpLastSeq(cb);
   };
@@ -1114,7 +1144,7 @@ module.exports = function(registry) {
    * @param {Number} currentCheckpointId Current checkpoint ID.
    */
 
-  PersistedModel.currentCheckpoint = function(cb) {
+  PersistedModel.currentCheckpoint = function (cb) {
     const Checkpoint = this.getChangeModel().getCheckpointModel();
     Checkpoint.current(cb);
   };
@@ -1135,7 +1165,7 @@ module.exports = function(registry) {
    * @promise
    */
 
-  PersistedModel.replicate = function(since, targetModel, options, callback) {
+  PersistedModel.replicate = function (since, targetModel, options, callback) {
     const lastArg = arguments[arguments.length - 1];
 
     if (typeof lastArg === 'function' && arguments.length > 1) {
@@ -1148,7 +1178,7 @@ module.exports = function(registry) {
     }
 
     if (typeof since !== 'object') {
-      since = {source: since, target: since};
+      since = { source: since, target: since };
     }
 
     if (typeof options === 'function') {
@@ -1233,7 +1263,7 @@ module.exports = function(registry) {
       utils.downloadInChunks(
         options.filter,
         replicationChunkSize,
-        function(filter, pagingCallback) {
+        function (filter, pagingCallback) {
           sourceModel.changes(since.source, filter, pagingCallback);
         },
         debug.enabled ? log : cb,
@@ -1242,7 +1272,7 @@ module.exports = function(registry) {
       function log(err, result) {
         if (err) return cb(err);
         debug('\tusing source changes');
-        result.forEach(function(it) { debug('\t\t%j', it); });
+        result.forEach(function (it) { debug('\t\t%j', it); });
         cb(err, result);
       }
     }
@@ -1251,7 +1281,7 @@ module.exports = function(registry) {
       utils.uploadInChunks(
         sourceChanges,
         replicationChunkSize,
-        function(smallArray, chunkCallback) {
+        function (smallArray, chunkCallback) {
           return targetModel.diff(since.target, smallArray, chunkCallback);
         },
         debug.enabled ? log : cb,
@@ -1261,11 +1291,11 @@ module.exports = function(registry) {
         if (err) return cb(err);
         if (result.conflicts && result.conflicts.length) {
           debug('\tdiff conflicts');
-          result.conflicts.forEach(function(d) { debug('\t\t%j', d); });
+          result.conflicts.forEach(function (d) { debug('\t\t%j', d); });
         }
         if (result.deltas && result.deltas.length) {
           debug('\tdiff deltas');
-          result.deltas.forEach(function(it) { debug('\t\t%j', it); });
+          result.deltas.forEach(function (it) { debug('\t\t%j', it); });
         }
         cb(err, result);
       }
@@ -1280,7 +1310,7 @@ module.exports = function(registry) {
         utils.uploadInChunks(
           diff.deltas,
           replicationChunkSize,
-          function(smallArray, chunkCallback) {
+          function (smallArray, chunkCallback) {
             return sourceModel.createUpdates(smallArray, chunkCallback);
           },
           cb,
@@ -1297,20 +1327,20 @@ module.exports = function(registry) {
       utils.uploadInChunks(
         updates,
         replicationChunkSize,
-        function(smallArray, chunkCallback) {
-          return targetModel.bulkUpdate(smallArray, options, function(err) {
+        function (smallArray, chunkCallback) {
+          return targetModel.bulkUpdate(smallArray, options, function (err) {
             // bulk update is a special case where we want to process all chunks and aggregate all errors
             chunkCallback(null, err);
           });
         },
-        function(notUsed, err) {
+        function (notUsed, err) {
           const conflicts = err && err.details && err.details.conflicts;
           if (conflicts && err.statusCode == 409) {
             diff.conflicts = conflicts;
             // filter out updates that were not applied
-            updates = updates.filter(function(u) {
+            updates = updates.filter(function (u) {
               return conflicts
-                .filter(function(d) { return d.modelId === u.change.modelId; })
+                .filter(function (d) { return d.modelId === u.change.modelId; })
                 .length === 0;
             });
             return cb();
@@ -1322,10 +1352,10 @@ module.exports = function(registry) {
 
     function checkpoints() {
       const cb = arguments[arguments.length - 1];
-      sourceModel.checkpoint(function(err, source) {
+      sourceModel.checkpoint(function (err, source) {
         if (err) return cb(err);
         newSourceCp = source.seq;
-        targetModel.checkpoint(function(err, target) {
+        targetModel.checkpoint(function (err, target) {
           if (err) return cb(err);
           newTargetCp = target.seq;
           debug('\tcreated checkpoints');
@@ -1345,7 +1375,7 @@ module.exports = function(registry) {
       debug('\t\tnew checkpoints: { source: %j, target: %j }',
         newSourceCp, newTargetCp);
 
-      const conflicts = diff.conflicts.map(function(change) {
+      const conflicts = diff.conflicts.map(function (change) {
         return new Change.Conflict(
           change.modelId, sourceModel, targetModel,
         );
@@ -1356,7 +1386,7 @@ module.exports = function(registry) {
       }
 
       if (callback) {
-        const newCheckpoints = {source: newSourceCp, target: newTargetCp};
+        const newCheckpoints = { source: newSourceCp, target: newTargetCp };
         callback(null, conflicts, newCheckpoints, updates);
       }
     }
@@ -1370,21 +1400,21 @@ module.exports = function(registry) {
    * @param  {Function} callback
    */
 
-  PersistedModel.createUpdates = function(deltas, cb) {
+  PersistedModel.createUpdates = function (deltas, cb) {
     const Change = this.getChangeModel();
     const updates = [];
     const Model = this;
     const tasks = [];
 
-    deltas.forEach(function(change) {
+    deltas.forEach(function (change) {
       change = new Change(change);
       const type = change.type();
-      const update = {type: type, change: change};
+      const update = { type: type, change: change };
       switch (type) {
         case Change.CREATE:
         case Change.UPDATE:
-          tasks.push(function(cb) {
-            Model.findById(change.modelId, function(err, inst) {
+          tasks.push(function (cb) {
+            Model.findById(change.modelId, function (err, inst) {
               if (err) return cb(err);
               if (!inst) {
                 return cb &&
@@ -1406,7 +1436,7 @@ module.exports = function(registry) {
       }
     });
 
-    async.parallel(tasks, function(err) {
+    async.parallel(tasks, function (err) {
       if (err) return cb(err);
       cb(null, updates);
     });
@@ -1422,7 +1452,7 @@ module.exports = function(registry) {
    * @param  {Function} callback Callback function.
    */
 
-  PersistedModel.bulkUpdate = function(updates, options, callback) {
+  PersistedModel.bulkUpdate = function (updates, options, callback) {
     const tasks = [];
     const Model = this;
     const Change = this.getChangeModel();
@@ -1440,38 +1470,38 @@ module.exports = function(registry) {
 
     options = options || {};
 
-    buildLookupOfAffectedModelData(Model, updates, function(err, currentMap) {
+    buildLookupOfAffectedModelData(Model, updates, function (err, currentMap) {
       if (err) return callback(err);
 
-      updates.forEach(function(update) {
+      updates.forEach(function (update) {
         const id = update.change.modelId;
         const current = currentMap[id];
         switch (update.type) {
           case Change.UPDATE:
-            tasks.push(function(cb) {
+            tasks.push(function (cb) {
               applyUpdate(Model, id, current, update.data, update.change, conflicts, options, cb);
             });
             break;
 
           case Change.CREATE:
-            tasks.push(function(cb) {
+            tasks.push(function (cb) {
               applyCreate(Model, id, current, update.data, update.change, conflicts, options, cb);
             });
             break;
           case Change.DELETE:
-            tasks.push(function(cb) {
+            tasks.push(function (cb) {
               applyDelete(Model, id, current, update.change, conflicts, options, cb);
             });
             break;
         }
       });
 
-      async.parallel(tasks, function(err) {
+      async.parallel(tasks, function (err) {
         if (err) return callback(err);
         if (conflicts.length) {
           err = new Error(g.f('Conflict'));
           err.statusCode = 409;
-          err.details = {conflicts: conflicts};
+          err.details = { conflicts: conflicts };
           return callback(err);
         }
         callback();
@@ -1481,13 +1511,13 @@ module.exports = function(registry) {
 
   function buildLookupOfAffectedModelData(Model, updates, callback) {
     const idName = Model.dataSource.idName(Model.modelName);
-    const affectedIds = updates.map(function(u) { return u.change.modelId; });
+    const affectedIds = updates.map(function (u) { return u.change.modelId; });
     const whereAffected = {};
-    whereAffected[idName] = {inq: affectedIds};
-    Model.find({where: whereAffected}, function(err, affectedList) {
+    whereAffected[idName] = { inq: affectedIds };
+    Model.find({ where: whereAffected }, function (err, affectedList) {
       if (err) return callback(err);
       const dataLookup = {};
-      affectedList.forEach(function(it) {
+      affectedList.forEach(function (it) {
         dataLookup[it[idName]] = it;
       });
       callback(null, dataLookup);
@@ -1512,7 +1542,7 @@ module.exports = function(registry) {
     // but not included in `data`
     // See https://github.com/strongloop/loopback/issues/1215
 
-    Model.updateAll(current.toObject(), data, options, function(err, result) {
+    Model.updateAll(current.toObject(), data, options, function (err, result) {
       if (err) return cb(err);
 
       const count = result && result.count;
@@ -1534,8 +1564,8 @@ module.exports = function(registry) {
         case null:
           return cb(new Error(
             g.f('Cannot apply bulk updates, ' +
-            'the connector does not correctly report ' +
-            'the number of updated records.'),
+              'the connector does not correctly report ' +
+              'the number of updated records.'),
           ));
 
         default:
@@ -1543,20 +1573,20 @@ module.exports = function(registry) {
             Model.modelName, count);
           return cb(new Error(
             g.f('Bulk update failed, the connector has modified unexpected ' +
-            'number of records: %s', JSON.stringify(count)),
+              'number of records: %s', JSON.stringify(count)),
           ));
       }
     });
   }
 
   function applyCreate(Model, id, current, data, change, conflicts, options, cb) {
-    Model.create(data, options, function(createErr) {
+    Model.create(data, options, function (createErr) {
       if (!createErr) return cb();
 
       // We don't have a reliable way how to detect the situation
       // where he model was not create because of a duplicate id
       // The workaround is to query the DB to check if the model already exists
-      Model.findById(id, function(findErr, inst) {
+      Model.findById(id, function (findErr, inst) {
         if (findErr || !inst) {
           // There isn't any instance with the same id, thus there isn't
           // any conflict and we just report back the original error.
@@ -1596,7 +1626,7 @@ module.exports = function(registry) {
       return Change.rectifyModelChanges(Model.modelName, [id], cb);
     }
 
-    Model.deleteAll(current.toObject(), options, function(err, result) {
+    Model.deleteAll(current.toObject(), options, function (err, result) {
       if (err) return cb(err);
 
       const count = result && result.count;
@@ -1618,8 +1648,8 @@ module.exports = function(registry) {
         case null:
           return cb(new Error(
             g.f('Cannot apply bulk updates, ' +
-            'the connector does not correctly report ' +
-            'the number of deleted records.'),
+              'the connector does not correctly report ' +
+              'the number of deleted records.'),
           ));
 
         default:
@@ -1627,7 +1657,7 @@ module.exports = function(registry) {
             Model.modelName, count);
           return cb(new Error(
             g.f('Bulk update failed, the connector has deleted unexpected ' +
-            'number of records: %s', JSON.stringify(count)),
+              'number of records: %s', JSON.stringify(count)),
           ));
       }
     });
@@ -1639,7 +1669,7 @@ module.exports = function(registry) {
    * @return {Change}
    */
 
-  PersistedModel.getChangeModel = function() {
+  PersistedModel.getChangeModel = function () {
     const changeModel = this.Change;
     const isSetup = changeModel && changeModel.dataSource;
 
@@ -1656,7 +1686,7 @@ module.exports = function(registry) {
    * @param {String} sourceId Source identifier for the model or dataSource.
    */
 
-  PersistedModel.getSourceId = function(cb) {
+  PersistedModel.getSourceId = function (cb) {
     const dataSource = this.dataSource;
     if (!dataSource) {
       this.once('dataSourceAttached', this.getSourceId.bind(this, cb));
@@ -1673,7 +1703,7 @@ module.exports = function(registry) {
    * Enable the tracking of changes made to the model. Usually for replication.
    */
 
-  PersistedModel.enableChangeTracking = function() {
+  PersistedModel.enableChangeTracking = function () {
     const Model = this;
     const Change = this.Change || this._defineChangeModel();
     const cleanupInterval = Model.settings.changeCleanupInterval || 30000;
@@ -1705,7 +1735,7 @@ module.exports = function(registry) {
     }
 
     function cleanup() {
-      Model.rectifyAllChanges(function(err) {
+      Model.rectifyAllChanges(function (err) {
         if (err) {
           Model.handleChangeError(err, 'cleanup');
         }
@@ -1775,7 +1805,7 @@ module.exports = function(registry) {
     return undefined;
   }
 
-  PersistedModel._defineChangeModel = function() {
+  PersistedModel._defineChangeModel = function () {
     const BaseChangeModel = this.registry.getModel('Change');
     assert(BaseChangeModel,
       'Change model must be defined before enabling change replication');
@@ -1786,7 +1816,7 @@ module.exports = function(registry) {
     this.Change = BaseChangeModel.extend(
       this.modelName + '-change',
       additionalChangeModelProperties,
-      {trackModel: this},
+      { trackModel: this },
     );
 
     if (this.dataSource) {
@@ -1795,7 +1825,7 @@ module.exports = function(registry) {
 
     // Re-attach related models whenever our datasource is changed.
     const self = this;
-    this.on('dataSourceAttached', function() {
+    this.on('dataSourceAttached', function () {
       attachRelatedModels(self);
     });
 
@@ -1807,7 +1837,7 @@ module.exports = function(registry) {
     }
   };
 
-  PersistedModel.rectifyAllChanges = function(callback) {
+  PersistedModel.rectifyAllChanges = function (callback) {
     this.getChangeModel().rectifyAll(callback);
   };
 
@@ -1818,7 +1848,7 @@ module.exports = function(registry) {
    * @param {Error} err Error object; see [Error object](http://loopback.io/doc/en/lb2/Error-object.html).
    */
 
-  PersistedModel.handleChangeError = function(err, operationName) {
+  PersistedModel.handleChangeError = function (err, operationName) {
     if (!err) return;
     this.emit('error', err, operationName);
   };
@@ -1831,19 +1861,19 @@ module.exports = function(registry) {
    * @param {Error} err
    */
 
-  PersistedModel.rectifyChange = function(id, callback) {
+  PersistedModel.rectifyChange = function (id, callback) {
     const Change = this.getChangeModel();
     Change.rectifyModelChanges(this.modelName, [id], callback);
   };
 
-  PersistedModel.findLastChange = function(id, cb) {
+  PersistedModel.findLastChange = function (id, cb) {
     const Change = this.getChangeModel();
-    Change.findOne({where: {modelId: id}}, cb);
+    Change.findOne({ where: { modelId: id } }, cb);
   };
 
-  PersistedModel.updateLastChange = function(id, data, cb) {
+  PersistedModel.updateLastChange = function (id, data, cb) {
     const self = this;
-    this.findLastChange(id, function(err, inst) {
+    this.findLastChange(id, function (err, inst) {
       if (err) return cb(err);
       if (!inst) {
         err = new Error(g.f('No change record found for %s with id %s',
@@ -1866,7 +1896,7 @@ module.exports = function(registry) {
    * @param {ChangeStream} changes
    */
 
-  PersistedModel.createChangeStream = function(options, cb) {
+  PersistedModel.createChangeStream = function (options, cb) {
     if (typeof options === 'function') {
       cb = options;
       options = undefined;
@@ -1875,9 +1905,9 @@ module.exports = function(registry) {
 
     const idName = this.getIdName();
     const Model = this;
-    const changes = new PassThrough({objectMode: true});
+    const changes = new PassThrough({ objectMode: true });
 
-    changes._destroy = function() {
+    changes._destroy = function () {
       changes.end();
       changes.emit('end');
       changes.emit('close');
@@ -1890,7 +1920,7 @@ module.exports = function(registry) {
     changes.on('finish', removeHandlers);
     changes.on('end', removeHandlers);
 
-    process.nextTick(function() {
+    process.nextTick(function () {
       cb(null, changes);
     });
 
@@ -1998,10 +2028,10 @@ module.exports = function(registry) {
    * {where: {checkpoint: {gte: since}, modelName: this.modelName}}
    * ```
    */
-  PersistedModel.createChangeFilter = function(since, modelFilter) {
+  PersistedModel.createChangeFilter = function (since, modelFilter) {
     return {
       where: {
-        checkpoint: {gte: since},
+        checkpoint: { gte: since },
         modelName: this.modelName,
       },
     };
@@ -2038,7 +2068,7 @@ module.exports = function(registry) {
    * @callback {Function} callback
    * @param {Error} err Error object; see [Error object](http://loopback.io/doc/en/lb3/Error-object.html).
    */
-  PersistedModel.prototype.fillCustomChangeProperties = function(change, cb) {
+  PersistedModel.prototype.fillCustomChangeProperties = function (change, cb) {
     // no-op by default
     cb();
   };
