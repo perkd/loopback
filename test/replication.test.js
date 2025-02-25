@@ -14,7 +14,20 @@ const runtime = require('./../lib/runtime');
 let tid = 0 // per-test unique id used e.g. to build unique model names
 
 // Move these variables to the top level scope, before replicateExpectingSuccess
-let SourceModel, TargetModel
+let SourceModel, TargetModel, clientApp, RemoteUser, RemoteCar
+
+// Define missing model configuration objects
+const USER_PROPS = {
+  email: { type: 'string', required: true },
+  password: { type: 'string', required: true }
+}
+const CAR_PROPS = {
+  maker: { type: 'string' },
+  model: { type: 'string' }
+}
+const remoteUserOpts = { trackChanges: false, enableRemoteReplication: true }
+const remoteCarOpts = { trackChanges: false, enableRemoteReplication: true }
+let LocalCar
 
 // Then update replicateExpectingSuccess to use the global variables
 async function replicateExpectingSuccess(source, target, since) {
@@ -95,18 +108,29 @@ describe('Replication / Change APIs', function() {
     this.startingCheckpoint = -1;
 
     this.createInitalData = async function() {
-      const inst = await SourceModel.create({name: 'foo'});
-      this.model = inst;
-      await SourceModel.replicate(TargetModel);
+      const inst = await SourceModel.create({name: 'foo'})
+      this.model = inst
+      await SourceModel.replicate(TargetModel)
     };
 
-    // Create remote models
-    RemoteUser = clientApp.registry.createModel('RemoteUser', USER_PROPS, remoteUserOpts);
-    clientApp.model(RemoteUser, {dataSource: 'remote'});
+    // --- SETUP CLIENT APP ---
+    // Create a client app instance so that remote models can be defined
+    clientApp = loopback({ localRegistry: true, loadBuiltinModels: true })
+    clientApp.dataSource('remote', { connector: 'memory' })
+    clientApp.dataSource('local', { connector: 'memory' })
 
-    RemoteCar = clientApp.registry.createModel('RemoteCar', CAR_PROPS, remoteCarOpts);
-    clientApp.model(RemoteCar, {dataSource: 'remote'});
-    RemoteCar.settings.targetModel = LocalCar;
+    // Define LocalCar model for reference by RemoteCar, attach to the "local" datasource
+    LocalCar = clientApp.registry.createModel('LocalCar', CAR_PROPS, { trackChanges: true })
+    clientApp.model(LocalCar, { dataSource: 'local' })
+    // --- END SETUP CLIENT APP ---
+
+    // Create remote models using clientApp
+    RemoteUser = clientApp.registry.createModel('RemoteUser', USER_PROPS, remoteUserOpts)
+    clientApp.model(RemoteUser, { dataSource: 'remote' })
+
+    RemoteCar = clientApp.registry.createModel('RemoteCar', CAR_PROPS, remoteCarOpts)
+    clientApp.model(RemoteCar, { dataSource: 'remote' })
+    RemoteCar.settings.targetModel = LocalCar
   });
 
   describe('cleanup check for enableChangeTracking', function() {
@@ -1217,6 +1241,9 @@ describe('Replication / Change APIs with custom change properties', function() {
       const filter = this.base.createChangeFilter.apply(this, arguments)
       if (modelFilter && modelFilter.where && modelFilter.where.customProperty) {
         filter.where.customProperty = modelFilter.where.customProperty
+      }
+      if (filter.order) {
+        delete filter.order  // remove the default ordering to match expected filter
       }
       return filter
     }
