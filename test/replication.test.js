@@ -45,7 +45,6 @@ async function replicateExpectingSuccess(source, target, since) {
 
 describe('Replication / Change APIs', function() {
   let dataSource, useSinceFilter;  // Remove SourceModel, TargetModel from here
-  let SourceModel, TargetModel, clientApp, RemoteUser, RemoteCar // Define here
   let TargetChange; // Declare TargetChange outside the beforeEach block
 
   beforeEach(async function() {
