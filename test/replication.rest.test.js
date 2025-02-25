@@ -589,11 +589,6 @@ describe('Replication over REST', function() {
     RemoteCar.settings.plural = CAR_OPTS.plural
     RemoteCar.settings.targetModel = LocalCar // Add reference to target
 
-    // Configure shared method metadata
-    RemoteCar.sharedClass.find('replicate', true).returns = [
-      {arg: 'result', type: 'object', root: true}
-    ]
-
     clientApp.model(RemoteCar, {
       dataSource: 'remote',
       public: true
