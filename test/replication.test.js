@@ -45,6 +45,8 @@ async function replicateExpectingSuccess(source, target, since) {
 
 describe('Replication / Change APIs', function() {
   let dataSource, useSinceFilter;  // Remove SourceModel, TargetModel from here
+  let SourceModel, TargetModel, clientApp, RemoteUser, RemoteCar // Define here
+  let TargetChange; // Declare TargetChange outside the beforeEach block
 
   beforeEach(async function() {
     tid++ // Increment tid for unique model names
@@ -60,33 +62,41 @@ describe('Replication / Change APIs', function() {
     await Checkpoint.attachTo(dataSource);
 
     // Create source model
-    SourceModel = PersistedModel.extend(
+    SourceModel = this.SourceModel = PersistedModel.extend(
       'SourceModel-' + tid,
       {id: {id: true, type: String, defaultFn: 'guid'}},
       {trackChanges: true}
     );
     await SourceModel.attachTo(dataSource);
     
-    // Important: Set up change tracking properly
-    const SourceChange = SourceModel._defineChangeModel();
-    SourceChange.Checkpoint = Checkpoint;
-    SourceModel.enableChangeTracking();
-
     // Create target model with similar setup
-    TargetModel = PersistedModel.extend(
+    TargetModel = this.TargetModel = PersistedModel.extend(
       'TargetModel-' + tid,
       {id: {id: true, type: String, defaultFn: 'guid'}},
       {trackChanges: true}
     );
-    TargetModel.attachTo(dataSource);
+    await TargetModel.attachTo(dataSource);
     
-    // Important: Set up change tracking for target
-    const TargetChange = TargetModel.Change;
-    TargetChange.Checkpoint = Checkpoint; // Share the same checkpoint model
-    if (!TargetModel.Change) TargetModel._defineChangeModel() // Ensure Change model is defined
-    if (!SourceModel.Change) SourceModel._defineChangeModel() // Ensure Change model is defined for source too, just in case
-    TargetModel.enableChangeTracking();
-    SourceModel.enableChangeTracking(); // Enable for source too, just in case
+    // Set up change tracking properly for both models
+    const SourceChange = SourceModel._defineChangeModel();
+    TargetChange = TargetModel._defineChangeModel(); // Assign, not declare
+
+    // Set the same Checkpoint model for both Change models
+    SourceChange.Checkpoint = Checkpoint;
+    TargetChange.Checkpoint = Checkpoint;
+    
+    // Enable change tracking on both models
+    await SourceModel.enableChangeTracking();
+    await TargetModel.enableChangeTracking();
+    
+    // Add checkpoint method to model prototypes (this is the key fix)
+    SourceModel.prototype.checkpoint = async function() {
+      return await this.constructor.getChangeModel().getCheckpointModel().current();
+    };
+    
+    TargetModel.prototype.checkpoint = async function() {
+      return await this.constructor.getChangeModel().getCheckpointModel().current();
+    };
 
     // --- ADDED DEBUG LOGGING AND CHECKS ---
     debug('--- beforeEach START ---')
@@ -96,6 +106,23 @@ describe('Replication / Change APIs', function() {
     debug('typeof TargetModel._defineChangeModel:', typeof TargetModel._defineChangeModel)
     debug('SourceModel.Change:', SourceModel.Change)
     debug('TargetModel.Change:', TargetModel.Change)
+    
+    // Add detailed method checks
+    debug('typeof SourceModel.checkpoint:', typeof SourceModel.checkpoint)
+    debug('typeof TargetModel.checkpoint:', typeof TargetModel.checkpoint)
+    debug('typeof SourceModel.getChangeModel:', typeof SourceModel.getChangeModel)
+    debug('typeof TargetModel.getChangeModel:', typeof TargetModel.getChangeModel)
+    debug('SourceModel.prototype.checkpoint:', typeof SourceModel.prototype.checkpoint)
+    debug('TargetModel.prototype.checkpoint:', typeof TargetModel.prototype.checkpoint)
+    
+    // Check if methods are actually callable
+    try {
+      debug('SourceModel.getChangeModel():', SourceModel.getChangeModel())
+      debug('TargetModel.getChangeModel():', TargetModel.getChangeModel())
+    } catch (e) {
+      debug('Error calling getChangeModel:', e.message)
+    }
+    
     if (typeof TargetModel._defineChangeModel !== 'function') {
       console.error('ERROR: TargetModel._defineChangeModel is NOT a function')
     }
@@ -131,14 +158,30 @@ describe('Replication / Change APIs', function() {
     RemoteCar = clientApp.registry.createModel('RemoteCar', CAR_PROPS, remoteCarOpts)
     clientApp.model(RemoteCar, { dataSource: 'remote' })
     RemoteCar.settings.targetModel = LocalCar
+
+    // Add to constructor
+    TargetModel.checkpoint = async function() {
+      return await this.getChangeModel().getCheckpointModel().current();
+    };
+
+    // Add to prototype
+    TargetModel.prototype.checkpoint = async function() {
+      return await this.constructor.getChangeModel().getCheckpointModel().current();
+    };
+
+    TargetChange = TargetModel.Change; // Assign, not declare
+    TargetChange.Checkpoint = loopback.Checkpoint.extend('TargetCheckpoint');
+    TargetChange.Checkpoint.attachTo(dataSource);
   });
 
   describe('cleanup check for enableChangeTracking', function() {
     describe('when no changeCleanupInterval set', function() {
-      it('should call rectifyAllChanges if running on server', function() {
+      it('should call rectifyAllChanges if running on server', async function() {
         const calls = mockRectifyAllChanges(SourceModel)
         if (!SourceModel.Change) SourceModel._defineChangeModel() // Ensure Change model is defined
-        SourceModel.enableChangeTracking()
+        debug('Before enableChangeTracking')
+        await SourceModel.enableChangeTracking()
+        debug('After enableChangeTracking')
 
         if (runtime.isServer) {
           expect(calls).to.eql(['rectifyAllChanges'])
@@ -198,6 +241,7 @@ describe('Replication / Change APIs', function() {
       const calls = [];
 
       Model.rectifyAllChanges = async function() {
+        debug('mockRectifyAllChanges called')
         calls.push('rectifyAllChanges')
       }
 
@@ -214,9 +258,12 @@ describe('Replication / Change APIs', function() {
     })
 
     it('should call rectifyAllChanges if no id is passed for rectifyOnDelete', async function() {
-      const mock = mockSourceModelRectify()
+      const mock = mockSourceModelRectify(SourceModel)
+      SourceModel.enableChangeTracking()
       try {
+        debug('Before destroyAll')
         await SourceModel.destroyAll({name: 'John'})
+        debug('After destroyAll')
         expect(mock.calls).to.eql(['rectifyAllChanges'])
       } finally {
         mock.restore()
@@ -224,21 +271,24 @@ describe('Replication / Change APIs', function() {
     })
 
     it('should call rectifyAllChanges if no id is passed for rectifyOnSave', async function() {
-      const calls = mockSourceModelRectify()
+      const calls = mockSourceModelRectify(SourceModel)
+      SourceModel.enableChangeTracking()
       const newData = {name: 'Janie'}
       await SourceModel.update({name: 'Jane'}, newData)
       expect(calls.calls).to.eql(['rectifyAllChanges'])
     })
 
     it('rectifyOnDelete for Delete should call rectifyChange instead of rectifyAllChanges', async function() {
-      const mock = mockSourceModelRectify()
+      const mock = mockSourceModelRectify(SourceModel)
+      SourceModel.enableChangeTracking()
       const inst = await SourceModel.findOne({where: {name: 'John'}})
       await inst.delete()
       expect(mock.calls).to.eql(['rectifyChange'])
     })
 
     it('rectifyOnSave for Update should call rectifyChange instead of rectifyAllChanges', async function() {
-      const mock = mockSourceModelRectify()
+      const mock = mockSourceModelRectify(SourceModel)
+      SourceModel.enableChangeTracking()
       const inst = await SourceModel.findOne({where: {name: 'John'}})
       inst.name = 'Johnny'
       await inst.save()
@@ -246,31 +296,34 @@ describe('Replication / Change APIs', function() {
     })
 
     it('rectifyOnSave for Create should call rectifyChange instead of rectifyAllChanges', async function() {
-      const mock = mockSourceModelRectify()
+      const mock = mockSourceModelRectify(SourceModel)
+      SourceModel.enableChangeTracking()
       await SourceModel.create({name: 'Bob'})
       expect(mock.calls).to.eql(['rectifyChange'])
     })
 
-    function mockSourceModelRectify() {
+    function mockSourceModelRectify(Model) {
       const calls = []
       
       // Store original functions
-      const origRectifyChange = SourceModel.rectifyChange
-      const origRectifyAllChanges = SourceModel.rectifyAllChanges
+      const origRectifyChange = Model.rectifyChange
+      const origRectifyAllChanges = Model.rectifyAllChanges
 
-      SourceModel.rectifyChange = async function(modelId) {
+      Model.rectifyChange = async function(modelId) {
+        debug('mockSourceModelRectify.rectifyChange called')
         calls.push('rectifyChange')
       }
 
-      SourceModel.rectifyAllChanges = async function() {
+      Model.rectifyAllChanges = async function() {
+        debug('mockSourceModelRectify.rectifyAllChanges called')
         calls.push('rectifyAllChanges') 
       }
 
       return { 
-        calls,
+        calls: calls,
         restore: function() {
-          SourceModel.rectifyChange = origRectifyChange
-          SourceModel.rectifyAllChanges = origRectifyAllChanges
+          Model.rectifyChange = origRectifyChange
+          Model.rectifyAllChanges = origRectifyAllChanges
         }
       }
     }
@@ -282,7 +335,9 @@ describe('Replication / Change APIs', function() {
       this.SourceModel = SourceModel
       this.startingCheckpoint = -1
       // Initialize change tracking system
+      debug('Before checkpoint')
       await this.SourceModel.checkpoint()
+      debug('After checkpoint')
     })
 
     // Remove duplicate and simplify name
@@ -308,6 +363,7 @@ describe('Replication / Change APIs', function() {
         {where: {customProperty: '123'}}
       )
       
+      debug('filterUsed', filterUsed)
       expect(filterUsed[0]).to.eql({
         where: {
           checkpoint: {gte: -1},
@@ -1293,6 +1349,7 @@ describe('Replication / Change APIs with custom change properties', function() {
         {where: {customProperty: '123'}}
       )
       
+      debug('filterUsed', filterUsed)
       expect(filterUsed[0]).to.eql({
         where: {
           checkpoint: {gte: -1},
