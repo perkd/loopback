@@ -57,7 +57,7 @@
     "serve-favicon": "^2.5.0",
     "stable": "^0.1.8",
     "strong-globalize": "6.0.5",
-    "strong-remoting": "^3.17.0",
+    "strong-remoting": "github:perkd/strong-remoting#semver:^3.20.0",
     "uid2": "1.0.0",
     "underscore.string": "^3.3.6"
   },
