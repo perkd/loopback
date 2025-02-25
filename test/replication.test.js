@@ -104,14 +104,14 @@ describe('Replication / Change APIs', function() {
   describe('cleanup check for enableChangeTracking', function() {
     describe('when no changeCleanupInterval set', function() {
       it('should call rectifyAllChanges if running on server', function() {
-        const calls = mockRectifyAllChanges(SourceModel);
+        const calls = mockRectifyAllChanges(SourceModel)
         if (!SourceModel.Change) SourceModel._defineChangeModel() // Ensure Change model is defined
-        SourceModel.enableChangeTracking();
+        SourceModel.enableChangeTracking()
 
         if (runtime.isServer) {
           expect(calls).to.eql(['rectifyAllChanges'])
         } else {
-          expect(calls).to.eql([]);
+          expect(calls).to.eql([])
         }
       })
     })
@@ -342,11 +342,22 @@ describe('Replication / Change APIs', function() {
         // Set up the race condition by triggering a 3rd-party update
         await setupRaceConditionInReplication(async function () {
           const { connector } = TargetModel.dataSource
+
           if (connector.updateAttributes.length <= 4) {
-            await connector.updateAttributes(TargetModel.modelName, '1', { name: '3rd-party' })
+            await new Promise((resolve, reject) => {
+              connector.updateAttributes(TargetModel.modelName, '1', { name: '3rd-party' }, (err) => {
+                if (err) reject(err)
+                else resolve()
+              })
+            })
           }
           else {
-            await connector.updateAttributes(TargetModel.modelName, '1', { name: '3rd-party' }, {}) // options
+            await new Promise((resolve, reject) => {
+              connector.updateAttributes(TargetModel.modelName, '1', { name: '3rd-party' }, {}, (err) => {
+                if (err) reject(err)
+                else resolve()
+              })
+            })
           }
         })
 
@@ -392,11 +403,20 @@ describe('Replication / Change APIs', function() {
           const { connector } = TargetModel.dataSource
 
           if (connector.updateAttributes.length <= 4) {
-            await connector.updateAttributes(TargetModel.modelName, '1', { name: '3rd-party' })
+            await new Promise((resolve, reject) => {
+              connector.updateAttributes(TargetModel.modelName, '1', { name: '3rd-party' }, (err) => {
+                if (err) reject(err)
+                else resolve()
+              })
+            })
           }
           else {
-            await connector.updateAttributes(TargetModel.modelName, '1', { name: '3rd-party' }, {}) // options
-          }
+            await new Promise((resolve, reject) => {
+              connector.updateAttributes(TargetModel.modelName, '1', { name: '3rd-party' }, {}, (err) => {
+                if (err) reject(err)
+                else resolve()
+              })
+            })          }
         })
         const result = await SourceModel.replicate(TargetModel)
         const conflicts = result.conflicts || []
