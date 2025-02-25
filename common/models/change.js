@@ -627,8 +627,14 @@ module.exports = function(Change) {
     getTargetChanges()
       .then(indexSourceChanges)
       .then(compareChanges)
-      .then(done)
-      .catch(done)
+      .then(result => {
+        debug('\tChange.diff: done - deltas count:', result.deltas.length, 'conflicts count:', result.conflicts.length)
+        callback(null, result)
+      })
+      .catch(err => {
+        debug('\tChange.diff: error -', err)
+        callback(err)
+      })
 
     async function getTargetChanges() {
       debug('\tChange.diff: getTargetChanges - TargetChange:', TargetChange.modelName, 'since:', since) // ADDED LOG
@@ -692,14 +698,6 @@ module.exports = function(Change) {
       debug('\tChange.diff: compareChanges - deltas count:', deltas.length, 'conflicts count:', conflicts.length) // ADDED LOG
 
       return {deltas, conflicts} // Implicitly return a resolved Promise
-    }
-
-    function done(result, err) { // Note: result is first arg in .then, err in .catch
-      debug('\tChange.diff: done - err:', err, 'deltas count:', result && result.deltas.length, 'conflicts count:', result && result.conflicts.length) // ADDED LOG
-      if (err) {
-        return callback(err) // Pass error to final callback
-      }
-      callback(null, result)
     }
   }
 };

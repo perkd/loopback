@@ -4,6 +4,7 @@ const extend = require('util')._extend;
 const loopback = require('../');
 const expect = require('./helpers/expect');
 const supertest = require('supertest');
+const debugTest = require('debug')('test:replication');
 
 describe('Replication over REST', function() {
 
@@ -74,26 +75,45 @@ describe('Replication over REST', function() {
       }
 
       function createCar() {
-        return request.post('/Cars').send({model: 'a-model'});
+        return request
+          .post('/Cars')
+          .send({
+            id: 'NewCar-' + Math.random(),
+            maker: 'Acme',
+            model: 'CreateCar',
+          });
       }
     });
   });
 
   describe('sync with model-level permissions', function() {
     describe('as anonymous user', function() {
+      beforeEach(function() {
+        // Explicitly clear any auth token before each anonymous test
+        setAccessToken(null)
+      })
+      
       it('rejects pull from server', async function() {
         try {
-          await LocalCar.replicate(ServerCar, -1)
+          // Pass -1 as the since parameter to match the original code
+          await RemoteCar.replicate(LocalCar, -1)
           throw new Error('should have failed')
-        } catch (err) {
+        }
+        catch (err) {
           expect(err).to.have.property('statusCode', 401)
         }
-      });
+      })
 
-      it('rejects push to the server', function(done) {
-        createCar().expect(401, done);
-      });
-    });
+      it('rejects push to the server', async function() {
+        try {
+          await LocalCar.replicate(RemoteCar, -1)
+          throw new Error('should have failed')
+        }
+        catch (err) {
+          expect(err).to.have.property('statusCode', 401)
+        }
+      })
+    })
 
     describe('as user with READ-only permissions', function() {
       beforeEach(function() {
@@ -119,12 +139,12 @@ describe('Replication over REST', function() {
 
     describe('as user with REPLICATE-only permissions', function() {
       beforeEach(function() {
-        setAccessToken(aliceToken);
-      });
+        setAccessToken(aliceToken)
+      })
 
       it('allows pull from server', async function() {
-        const result = await RemoteCar.replicate(LocalCar, -1)
-        const { conflicts } = result
+        const result = await RemoteCar.replicate(LocalCar)
+        const { conflicts } = result ?? {}
 
         if (conflicts.length) return conflictError(conflicts)
 
@@ -150,9 +170,9 @@ describe('Replication over REST', function() {
         
         const conflict = conflicts[0]
         
-        // Ensure models are properly bound before swapping
-        conflict.sourceModel = RemoteCar
-        conflict.targetModel = LocalCar
+        // No need to manually set these properties if we've updated the Conflict class
+        // conflict.sourceModel = RemoteCar
+        // conflict.targetModel = LocalCar
         
         // Now swap and resolve
         await conflict
@@ -206,8 +226,8 @@ describe('Replication over REST', function() {
     let LocalConflict, RemoteConflict;
 
     before(function setupConflictModels() {
-      LocalConflict = LocalCar.Change.Conflict;
-      RemoteConflict = RemoteCar.Change.Conflict;
+      LocalConflict = LocalCar.getChangeModel().Conflict
+      RemoteConflict = RemoteCar.getChangeModel().Conflict
     })
 
     beforeEach(async function() {
@@ -279,9 +299,9 @@ describe('Replication over REST', function() {
         
         const conflict = conflicts[0]
         
-        // Ensure models are properly bound before swapping
-        conflict.sourceModel = RemoteCar
-        conflict.targetModel = LocalCar
+        // No need to manually set these properties if we've updated the Conflict class
+        // conflict.sourceModel = RemoteCar
+        // conflict.targetModel = LocalCar
         
         // Now swap and resolve
         await conflict
@@ -586,9 +606,26 @@ describe('Replication over REST', function() {
     RemoteCar.enableChangeTracking()
     // =============================================================
 
-    // Log the types of replicate methods - moved to the end
+    // Fix 2: Use getChangeModel() instead of direct Change property
     console.log('LocalCar.replicate type:', typeof LocalCar.replicate)
     console.log('RemoteCar.replicate type:', typeof RemoteCar.replicate)
+
+    // Make sure both models have their Change models properly initialized
+    LocalCar._defineChangeModel()
+    LocalCar.Change.attachTo(clientApp.dataSources.db)
+    LocalCar.Change.Checkpoint = ClientCheckpoint
+    LocalCar.enableChangeTracking()
+    
+    RemoteCar._defineChangeModel()
+    RemoteCar.Change.attachTo(clientApp.dataSources.db)
+    RemoteCar.Change.Checkpoint = ClientCheckpoint
+    RemoteCar.enableChangeTracking()
+    
+    // Add debug logging to verify models are properly set up
+    console.log('LocalCar.modelName:', LocalCar.modelName)
+    console.log('RemoteCar.modelName:', RemoteCar.modelName)
+    console.log('LocalCar.Change.modelName:', LocalCar.Change.modelName)
+    console.log('RemoteCar.Change.modelName:', RemoteCar.Change.modelName)
   }
 
   function createRemoteModelOpts(modelOpts) {
@@ -668,10 +705,19 @@ describe('Replication over REST', function() {
   }
 
   function setAccessToken(token) {
-    clientApp.dataSources.remote.connector.remotes.auth = {
-      bearer: new Buffer(token).toString('base64'),
-      sendImmediately: true,
-    };
+    debugTest('Setting access token:', token ? 'token provided' : 'null/undefined')
+    
+    if (token) {
+      clientApp.dataSources.remote.connector.remotes.auth = {
+        bearer: Buffer.from(token).toString('base64'),
+        sendImmediately: true,
+      }
+    } else {
+      // Explicitly clear the auth by setting it to null
+      clientApp.dataSources.remote.connector.remotes.auth = null
+    }
+    
+    debugTest('Auth state after setting:', clientApp.dataSources.remote.connector.remotes.auth)
   }
 
   function expectHttpError(code) {
