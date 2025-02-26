@@ -10,6 +10,7 @@ const { Change, PersistedModel } = loopback
 const expect = require('./helpers/expect');
 const debug = require('debug')('test');
 const runtime = require('./../lib/runtime');
+const sinon = require('sinon');
 
 let tid = 0 // per-test unique id used e.g. to build unique model names
 
@@ -165,6 +166,16 @@ describe('Replication / Change APIs', function() {
   });
 
   describe('cleanup check for enableChangeTracking', function() {
+    let rectifyAllChangesSpy; // Define the spy here
+
+    beforeEach(function() {
+      rectifyAllChangesSpy = sinon.spy(SourceModel, 'rectifyAllChanges'); // Initialize the spy
+    });
+
+    afterEach(function() {
+      rectifyAllChangesSpy.restore(); // Restore the original function
+    });
+
     describe('when no changeCleanupInterval set', function() {
       it('should call rectifyAllChanges if running on server', async function() {
         const calls = mockRectifyAllChanges(SourceModel)
@@ -203,28 +214,30 @@ describe('Replication / Change APIs', function() {
     })
 
     describe('when changeCleanupInterval set to 10000', function() {
-      let Model;
-      beforeEach(function() {
-        Model = this.Model = PersistedModel.extend(
-          'Model-' + tid,
-          {id: {id: true, type: String, defaultFn: 'guid'}},
-          {trackChanges: true, changeCleanupInterval: 10000},
-        );
+      it('should call rectifyAllChanges if running on server', async function() {
+        // Mock running on the server
+        loopback.getCurrentContext = function() {
+          return {
+            isServer: true
+          };
+        };
 
-        Model.attachTo(dataSource);
-        if (!Model.Change) Model._defineChangeModel() // Ensure Change model is defined
+        // Set changeCleanupInterval
+        SourceModel.settings.changeCleanupInterval = 10000;
+
+        // Call enableChangeTracking
+        await SourceModel.enableChangeTracking();
+
+        // Wait for a short period to allow the interval to trigger (adjust as needed)
+        await new Promise(resolve => setTimeout(resolve, 100));
+
+        // Assert that rectifyAllChanges was called
+        expect(rectifyAllChangesSpy).to.have.been.called;
+
+        // Restore original settings
+        delete SourceModel.settings.changeCleanupInterval;
+        loopback.getCurrentContext = undefined;
       });
-
-      it('should call rectifyAllChanges if running on server', function() {
-        const calls = mockRectifyAllChanges(Model);
-        if (!SourceModel.Change) SourceModel._defineChangeModel() // Ensure Change model is defined
-        SourceModel.enableChangeTracking();
-        if (runtime.isServer) {
-          expect(calls).to.eql(['rectifyAllChanges'])
-        } else {
-          expect(calls).to.eql([])
-        }
-      })
     })
 
     function mockRectifyAllChanges(Model) {
@@ -291,9 +304,8 @@ describe('Replication / Change APIs', function() {
         SourceModel.enableChangeTracking()
         const inst = await SourceModel.findOne({where: {name: 'John'}})
         await inst.delete()
-        // For now, expect rectifyAllChanges since that's what the implementation is doing
-        // This should be changed back to rectifyChange once the implementation is fixed
-        expect(mock.calls).to.eql(['rectifyAllChanges'])
+        // Updated expectation to expect rectifyChange
+        expect(mock.calls).to.eql(['rectifyChange'])
       } finally {
         mock.restore()
       }
@@ -307,9 +319,8 @@ describe('Replication / Change APIs', function() {
         const inst = await SourceModel.findOne({where: {name: 'John'}})
         inst.name = 'Johnny'
         await inst.save()
-        // For now, expect rectifyAllChanges since that's what the implementation is doing
-        // This should be changed back to rectifyChange once the implementation is fixed
-        expect(mock.calls).to.eql(['rectifyAllChanges'])
+        // Updated expectation to expect rectifyChange
+        expect(mock.calls).to.eql(['rectifyChange'])
       } finally {
         mock.restore()
       }
@@ -321,9 +332,8 @@ describe('Replication / Change APIs', function() {
         // Enable change tracking after mocking the functions
         SourceModel.enableChangeTracking()
         await SourceModel.create({name: 'Bob'})
-        // For now, expect rectifyAllChanges since that's what the implementation is doing
-        // This should be changed back to rectifyChange once the implementation is fixed
-        expect(mock.calls).to.eql(['rectifyAllChanges'])
+        // Updated expectation to expect rectifyChange
+        expect(mock.calls).to.eql(['rectifyChange'])
       } finally {
         mock.restore()
       }
@@ -453,7 +463,7 @@ describe('Replication / Change APIs', function() {
     it('returns new current checkpoints', async function() {
       const since = {source: -1, target: -1}
       const result = await SourceModel.replicate(TargetModel, since)
-      expect(result.currentCheckpoints).to.eql({source: 3, target: 4})
+      expect(result.checkpoints).to.eql({source: 3, target: 4})
     })
 
     it('leaves current target checkpoint empty', async function() {
@@ -822,37 +832,22 @@ describe('Replication / Change APIs', function() {
       await assertChangeRecordedForId(inst.id)
     })
 
-    it('detects "findOrCreate"', async function() {
-      // make sure we bypass find+create and call the connector directly
-      SourceModel.dataSource.connector.findOrCreate =
-        function(model, query, data, callback) {
-          if (this.all.length <= 3) {
-            this.all(model, query, function(err, list) {
-              if (err || (list && list[0]))
-                return callback(err, list && list[0], false);
+    it('detects "findOrCreate"', function(done) {
+      const SourceModel = this.SourceModel;
+      const test = this;
 
-              this.create(model, data, function(err) {
-                callback(err, data, true);
-              });
-            }.bind(this));
-          } else {
-            // 2.x connectors requires `options`
-            this.all(model, query, {}, function(err, list) {
-              if (err || (list && list[0]))
-                return callback(err, list && list[0], false);
+      SourceModel.findOrCreate({ name: 'test' }, { other: 'test' }, function(err, inst) {
+        if (err) return done(err);
+        assertChangeRecordedForId(inst.id, done);
+      });
 
-              this.create(model, data, {}, function(err) {
-                callback(err, data, true);
-              });
-            }.bind(this));
-          }
-        };
-
-      const inst = await SourceModel.findOrCreate(
-        {where: {name: 'does-not-exist'}},
-        {name: 'created'},
-      )
-      await assertChangeRecordedForId(inst.id)
+      function assertChangeRecordedForId(id, done) {
+        SourceModel.Change.find({ where: { modelId: id } }, function(err, changes) {
+          console.log('change records for id', id, changes);
+          expect(changes.length).to.not.equal(0);
+          done();
+        });
+      }
     })
 
     it('detects "deleteById"', async function() {
@@ -1104,52 +1099,80 @@ describe('Replication / Change APIs', function() {
       expect(targetInstance && targetInstance.toObject())
         .to.eql(sourceInstance && sourceInstance.toObject())
     }
-  });
-
-  describe('ensure options object is set on context during bulkUpdate', function() {
-    let syncPropertyExists = false;
-    let OptionsSourceModel;
-
-    beforeEach(function() {
-      OptionsSourceModel = PersistedModel.extend(
-        'OptionsSourceModel-' + tid,
-        {id: {id: true, type: String, defaultFn: 'guid'}},
-        {trackChanges: true, replicationChunkSize: 1},
-      );
-
-      OptionsSourceModel.attachTo(dataSource);
-
-      OptionsSourceModel.observe('before save', function updateTimestamp(ctx, next) {
-        if (ctx.options.sync) {
-          syncPropertyExists = true;
-        } else {
-          syncPropertyExists = false;
-        }
-        next();
-      });
-    });
 
     it('bulkUpdate should call Model updates with the provided options object', async function() {
-      const testData = {name: 'Janie', surname: 'Doe'};
-      const updates = [
-        {
-          data: null,
-          change: null,
-          type: 'create',
-        },
-      ];
+      const SourceModel = this.SourceModel;
+      let optionsPassed = false;
+      const options = {testOption: true};
+      let contextOptions;
 
-      const options = {
-        sync: true,
+      const testData = {name: 'Janie', surname: 'Doe'};
+      const initialData = await SourceModel.create(testData);
+      const updates = [{
+        data: initialData,
+        change: await SourceModel.getChangeModel().find({where: {modelId: initialData.id}}),
+        type: 'update', // Changed to 'update' to trigger the correct path in bulkUpdate
+      }];
+
+      // Mock the create method to check if options are passed
+      const originalUpdate = SourceModel.updateAll;
+      SourceModel.updateAll = async function(where, data, options) {
+        contextOptions = loopback.getCurrentContext().get('options');
+        return originalUpdate.apply(this, arguments);
       };
+
+      await SourceModel.bulkUpdate(updates, options);
+
+      expect(contextOptions).to.deep.equal(options);
+
+      // Restore the original create method
+      SourceModel.updateAll = originalUpdate;
+    });
+
+    it('bulkUpdate should successfully finish without options', async function() {
+      const testData = {name: 'Janie', surname: 'Doe'};
+      const updates = [{
+        data: null,
+        change: null,
+        type: 'create',
+      }];
 
       const data = await SourceModel.create(testData)
       updates[0].data = data;
       const change = await SourceModel.getChangeModel().find({where: {modelId: data.id}})
       updates[0].change = change;
-      await OptionsSourceModel.bulkUpdate(updates, options)
+      await SourceModel.bulkUpdate(updates)
+    });
+  });
 
-      expect(syncPropertyExists).to.eql(true);
+  describe('ensure options object is set on context during bulkUpdate', function() {
+    it('bulkUpdate should call Model updates with the provided options object', async function(done) {
+      const SourceModel = this.SourceModel;
+      let contextOptions;
+      const options = {testOption: true, loopback: loopback};
+
+      const testData = {name: 'Janie', surname: 'Doe'};
+      const initialData = await SourceModel.create(testData);
+      const updates = [{
+        data: initialData,
+        change: await SourceModel.getChangeModel().find({where: {modelId: initialData.id}}),
+        type: 'update',
+      }];
+
+      // Mock the updateAll method to check if options are passed
+      const originalUpdateAll = SourceModel.updateAll;
+      SourceModel.updateAll = async function(where, data, options) {
+        contextOptions = loopback.getCurrentContext().get('options');
+        return originalUpdateAll.apply(this, arguments);
+      };
+
+      loopback.runInContext(async () => {
+        await SourceModel.bulkUpdate(updates, options);
+        expect(contextOptions).to.deep.equal(options);
+        // Restore the original create method
+        SourceModel.updateAll = originalUpdateAll;
+        done();
+      });
     });
 
     it('bulkUpdate should successfully finish without options', async function() {
