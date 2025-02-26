@@ -265,6 +265,10 @@ describe('Replication / Change APIs', function() {
       try {
         // Don't call enableChangeTracking here, just mock the methods
         // and test if destroyAll calls rectifyAllChanges
+        
+        // Mark setup as complete since we're not calling enableChangeTracking
+        mock.markSetupComplete()
+        
         debug('Before destroyAll')
         // Directly call the observer that would be triggered
         await SourceModel.notifyObserversOf('after delete', {
@@ -273,7 +277,7 @@ describe('Replication / Change APIs', function() {
           // No instance or id provided, should trigger rectifyAllChanges
         })
         debug('After observer notification')
-        expect(mock.calls).to.eql(['rectifyAllChanges'])
+        expect(mock.operationCalls).to.eql(['rectifyAllChanges'])
       } finally {
         mock.restore()
       }
@@ -284,6 +288,10 @@ describe('Replication / Change APIs', function() {
       try {
         // Don't call enableChangeTracking here, just mock the methods
         // and test if update calls rectifyAllChanges
+        
+        // Mark setup as complete since we're not calling enableChangeTracking
+        mock.markSetupComplete()
+        
         // Directly call the observer that would be triggered
         await SourceModel.notifyObserversOf('after save', {
           Model: SourceModel,
@@ -291,7 +299,7 @@ describe('Replication / Change APIs', function() {
           data: { name: 'Janie' },
           // No instance or id provided, should trigger rectifyAllChanges
         })
-        expect(mock.calls).to.eql(['rectifyAllChanges'])
+        expect(mock.operationCalls).to.eql(['rectifyAllChanges'])
       } finally {
         mock.restore()
       }
@@ -302,10 +310,14 @@ describe('Replication / Change APIs', function() {
       try {
         // Enable change tracking after mocking the functions
         SourceModel.enableChangeTracking()
+        
+        // Mark setup as complete
+        mock.markSetupComplete()
+        
         const inst = await SourceModel.findOne({where: {name: 'John'}})
         await inst.delete()
-        // Updated expectation to expect rectifyChange
-        expect(mock.calls).to.eql(['rectifyChange'])
+        // Check that only rectifyChange was called during the operation
+        expect(mock.operationCalls).to.eql(['rectifyChange'])
       } finally {
         mock.restore()
       }
@@ -316,11 +328,15 @@ describe('Replication / Change APIs', function() {
       try {
         // Enable change tracking after mocking the functions
         SourceModel.enableChangeTracking()
+        
+        // Mark setup as complete
+        mock.markSetupComplete()
+        
         const inst = await SourceModel.findOne({where: {name: 'John'}})
         inst.name = 'Johnny'
         await inst.save()
-        // Updated expectation to expect rectifyChange
-        expect(mock.calls).to.eql(['rectifyChange'])
+        // Check that only rectifyChange was called during the operation
+        expect(mock.operationCalls).to.eql(['rectifyChange'])
       } finally {
         mock.restore()
       }
@@ -331,16 +347,28 @@ describe('Replication / Change APIs', function() {
       try {
         // Enable change tracking after mocking the functions
         SourceModel.enableChangeTracking()
+        
+        // Mark setup as complete so that new calls go to operationCalls
+        mock.markSetupComplete()
+        
+        // Now create the instance and test the operation calls
         await SourceModel.create({name: 'Bob'})
-        // Updated expectation to expect rectifyChange
-        expect(mock.calls).to.eql(['rectifyChange'])
+        
+        // Check that only rectifyChange was called during the operation
+        expect(mock.operationCalls).to.eql(['rectifyChange'])
+        
+        // For debugging, we can also check what was called during setup
+        debug('Setup calls:', mock.setupCalls)
       } finally {
         mock.restore()
       }
     })
 
     function mockSourceModelRectify(Model) {
-      const calls = []
+      // Track setup calls and operation calls separately
+      const setupCalls = []
+      const operationCalls = []
+      let setupComplete = false
       
       // Store original functions
       const origRectifyChange = Model.rectifyChange
@@ -349,9 +377,10 @@ describe('Replication / Change APIs', function() {
       // Replace with mock implementations
       Model.rectifyChange = async function(modelId) {
         debug('mockSourceModelRectify.rectifyChange called with id: %s', modelId)
-        // Only record the first call
-        if (calls.length === 0) {
-          calls.push('rectifyChange')
+        // Add to the appropriate call list based on whether setup is complete
+        const callList = setupComplete ? operationCalls : setupCalls
+        if (!callList.includes('rectifyChange')) {
+          callList.push('rectifyChange')
         }
         // Call original to maintain functionality
         return await origRectifyChange.call(this, modelId)
@@ -359,16 +388,23 @@ describe('Replication / Change APIs', function() {
 
       Model.rectifyAllChanges = async function() {
         debug('mockSourceModelRectify.rectifyAllChanges called')
-        // Only record the first call
-        if (calls.length === 0) {
-          calls.push('rectifyAllChanges') 
+        // Add to the appropriate call list based on whether setup is complete
+        const callList = setupComplete ? operationCalls : setupCalls
+        if (!callList.includes('rectifyAllChanges')) {
+          callList.push('rectifyAllChanges') 
         }
         // Call original to maintain functionality
         return await origRectifyAllChanges.call(this)
       }
 
       return { 
-        calls: calls,
+        // Return both call lists and a method to mark setup as complete
+        setupCalls,
+        operationCalls,
+        markSetupComplete: function() {
+          debug('Marking setup as complete for mockSourceModelRectify')
+          setupComplete = true
+        },
         restore: function() {
           Model.rectifyChange = origRectifyChange
           Model.rectifyAllChanges = origRectifyAllChanges
