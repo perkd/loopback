@@ -180,37 +180,33 @@ describe.onServer('Remote Methods', function() {
         })
     })
 
-    it('creates array of models', function() {
+    it('creates array of models', async function() {
       const arrayOfObjects = [
         {first: 'John'}, {first: 'Jane'},
       ]
-      return request(app)
+      const { body } = await request(app)
         .post('/users')
         .send(arrayOfObjects)
         .expect('Content-Type', /json/)
         .expect(200)
-        .then(res => {
-          expect(res.body.length).to.eql(2)
-          expect(res.body).to.have.nested.property('[0].first', 'John')
-          expect(res.body).to.have.nested.property('[1].first', 'Jane')
-        })
+
+      expect(body.length).to.eql(2)
+      expect(body).to.have.nested.property('[0].first', 'John')
+      expect(body).to.have.nested.property('[1].first', 'Jane')
     })
 
-    it('creates related models', function() {
-      return User.create({first: 'Bob'})
-        .then(res => {
-          const aPost = {title: 'A story', content: 'Once upon a time'}
-          return request(app)
-            .post(`/users/${res.id}/posts`)
-            .send(aPost)
-            .expect('Content-Type', /json/)
-            .expect(200)
-        })
-        .then(result => {
-          expect(result.body).to.have.property('id')
-          expect(result.body).to.have.property('title', 'A story')
-          expect(result.body).to.have.property('content', 'Once upon a time')
-        })
+    it('creates related models', async function() {
+      const res = await User.create({first: 'Bob'})
+      const aPost = {title: 'A story', content: 'Once upon a time'}
+      const result = await request(app)
+        .post(`/users/${res.id}/posts`)
+        .send(aPost)
+        .expect('Content-Type', /json/)
+        .expect(200)
+
+      expect(result.body).to.have.property('id')
+      expect(result.body).to.have.property('title', 'A story')
+      expect(result.body).to.have.property('content', 'Once upon a time')
     })
 
     it('creates array of hasMany models', function() {
@@ -233,32 +229,30 @@ describe.onServer('Remote Methods', function() {
         })
     })
 
-    it('rejects array of obj input for hasOne relation', function() {
+    it('rejects array of obj input for hasOne relation', async function() {
       const Friend = app.registry.createModel('friend', {name: String})
       app.model(Friend, {dataSource: 'db'})
       User.hasOne(Friend)
 
-      return User.create({first: 'Bob'})
-        .then(res => {
-          const twoFriends = [
-            {name: 'bob'},
-            {name: 'rob'},
-          ]
-          return request(app)
-            .post(`/users/${res.id}/friend`)
-            .send(twoFriends)
-            .expect('Content-Type', /json/)
-            .expect(400)
-        })
-        .then(result => {
-          const resError = result.body.error
-          expect(resError.message).to.match(/value(.*?)not(.*?)object(\.?)/i)
-        })
+      const res = await User.create({first: 'Bob'})
+      const twoFriends = [
+        {name: 'bob'},
+        {name: 'rob'},
+      ]
+      const result = await request(app)
+        .post(`/users/${res.id}/friend`)
+        .send(twoFriends)
+        .expect('Content-Type', /json/)
+        .expect(400)
+
+      const { error } = result.body
+      expect(error.message).to.match(/value(.*?)not(.*?)object(\.?)/i)
     })
   })
+
   // destoryAll is not exposed as a remoteMethod by default
-  describe('Model.destroyAll(callback)', function() {
-    it('Delete all Model instances from data source', function() {
+  describe('Model.destroyAll()', function() {
+    it('Delete all Model instances from data source', async function() {
       return Promise.all([
         User.create({first: 'jill'}),
         User.create({first: 'bob'}),
@@ -283,103 +277,80 @@ describe.onServer('Remote Methods', function() {
       assert.equal(updated.second, 'jones')
     })
 
-    it('Creates when no Model instance exists', function() {
-      return User.upsertWithWhere({first: 'somers'}, {first: 'Simon'})
-        .then(user => User.findById(user.id))
-        .then(created => assert.equal(created.first, 'Simon'))
-    });
-  });
+    it('Creates when no Model instance exists', async function() {
+      const user = await User.upsertWithWhere({first: 'somers'}, {first: 'Simon'})
+      const created = await User.findById(user.id)
+      assert.equal(created.first, 'Simon')
+    })
+  })
 
   describe('Example Remote Method', function() {
-    it('Call the method using HTTP / REST', function(done) {
-      request(app)
+    it('Call the method using HTTP / REST', async function() {
+      const result = await request(app)
         .get('/users/sign-in?username=foo&password=bar')
         .expect('Content-Type', /json/)
         .expect(200)
-        .end(function(err, res) {
-          if (err) return done(err);
 
-          assert.equal(res.body, 123);
+      assert.equal(result.body, 123)
+    })
 
-          done();
-        });
-    });
-
-    it('Converts null result of findById to 404 Not Found', function(done) {
-      request(app)
+    it('Converts null result of findById to 404 Not Found', async function() {
+      const result = await request(app)
         .get('/users/not-found')
         .expect(404)
-        .end(function(err, res) {
-          const errorResponse = res.body.error;
-          assert(errorResponse);
-          assert.equal(errorResponse.code, 'MODEL_NOT_FOUND');
-          done();
-        });
-    });
 
-    it('Call the findById with filter.fields using HTTP / REST', function(done) {
-      request(app)
+      const {error} = result.body
+      assert(error)
+      assert.equal(error.code, 'MODEL_NOT_FOUND')
+    })
+
+    it('Call the findById with filter.fields using HTTP / REST', async function() {
+      const { body } = await request(app)
         .post('/users')
         .send({first: 'x', last: 'y'})
         .expect('Content-Type', /json/)
         .expect(200)
-        .end(function(err, res) {
-          if (err) return done(err);
 
-          const userId = res.body.id;
-          assert(userId);
-          request(app)
-            .get('/users/' + userId + '?filter[fields]=first')
-            .expect('Content-Type', /json/)
-            .expect(200)
-            .end(function(err, res) {
-              if (err) return done(err);
+      const userId = body.id
+      assert(userId)
 
-              assert.equal(res.body.first, 'x', 'first should be x');
-              assert(res.body.last === undefined, 'last should not be present');
+      const result = await request(app)
+        .get('/users/' + userId + '?filter[fields]=first')
+        .expect('Content-Type', /json/)
+        .expect(200)
 
-              done();
-            });
-        });
-    });
+      assert.equal(result.body.first, 'x', 'first should be x')
+      assert(result.body.last === undefined, 'last should not be present')
+    })
 
-    it('Call the findById with filter.include using HTTP / REST', function(done) {
-      request(app)
+    it('Call the findById with filter.include using HTTP / REST', async function() {
+      const { body } = await request(app)
         .post('/users')
         .send({first: 'x', last: 'y'})
         .expect('Content-Type', /json/)
         .expect(200)
-        .end(function(err, res) {
-          if (err) return done(err);
 
-          const userId = res.body.id;
-          assert(userId);
-          request(app)
-            .post('/users/' + userId + '/posts')
-            .send({title: 'T1', content: 'C1'})
-            .expect('Content-Type', /json/)
-            .expect(200)
-            .end(function(err, res) {
-              if (err) return done(err);
+      const userId = body.id
+      assert(userId)
 
-              const post = res.body;
-              request(app)
-                .get('/users/' + userId + '?filter[include]=posts')
-                .expect('Content-Type', /json/)
-                .expect(200)
-                .end(function(err, res) {
-                  if (err) return done(err);
+      const postResult = await request(app)
+        .post('/users/' + userId + '/posts')
+        .send({title: 'T1', content: 'C1'})
+        .expect('Content-Type', /json/)
+        .expect(200)
 
-                  assert.equal(res.body.first, 'x', 'first should be x');
-                  assert.equal(res.body.last, 'y', 'last should be y');
-                  assert.deepEqual(post, res.body.posts[0]);
+      const post = postResult.body
 
-                  done();
-                });
-            });
-        });
-    });
-  });
+      const result = await request(app)
+        .get('/users/' + userId + '?filter[include]=posts')
+        .expect('Content-Type', /json/)
+        .expect(200)
+
+      assert.equal(result.body.first, 'x', 'first should be x')
+      assert.equal(result.body.last, 'y', 'last should be y')
+      assert.deepEqual(post, result.body.posts[0])
+    })
+  })
 
   describe('Model.beforeRemote(name, fn)', function() {
     it('Run a function before a remote method is called by a client', function(done) {
@@ -807,7 +778,7 @@ describe.onServer('Remote Methods', function() {
       TestModel.disableRemoteMethod('findOne', true);
 
       expect(callbackSpy).to.have.been.calledWith(TestModel.sharedClass, 'findOne');
-    });
+    })
 
     it('emits a `remoteMethodDisabled` event from disableRemoteMethodByName', function() {
       const app = loopback();
@@ -860,7 +831,7 @@ describe.onServer('Remote Methods', function() {
     expect(callbackSpy).to.have.been.calledWith(TestModel.sharedClass);
   });
 
-  describe('Model.getApp(cb)', function() {
+  describe('Model.getApp(cb)', function() {   // FIXME: promise?
     let app, TestModel;
     beforeEach(function setup() {
       app = loopback();
@@ -903,70 +874,61 @@ describe.onServer('Remote Methods', function() {
       TestModel.definition.settings = {};
     });
 
-    it('sets empty options.accessToken for anonymous requests', function(done) {
-      request(app).get('/TestModels/saveOptions')
-        .expect(204, function(err) {
-          if (err) return done(err);
-          expect(actualOptions).to.include({accessToken: null});
-          done();
-        });
-    });
+    it('sets empty options.accessToken for anonymous requests', async function() {
+      await request(app).get('/TestModels/saveOptions')
+        .expect(204)
 
-    it('sets options for juggler', function(done) {
-      request(app).get('/TestModels/saveOptions')
-        .expect(204, function(err) {
-          if (err) return done(err);
-          expect(actualOptions).to.include({
-            prohibitHiddenPropertiesInQuery: true,
-            maxDepthOfQuery: 12,
-            maxDepthOfData: 32,
-          });
-          done();
-        });
-    });
+      expect(actualOptions).to.include({accessToken: null})
+    })
 
-    it('honors model settings to create options for juggler', function(done) {
+    it('sets options for juggler', async function() {
+       await request(app).get('/TestModels/saveOptions')
+        .expect(204)
+
+      expect(actualOptions).to.include({
+        prohibitHiddenPropertiesInQuery: true,
+        maxDepthOfQuery: 12,
+        maxDepthOfData: 32,
+      })
+    })
+
+    it('honors model settings to create options for juggler', async function() {
       TestModel.definition.settings = {
         prohibitHiddenPropertiesInQuery: false,
         maxDepthOfData: 64,
-      };
-      request(app).get('/TestModels/saveOptions')
-        .expect(204, function(err) {
-          if (err) return done(err);
-          expect(actualOptions).to.include({
-            prohibitHiddenPropertiesInQuery: false,
-            maxDepthOfQuery: 12,
-            maxDepthOfData: 64,
-          });
-          done();
-        });
-    });
+      }
 
-    it('sets options.accessToken for authorized requests', function(done) {
-      request(app).get('/TestModels/saveOptions')
+      await request(app).get('/TestModels/saveOptions')
+        .expect(204)
+
+      expect(actualOptions).to.include({
+        prohibitHiddenPropertiesInQuery: false,
+        maxDepthOfQuery: 12,
+        maxDepthOfData: 64,
+      })
+    })
+
+    it('sets options.accessToken for authorized requests', async function() {
+      await request(app).get('/TestModels/saveOptions')
         .set('Authorization', accessToken.id)
-        .expect(204, function(err) {
-          if (err) return done(err);
-          expect(actualOptions).to.have.property('accessToken');
-          expect(actualOptions.accessToken.toObject())
-            .to.eql(accessToken.toObject());
-          done();
-        });
-    });
+        .expect(204)
 
-    it('allows "beforeRemote" hooks to contribute options', function(done) {
+      expect(actualOptions).to.have.property('accessToken')
+      expect(actualOptions.accessToken.toObject())
+        .to.eql(accessToken.toObject());
+    })
+
+    it('allows "beforeRemote" hooks to contribute options', async function() {
       TestModel.beforeRemote('saveOptions', function(ctx, unused, next) {
-        ctx.args.options.hooked = true;
-        next();
-      });
+        ctx.args.options.hooked = true
+        next()
+      })
 
-      request(app).get('/TestModels/saveOptions')
-        .expect(204, function(err) {
-          if (err) return done(err);
-          expect(actualOptions).to.have.property('hooked', true);
-          done();
-        });
-    });
+      await request(app).get('/TestModels/saveOptions')
+        .expect(204)
+
+      expect(actualOptions).to.have.property('hooked', true)
+    })
 
     it('sets empty options.accessToken for requests coming from websocket/primus adapters', function() {
       const primusContext = {};
@@ -974,7 +936,7 @@ describe.onServer('Remote Methods', function() {
       expect(opts).to.have.property('accessToken', null);
     });
 
-    it('allows apps to add options before remoting hooks', function(done) {
+    it('allows apps to add options before remoting hooks', async function() {
       TestModel.createOptionsFromRemotingContext = function(ctx) {
         return {hooks: []};
       };
@@ -992,13 +954,11 @@ describe.onServer('Remote Methods', function() {
           next();
         });
 
-      request(app).get('/TestModels/saveOptions')
-        .expect(204, function(err) {
-          if (err) return done(err);
-          expect(actualOptions.hooks).to.eql(['custom', 'beforeRemote']);
-          done();
-        });
-    });
+      await request(app).get('/TestModels/saveOptions')
+        .expect(204)
+
+      expect(actualOptions.hooks).to.eql(['custom', 'beforeRemote'])
+    })
 
     function setupAppAndRequest() {
       app = loopback({localRegistry: true, loadBuiltinModels: true});
@@ -1024,18 +984,17 @@ describe.onServer('Remote Methods', function() {
       app.use(loopback.rest());
     }
 
-    function createUserAndAccessToken() {
+    async function createUserAndAccessToken() {
       const CREDENTIALS = {email: 'context@example.com', password: 'pass'};
       const User = app.registry.getModel('User');
       const AccessToken = app.registry.getModel('AccessToken');
-      return Promise.all([
+      const [user, token] = await Promise.all([
         User.create(CREDENTIALS),
         AccessToken.create({userId: 1}),
-      ]).then(([user, token]) => {
-        accessToken = token;
-      });
+      ])
+      accessToken = token
     }
-  });
+  })
 
   describe('Create Model with remote methods from JSON description', function() {
     it('does not add isStatic properties to the method settings', function() {
