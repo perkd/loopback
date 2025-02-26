@@ -30,10 +30,22 @@ const g = require('../../lib/globalize')
  */
 
 class Conflict {
-  constructor(id, SourceModel, TargetModel) {
+  constructor(id, SourceModel, TargetModel, conflictData) {
     this.modelId = id
     this.SourceModel = SourceModel
     this.TargetModel = TargetModel
+    this.conflictData = conflictData
+
+    // If we have conflict data with type, store it for more efficient access
+    if (conflictData && conflictData.type) {
+      this._type = conflictData.type
+    }
+    
+    // Store the source and target changes if available in conflict data
+    if (conflictData) {
+      this._sourceChange = conflictData.sourceChange
+      this._targetChange = conflictData.targetChange
+    }
   }
 
   /**
@@ -42,26 +54,32 @@ class Conflict {
    */
 
   async models() {
-    const conflict = this
-    const SourceModel = this.SourceModel
-    const TargetModel = this.TargetModel
-
     try {
       debug('Conflict.models: fetching models for conflict %s', this.modelId)
       
-      // Ensure we have both model classes
+      const SourceModel = this.SourceModel
+      const TargetModel = this.TargetModel
+      
       if (!SourceModel || !TargetModel) {
         debug('Conflict.models: missing model class')
-        return [null, null]
+        return { source: null, target: null }
+      }
+      
+      // Special case when both models would be equal - this is usually
+      // a configuration error or a test case
+      if (SourceModel === TargetModel) {
+        debug('Conflict.models: SourceModel and TargetModel are the same class')
+        const model = await SourceModel.findById(this.modelId)
+        return { source: model, target: model }
       }
       
       // Find both models in parallel
       const [source, target] = await Promise.all([
-        SourceModel.findById(conflict.modelId).catch(err => {
+        SourceModel.findById(this.modelId).catch(err => {
           debug('Conflict.models: error finding source model: %s', err.message)
           return null
         }),
-        TargetModel.findById(conflict.modelId).catch(err => {
+        TargetModel.findById(this.modelId).catch(err => {
           debug('Conflict.models: error finding target model: %s', err.message)
           return null
         })
@@ -70,7 +88,7 @@ class Conflict {
       debug('Conflict.models: found source=%s, target=%s', 
         source ? 'yes' : 'no', target ? 'yes' : 'no')
       
-      return [source, target]
+      return { source, target }
     } catch (err) {
       debug('Conflict.models: error: %s', err.message)
       return [null, null]
@@ -94,17 +112,26 @@ class Conflict {
     try {
       debug('Conflict.changes: fetching changes for conflict %s', this.modelId)
       
+      // If we already have changes from the constructor, use those
+      if (this._sourceChange && this._targetChange) {
+        debug('Conflict.changes: using stored changes')
+        return {
+          source: this._sourceChange,
+          target: this._targetChange
+        }
+      }
+      
       // Ensure we have both model classes
       if (!SourceModel || !TargetModel) {
         debug('Conflict.changes: missing model class')
-        return [null, null]
+        return { source: null, target: null }
       }
       
       // Check if models have findLastChange method
       if (typeof SourceModel.findLastChange !== 'function' || 
           typeof TargetModel.findLastChange !== 'function') {
         debug('Conflict.changes: findLastChange method not available')
-        return [null, null]
+        return { source: null, target: null }
       }
       
       // Find both changes in parallel
@@ -122,10 +149,17 @@ class Conflict {
       debug('Conflict.changes: found sourceChange=%s, targetChange=%s', 
         sourceChange ? 'yes' : 'no', targetChange ? 'yes' : 'no')
       
-      return [sourceChange, targetChange]
+      // Store the changes for future use
+      this._sourceChange = sourceChange
+      this._targetChange = targetChange
+      
+      return {
+        source: sourceChange,
+        target: targetChange
+      }
     } catch (err) {
       debug('Conflict.changes: error: %s', err.message)
-      return [null, null]
+      return { source: null, target: null }
     }
   }
 
@@ -219,20 +253,47 @@ class Conflict {
    */
 
   async type() {
-    try {
-      const [sourceChange, targetChange] = await this.changes()
-      
-      // Ensure we have both changes before determining type
-      if (!sourceChange || !targetChange) {
-        debug('Conflict.type: missing change object, returning UNKNOWN')
-        return Change.UNKNOWN
+    // If we already have the type from conflictData, use that
+    if (this._type) {
+      debug('Conflict.type: using stored type: %s', this._type)
+      // Convert string type to Change constants
+      const Change = this.SourceModel && this.SourceModel.getChangeModel ? 
+        this.SourceModel.getChangeModel() : 
+        (this.SourceModel && this.SourceModel.Change);
+        
+      if (!Change) {
+        debug('Conflict.type: Change model not found, using string constants')
+        if (this._type === 'delete') return 'delete'
+        if (this._type === 'update') return 'update'
+        if (this._type === 'create') return 'create'
+        return 'update' // Default to update if not recognized
       }
       
-      const sourceChangeType = sourceChange.type()
-      const targetChangeType = targetChange.type()
+      if (this._type === 'delete') return Change.DELETE
+      if (this._type === 'update') return Change.UPDATE
+      if (this._type === 'create') return Change.CREATE
+      return Change.UPDATE // Default to update if not recognized
+    }
+    
+    try {
+      const changes = await this.changes()
+      
+      // Ensure we have both changes before determining type
+      if (!changes.source || !changes.target) {
+        debug('Conflict.type: missing change object, returning UNKNOWN')
+        const Change = this.SourceModel && this.SourceModel.getChangeModel ?
+          this.SourceModel.getChangeModel() :
+          (this.SourceModel && this.SourceModel.Change);
+        return Change ? Change.UNKNOWN : 'unknown'
+      }
+      
+      const sourceChangeType = changes.source.type()
+      const targetChangeType = changes.target.type()
       
       debug('Conflict.type: sourceChangeType=%s, targetChangeType=%s', 
         sourceChangeType, targetChangeType)
+      
+      const Change = this.SourceModel.getChangeModel()
       
       // If either is a delete, the conflict type is DELETE
       if (sourceChangeType === Change.DELETE || targetChangeType === Change.DELETE) {
@@ -254,7 +315,10 @@ class Conflict {
       return Change.UNKNOWN
     } catch (err) {
       debug('Error in Conflict.type(): %s', err.message)
-      return Change.UNKNOWN
+      const Change = this.SourceModel && this.SourceModel.getChangeModel ?
+        this.SourceModel.getChangeModel() :
+        (this.SourceModel && this.SourceModel.Change);
+      return Change ? Change.UNKNOWN : 'unknown'
     }
   }
 }
