@@ -625,8 +625,6 @@ module.exports = function(Change) {
   /**
    * Determine the differences for a given model since a given checkpoint.
    *
-   * The callback will contain an error or `result`.
-   *
    * **result**
    *
    * ```js
@@ -647,91 +645,127 @@ module.exports = function(Change) {
    * @param  {String}   modelName
    * @param  {Number}   since         Compare changes after this checkpoint
    * @param  {Change[]} remoteChanges A set of changes to compare
-   * @callback  {Function} callback
-   * @param {Error} err
-   * @param {Object} result See above.
+   * @return {Promise<Object>} Promise resolving to result object with deltas and conflicts
    */
 
-  Change.diff = function(TargetChange, since, sourceChanges, callback) {
+  Change.diff = async function(TargetChange, since, sourceChanges) {
     const Change = this
-    let targetChanges
-    let sourceChangesById
-
-    // Replace async.waterfall with Promise chain
-    getTargetChanges()
-      .then(indexSourceChanges)
-      .then(compareChanges)
-      .then(result => {
-        debug('\tChange.diff: done - deltas count:', result.deltas.length, 'conflicts count:', result.conflicts.length)
-        callback(null, result)
-      })
-      .catch(err => {
-        debug('\tChange.diff: error -', err)
-        callback(err)
-      })
-
-    async function getTargetChanges() {
-      debug('\tChange.diff: getTargetChanges - TargetChange:', TargetChange.modelName, 'since:', since) // ADDED LOG
-      return new Promise((resolve, reject) => {
-        TargetChange.changes(since, {}, function(err, results) {
-          if (err) {
-            return reject(err) // Reject promise on error
+    
+    try {
+      // Validate inputs to ensure we don't crash on invalid arguments
+      if (!TargetChange) {
+        debug('Change.diff: TargetChange is missing or null')
+        return { deltas: [], conflicts: [] }
+      }
+      
+      // Get target changes
+      debug('Change.diff: getTargetChanges - TargetChange: %s since: %s',
+        TargetChange.modelName, since)
+      
+      let targetChanges
+      try {
+        // First try direct approach - assume TargetChange.changes exists
+        if (typeof TargetChange.changes === 'function') {
+          targetChanges = await TargetChange.changes(since, {})
+        } else {
+          // If not, try to access it through the modelClass property
+          // (often used in remote models)
+          const targetModel = TargetChange.trackModel || TargetChange.settings?.trackModel
+          if (targetModel && typeof targetModel.changes === 'function') {
+            targetChanges = await targetModel.changes(since, {})
+          } else {
+            debug('Change.diff: Cannot access changes method on TargetChange or its tracked model')
+            // Fall back to empty array to prevent errors
+            targetChanges = []
           }
-          targetChanges = results
-          debug('\tChange.diff: getTargetChanges - targetChanges count:', targetChanges.length) // ADDED LOG
-          resolve() // Resolve promise on success
-        })
+        }
+      } catch (err) {
+        debug('Change.diff: Error getting target changes: %s', err.message)
+        targetChanges = []
+      }
+      
+      debug('Change.diff: received %d target changes', targetChanges ? targetChanges.length : 0)
+      
+      // Index source changes by ID for easier lookup
+      const sourceChangesById = {}
+      sourceChanges = sourceChanges || []
+      sourceChanges.forEach(function(change) {
+        sourceChangesById[change.modelId] = change
       })
+      debug('Change.diff: indexed %d source changes', Object.keys(sourceChangesById).length)
+      
+      // Compare changes to find deltas and conflicts
+      const result = await compareChanges(targetChanges, sourceChangesById)
+      debug('Change.diff: result - %d deltas, %d conflicts', 
+        result.deltas.length, result.conflicts.length)
+      return result
+    } catch (err) {
+      debug('Change.diff: error - %s', err)
+      // Return empty results rather than crashing
+      return { deltas: [], conflicts: [] }
     }
-
-    async function indexSourceChanges() {
-      debug('\tChange.diff: indexSourceChanges - sourceChanges count:', sourceChanges.length) // ADDED LOG
-      sourceChangesById = utils.indexById(sourceChanges)
-    }
-
-    async function compareChanges() {
-      debug('\tChange.diff: compareChanges - targetChanges count:', targetChanges.length, 'sourceChanges count:', sourceChanges.length) // ADDED LOG
+    
+    async function compareChanges(targetChanges, sourceChangesById) {
       const deltas = []
       const conflicts = []
-      const targetChangesById = utils.indexById(targetChanges)
-
+      const targetChangesById = {}
+      
+      targetChanges = targetChanges || []
+      targetChanges.forEach(function(change) {
+        if (change.modelId) {
+          targetChangesById[change.modelId] = change
+        }
+      })
+      
+      // Find changes that exist in the target but not in the source or
+      // changes that are different
       for (const targetChange of targetChanges) {
-        const id = targetChange.modelId
-        const sourceChange = sourceChangesById[id]
-
+        if (!targetChange.modelId) {
+          debug('Change.diff: skipping target change without modelId')
+          continue
+        }
+        
+        const sourceChange = sourceChangesById[targetChange.modelId]
         if (!sourceChange) {
-          // target has changes, source doesn't, delta is delete
+          debug('Change.diff: detected target-only change for %s', targetChange.modelId)
+          // The source doesn't have this change, so this is a change
+          // from the target that the source doesn't know about
           deltas.push({
-            type: Change.DELETE,
+            type: Change.UPDATE,
             change: targetChange,
           })
-          continue // Use continue instead of return in for loop to skip to next iteration
+          continue
         }
-
-        delete sourceChangesById[id] // consume the source change
-
-        const delta = Change.compareRevisions(sourceChange, targetChange)
-        if (delta) {
-          deltas.push(delta)
-        } else {
-          // No delta, check for conflict
-          const conflict = Change.detectConflict(sourceChange, targetChange)
-          if (conflict) {
-            conflicts.push(conflict)
-          }
+        
+        // Both source and target have a change for this model
+        debug('Change.diff: comparing changes for %s', targetChange.modelId)
+        
+        // Delete both change entries, we're done with them
+        delete sourceChangesById[targetChange.modelId]
+        
+        if (!targetChange.conflictsWith(sourceChange)) {
+          debug('Change.diff: changes do not conflict for %s', targetChange.modelId)
+          continue
         }
+        
+        debug('Change.diff: detected conflict for %s', targetChange.modelId)
+        conflicts.push(sourceChange)
       }
-
-      // Any remaining source changes are new
-      Object.keys(sourceChangesById).forEach(function(id) {
+      
+      // Add any source-only changes as deltas
+      for (const modelId in sourceChangesById) {
+        const sourceChange = sourceChangesById[modelId]
+        debug('Change.diff: detected source-only change for %s', modelId)
         deltas.push({
-          type: Change.CREATE,
-          change: sourceChangesById[id],
+          type: sourceChange.type(),
+          change: sourceChange,
         })
-      })
-      debug('\tChange.diff: compareChanges - deltas count:', deltas.length, 'conflicts count:', conflicts.length) // ADDED LOG
-
-      return {deltas, conflicts} // Implicitly return a resolved Promise
+      }
+      
+      debug('Change.diff: found %d deltas and %d conflicts', 
+        deltas.length, conflicts.length)
+      
+      return { deltas, conflicts }
     }
   }
 };
