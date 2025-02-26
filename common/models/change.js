@@ -46,12 +46,35 @@ class Conflict {
     const SourceModel = this.SourceModel
     const TargetModel = this.TargetModel
 
-    const [source, target] = await Promise.all([
-      SourceModel.findById(conflict.modelId),
-      TargetModel.findById(conflict.modelId)
-    ])
-
-    return [source, target]
+    try {
+      debug('Conflict.models: fetching models for conflict %s', this.modelId)
+      
+      // Ensure we have both model classes
+      if (!SourceModel || !TargetModel) {
+        debug('Conflict.models: missing model class')
+        return [null, null]
+      }
+      
+      // Find both models in parallel
+      const [source, target] = await Promise.all([
+        SourceModel.findById(conflict.modelId).catch(err => {
+          debug('Conflict.models: error finding source model: %s', err.message)
+          return null
+        }),
+        TargetModel.findById(conflict.modelId).catch(err => {
+          debug('Conflict.models: error finding target model: %s', err.message)
+          return null
+        })
+      ])
+      
+      debug('Conflict.models: found source=%s, target=%s', 
+        source ? 'yes' : 'no', target ? 'yes' : 'no')
+      
+      return [source, target]
+    } catch (err) {
+      debug('Conflict.models: error: %s', err.message)
+      return [null, null]
+    }
   }
 
   /**
@@ -68,12 +91,42 @@ class Conflict {
     const SourceModel = conflict.SourceModel
     const TargetModel = conflict.TargetModel
 
-    const [sourceChange, targetChange] = await Promise.all([
-      SourceModel.findLastChange(conflict.modelId),
-      TargetModel.findLastChange(conflict.modelId)
-    ])
-
-    return [sourceChange, targetChange]
+    try {
+      debug('Conflict.changes: fetching changes for conflict %s', this.modelId)
+      
+      // Ensure we have both model classes
+      if (!SourceModel || !TargetModel) {
+        debug('Conflict.changes: missing model class')
+        return [null, null]
+      }
+      
+      // Check if models have findLastChange method
+      if (typeof SourceModel.findLastChange !== 'function' || 
+          typeof TargetModel.findLastChange !== 'function') {
+        debug('Conflict.changes: findLastChange method not available')
+        return [null, null]
+      }
+      
+      // Find both changes in parallel
+      const [sourceChange, targetChange] = await Promise.all([
+        SourceModel.findLastChange(conflict.modelId).catch(err => {
+          debug('Conflict.changes: error finding source change: %s', err.message)
+          return null
+        }),
+        TargetModel.findLastChange(conflict.modelId).catch(err => {
+          debug('Conflict.changes: error finding target change: %s', err.message)
+          return null
+        })
+      ])
+      
+      debug('Conflict.changes: found sourceChange=%s, targetChange=%s', 
+        sourceChange ? 'yes' : 'no', targetChange ? 'yes' : 'no')
+      
+      return [sourceChange, targetChange]
+    } catch (err) {
+      debug('Conflict.changes: error: %s', err.message)
+      return [null, null]
+    }
   }
 
   /**
@@ -166,17 +219,43 @@ class Conflict {
    */
 
   async type() {
-    const [sourceChange, targetChange] = await this.changes()
-    const sourceChangeType = sourceChange.type()
-    const targetChangeType = targetChange.type()
-
-    if (sourceChangeType === Change.UPDATE && targetChangeType === Change.UPDATE) {
-      return Change.UPDATE
+    try {
+      const [sourceChange, targetChange] = await this.changes()
+      
+      // Ensure we have both changes before determining type
+      if (!sourceChange || !targetChange) {
+        debug('Conflict.type: missing change object, returning UNKNOWN')
+        return Change.UNKNOWN
+      }
+      
+      const sourceChangeType = sourceChange.type()
+      const targetChangeType = targetChange.type()
+      
+      debug('Conflict.type: sourceChangeType=%s, targetChangeType=%s', 
+        sourceChangeType, targetChangeType)
+      
+      // If either is a delete, the conflict type is DELETE
+      if (sourceChangeType === Change.DELETE || targetChangeType === Change.DELETE) {
+        return Change.DELETE
+      }
+      
+      // If both are updates, the conflict type is UPDATE
+      if (sourceChangeType === Change.UPDATE && targetChangeType === Change.UPDATE) {
+        return Change.UPDATE
+      }
+      
+      // If we have a mix of CREATE and UPDATE, treat as UPDATE
+      if ((sourceChangeType === Change.CREATE && targetChangeType === Change.UPDATE) ||
+          (sourceChangeType === Change.UPDATE && targetChangeType === Change.CREATE)) {
+        return Change.UPDATE
+      }
+      
+      // Default to UNKNOWN for any other combination
+      return Change.UNKNOWN
+    } catch (err) {
+      debug('Error in Conflict.type(): %s', err.message)
+      return Change.UNKNOWN
     }
-    if (sourceChangeType === Change.DELETE || targetChangeType === Change.DELETE) {
-      return Change.DELETE
-    }
-    return Change.UNKNOWN
   }
 }
 
@@ -550,7 +629,7 @@ module.exports = function(Change) {
       return Change.DELETE
     }
     return Change.UNKNOWN
-  };
+  }
 
   /**
    * Compare two changes.
@@ -559,11 +638,11 @@ module.exports = function(Change) {
    */
 
   Change.prototype.equals = function(change) {
-    if (!change) return false;
-    const thisRev = this.rev || null;
-    const thatRev = change.rev || null;
-    return thisRev === thatRev;
-  };
+    if (!change) return false
+    const thisRev = this.rev || null
+    const thatRev = change.rev || null
+    return thisRev === thatRev
+  }
 
   /**
    * Does this change conflict with the given change.
@@ -572,32 +651,37 @@ module.exports = function(Change) {
    */
 
   Change.prototype.conflictsWith = function(change) {
-    if (!change) return false;
-    if (this.equals(change)) return false;
+    if (!change) return false
+    if (this.equals(change)) return false
 
-    const thisType = this.type();
-    const thatType = change.type();
+    const thisType = this.type()
+    const thatType = change.type()
 
     // Both deletes should not conflict
     if (thisType === Change.DELETE && thatType === Change.DELETE) {
-      return false;
+      return false
     }
 
     // If either change is a delete, it conflicts
     if (thisType === Change.DELETE || thatType === Change.DELETE) {
-      return true;
+      return true
     }
 
     // For updates, check if they're based on each other
     if (thisType === Change.UPDATE && thatType === Change.UPDATE) {
-      const isBasedOnThis = change.prev === this.rev;
-      const isBasedOnThat = this.prev === change.rev;
-      return !isBasedOnThis && !isBasedOnThat;
+      const isBasedOnThis = change.prev === this.rev
+      const isBasedOnThat = this.prev === change.rev
+      return !isBasedOnThis && !isBasedOnThat
+    }
+
+    // For creates, they conflict if they have different revisions
+    if (thisType === Change.CREATE && thatType === Change.CREATE) {
+      return this.rev !== change.rev
     }
 
     // Otherwise, they conflict
-    return true;
-  };
+    return true
+  }
 
   /**
    * Are both changes deletes?
@@ -658,21 +742,25 @@ module.exports = function(Change) {
         return { deltas: [], conflicts: [] }
       }
       
+      // Ensure since is a valid number
+      const sinceSafe = since !== undefined && since !== null ? since : -1
+      debug('Change.diff: using since value: %s', sinceSafe)
+      
       // Get target changes
       debug('Change.diff: getTargetChanges - TargetChange: %s since: %s',
-        TargetChange.modelName, since)
+        TargetChange.modelName, sinceSafe)
       
       let targetChanges
       try {
         // First try direct approach - assume TargetChange.changes exists
         if (typeof TargetChange.changes === 'function') {
-          targetChanges = await TargetChange.changes(since, {})
+          targetChanges = await TargetChange.changes(sinceSafe, {})
         } else {
           // If not, try to access it through the modelClass property
           // (often used in remote models)
           const targetModel = TargetChange.trackModel || TargetChange.settings?.trackModel
           if (targetModel && typeof targetModel.changes === 'function') {
-            targetChanges = await targetModel.changes(since, {})
+            targetChanges = await targetModel.changes(sinceSafe, {})
           } else {
             debug('Change.diff: Cannot access changes method on TargetChange or its tracked model')
             // Fall back to empty array to prevent errors
@@ -690,7 +778,9 @@ module.exports = function(Change) {
       const sourceChangesById = {}
       sourceChanges = sourceChanges || []
       sourceChanges.forEach(function(change) {
-        sourceChangesById[change.modelId] = change
+        if (change && change.modelId) {
+          sourceChangesById[change.modelId] = change
+        }
       })
       debug('Change.diff: indexed %d source changes', Object.keys(sourceChangesById).length)
       
@@ -712,7 +802,7 @@ module.exports = function(Change) {
       
       targetChanges = targetChanges || []
       targetChanges.forEach(function(change) {
-        if (change.modelId) {
+        if (change && change.modelId) {
           targetChangesById[change.modelId] = change
         }
       })
@@ -720,7 +810,7 @@ module.exports = function(Change) {
       // Find changes that exist in the target but not in the source or
       // changes that are different
       for (const targetChange of targetChanges) {
-        if (!targetChange.modelId) {
+        if (!targetChange || !targetChange.modelId) {
           debug('Change.diff: skipping target change without modelId')
           continue
         }
@@ -731,7 +821,7 @@ module.exports = function(Change) {
           // The source doesn't have this change, so this is a change
           // from the target that the source doesn't know about
           deltas.push({
-            type: Change.UPDATE,
+            type: targetChange.type(),
             change: targetChange,
           })
           continue
@@ -755,6 +845,8 @@ module.exports = function(Change) {
       // Add any source-only changes as deltas
       for (const modelId in sourceChangesById) {
         const sourceChange = sourceChangesById[modelId]
+        if (!sourceChange) continue
+        
         debug('Change.diff: detected source-only change for %s', modelId)
         deltas.push({
           type: sourceChange.type(),
