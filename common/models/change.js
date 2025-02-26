@@ -295,14 +295,29 @@ module.exports = function(Change) {
     const id = this.idForModel(modelName, modelId)
     const Change = this
 
-    const change = await this.findById(id)
-    if (change) {
-      return change
-    }
+    try {
+      const change = await this.findById(id)
+      if (change) {
+        debug('found existing change for %s:%s', modelName, modelId)
+        return change
+      }
 
-    const ch = new Change({ id, modelName, modelId })
-    ch.debug('creating change')
-    return Change.updateOrCreate(ch)
+      // Get current checkpoint for new changes
+      const checkpoint = await this.getCheckpointModel().current() || 1
+      
+      const ch = new Change({ 
+        id, 
+        modelName, 
+        modelId,
+        checkpoint 
+      })
+      
+      debug('creating change for %s:%s at checkpoint %s', modelName, modelId, checkpoint)
+      return Change.updateOrCreate(ch)
+    } catch (err) {
+      debug('Error in findOrCreateChange: %s', err.message)
+      throw err
+    }
   }
 
   /**
@@ -340,7 +355,7 @@ module.exports = function(Change) {
       }
 
       // Get checkpoint only if we need to make updates
-      const checkpoint = await change.constructor.getCheckpointModel().current()
+      const checkpoint = await change.constructor.getCheckpointModel().current() || 1
 
       // Handle revision updates
       if (newRev) {
@@ -379,8 +394,10 @@ module.exports = function(Change) {
         return await change.remove()
       }
 
+      // Save the change with all properties (including custom ones)
       return await change.save()
     } catch (err) {
+      debug('Error in rectify: %s', err.message)
       if (!this.constructor.settings.ignoreErrors) {
         throw err
       }
@@ -406,10 +423,27 @@ module.exports = function(Change) {
    */
 
   Change.rectifyAll = async function() {
-    debug('rectify all');
-    const changes = await this.find();
-    await Promise.all(changes.map(c => c.rectify()));
-  };
+    debug('rectify all')
+    try {
+      const changes = await this.find()
+      debug('rectifyAll found %d changes to process', changes.length)
+
+      // Process changes in sequence to avoid checkpoint race conditions
+      for (const change of changes) {
+        try {
+          await change.rectify()
+          debug('rectified change for %s:%s', change.modelName, change.modelId)
+        } catch (err) {
+          debug('Error rectifying change %s:%s - %s', 
+            change.modelName, change.modelId, err.message)
+          // Continue with other changes even if one fails
+        }
+      }
+    } catch (err) {
+      debug('Error in rectifyAll: %s', err.message)
+      throw err
+    }
+  }
 
   /**
    * Get the checkpoint model.
