@@ -739,20 +739,10 @@ describe('Replication over REST', function() {
         maker: 'Ford'
       })
       
-      // Update local record with a client-specific change
-      const sourceInst = await LocalCar.findById(conflictId)
-      if (sourceInst) {
-        await sourceInst.updateAttributes({model: 'Client Updated Mustang'})
-      } else {
-        await LocalCar.create({
-          id: conflictId,
-          model: 'Client Updated Mustang',
-          maker: 'Ford'
-        })
-      }
-      
-      // Now update the remote server record with a different value
-      await ServerCar.updateAll({id: conflictId}, {model: 'Server Updated Mustang'})
+      // Now update both sides to force a conflict
+      // Mimic original behavior by using new instances and updateAttributes
+      await new LocalCar({id: conflictId}).updateAttributes({model: 'Client Updated Mustang'})
+      await new ServerCar({id: conflictId}).updateAttributes({model: 'Server Updated Mustang'})
       
       debug(`Seeded conflict with ID: ${conflictId}`)
     } catch (err) {
