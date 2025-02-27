@@ -730,7 +730,7 @@ describe('Replication over REST', function() {
       const conflictId = 'Ford-Mustang'
       // Save the ID we're using for the conflict
       conflictedCarId = conflictId
-
+      
       // First ensure model exists on the server side: clean up and create remote record
       await ServerCar.destroyById(conflictId) // Clean up any existing record
       await ServerCar.create({
@@ -739,10 +739,24 @@ describe('Replication over REST', function() {
         maker: 'Ford'
       })
       
+      // Ensure the local record exists by upserting
+      await LocalCar.upsert({
+        id: conflictId,
+        model: 'Mustang',
+        maker: 'Ford'
+      })
+      
       // Now update both sides to force a conflict
-      // Mimic original behavior by using new instances and updateAttributes
-      await new LocalCar({id: conflictId}).updateAttributes({model: 'Client Updated Mustang'})
-      await new ServerCar({id: conflictId}).updateAttributes({model: 'Server Updated Mustang'})
+      // Mimic original behavior by retrieving the instances and calling updateAttributes()
+      const localInstance = await LocalCar.findById(conflictId)
+      if (localInstance) {
+        await localInstance.updateAttributes({ model: 'Client Updated Mustang' })
+      }
+      
+      const serverInstance = await ServerCar.findById(conflictId)
+      if (serverInstance) {
+        await serverInstance.updateAttributes({ model: 'Server Updated Mustang' })
+      }
       
       debug(`Seeded conflict with ID: ${conflictId}`)
     } catch (err) {
@@ -755,11 +769,14 @@ describe('Replication over REST', function() {
     debugTest('Setting access token:', token ? 'token provided' : 'null/undefined')
     
     if (token) {
+      // Revert to original: don't modify the remote datasource URL
+      clientApp.dataSources.remote.settings.url = serverUrl
       clientApp.dataSources.remote.connector.remotes.auth = {
         bearer: Buffer.from(token).toString('base64'),
         sendImmediately: true,
       }
     } else {
+      clientApp.dataSources.remote.settings.url = serverUrl
       clientApp.dataSources.remote.connector.remotes.auth = null
     }
     

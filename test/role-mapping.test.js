@@ -8,7 +8,6 @@ const expect = require('./helpers/expect');
 const loopback = require('../');
 
 describe('role-mapping model', function() {
-  this.timeout(10000);
 
   let app, oneUser, anApp, aRole;
   const models = {};
