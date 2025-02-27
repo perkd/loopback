@@ -376,7 +376,7 @@ class Conflict {
    * Resolve the conflict using the instance data in the target model.
    */
   async resolveUsingTarget() {
-    const [source, target] = await this.models()
+    const {source, target} = await this.models()
 
     if (target === null) {
       await this.SourceModel.deleteById(this.modelId)

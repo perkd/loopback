@@ -730,7 +730,7 @@ describe('Replication over REST', function() {
       const conflictId = 'Ford-Mustang'
       // Save the ID we're using for the conflict
       conflictedCarId = conflictId
-      
+
       // First ensure model exists on the server side: clean up and create remote record
       await ServerCar.destroyById(conflictId) // Clean up any existing record
       await ServerCar.create({
@@ -760,7 +760,6 @@ describe('Replication over REST', function() {
         sendImmediately: true,
       }
     } else {
-      // Explicitly clear the auth by setting it to null
       clientApp.dataSources.remote.connector.remotes.auth = null
     }
     
