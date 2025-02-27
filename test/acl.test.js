@@ -620,11 +620,9 @@ describe('access check', function() {
     app.use(loopback.rest())
     
     // Set up access check
-    MyTestModel.checkAccess = function() {
-      const cb = arguments[arguments.length - 1]
+    MyTestModel.checkAccess = async function() {
       checkAccessCalled = true
-      // Call the callback immediately to maintain the ordering
-      cb(null, true)
+      return true
     }
 
     // Set up before hook
@@ -660,66 +658,61 @@ describe('authorized roles propagation in RemotingContext', function() {
   let app, request, accessToken;
   let models = {};
 
-  beforeEach(setupAppAndRequest);
+  beforeEach(async function() {
+    await setupAppAndRequest();
+  });
 
-  it('contains all authorized roles for a principal if query is allowed', function() {
-    return createACLs('MyTestModel', [
+  it('contains all authorized roles for a principal if query is allowed', async function() {
+    await createACLs('MyTestModel', [
       {permission: ACL.ALLOW, principalId: '$everyone'},
       {permission: ACL.ALLOW, principalId: '$authenticated'},
       {permission: ACL.ALLOW, principalId: 'myRole'},
     ])
-      .then(makeAuthorizedHttpRequestOnMyTestModel)
-      .then(function() {
-        const ctx = models.MyTestModel.lastRemotingContext;
-        expect(ctx.args.options.authorizedRoles).to.eql(
-          {
-            $everyone: true,
-            $authenticated: true,
-            myRole: true,
-          },
-        );
-      });
+    await makeAuthorizedHttpRequestOnMyTestModel()
+    
+    const ctx = models.MyTestModel.lastRemotingContext;
+    expect(ctx.args.options.authorizedRoles).to.eql({
+      $everyone: true,
+      $authenticated: true,
+      myRole: true,
+    });
   });
 
-  it('does not contain any denied role even if query is allowed', function() {
-    return createACLs('MyTestModel', [
+  it('does not contain any denied role even if query is allowed', async function() {
+    await createACLs('MyTestModel', [
       {permission: ACL.ALLOW, principalId: '$everyone'},
       {permission: ACL.DENY, principalId: '$authenticated'},
       {permission: ACL.ALLOW, principalId: 'myRole'},
     ])
-      .then(makeAuthorizedHttpRequestOnMyTestModel)
-      .then(function() {
-        const ctx = models.MyTestModel.lastRemotingContext;
-        expect(ctx.args.options.authorizedRoles).to.eql(
-          {
-            $everyone: true,
-            myRole: true,
-          },
-        );
-      });
+    await makeAuthorizedHttpRequestOnMyTestModel()
+    
+    const ctx = models.MyTestModel.lastRemotingContext;
+    expect(ctx.args.options.authorizedRoles).to.eql({
+      $everyone: true,
+      myRole: true,
+    });
   });
 
-  it('honors default permission setting', function() {
+  it('honors default permission setting', async function() {
     // default permission is set to DENY for MyTestModel
     models.MyTestModel.settings.defaultPermission = ACL.DENY;
 
-    return createACLs('MyTestModel', [
+    await createACLs('MyTestModel', [
       {permission: ACL.DEFAULT, principalId: '$everyone'},
       {permission: ACL.DENY, principalId: '$authenticated'},
       {permission: ACL.ALLOW, principalId: 'myRole'},
     ])
-      .then(makeAuthorizedHttpRequestOnMyTestModel)
-      .then(function() {
-        const ctx = models.MyTestModel.lastRemotingContext;
-        expect(ctx.args.options.authorizedRoles).to.eql(
-        // '$everyone' is not expected as default permission is DENY
-          {myRole: true},
-        );
-      });
+    await makeAuthorizedHttpRequestOnMyTestModel()
+    
+    const ctx = models.MyTestModel.lastRemotingContext;
+    expect(ctx.args.options.authorizedRoles).to.eql(
+      // '$everyone' is not expected as default permission is DENY
+      {myRole: true}
+    );
   });
 
   // helpers
-  function setupAppAndRequest() {
+  async function setupAppAndRequest() {
     app = loopback({localRegistry: true, loadBuiltinModels: true});
     app.use(loopback.rest());
     app.set('remoting', {errorHandler: {debug: true, log: true}});
@@ -743,23 +736,21 @@ describe('authorized roles propagation in RemotingContext', function() {
     });
 
     // creating a user, a role and a rolemapping binding that user with that role
-    return Promise.all([
+    const [myUser, myRole] = await Promise.all([
       models.User.create({username: 'myUser', email: 'myuser@example.com', password: 'pass'}),
       models.Role.create({name: 'myRole'}),
     ])
-      .then(function([myUser, myRole]) {
-        return Promise.all([
-          myRole.principals.create({principalType: 'USER', principalId: myUser.id}),
-          models.User.login({username: 'myUser', password: 'pass'}),
-        ]);
-      })
-      .then(function([role, token]) {
-        accessToken = token;
-      });
+    
+    const [role, token] = await Promise.all([
+      myRole.principals.create({principalType: 'USER', principalId: myUser.id}),
+      models.User.login({username: 'myUser', password: 'pass'}),
+    ])
+    
+    accessToken = token;
   }
 
-  function createACLs(model, acls) {
-    acls = acls.map(function(acl) {
+  async function createACLs(model, acls) {
+    const aclPromises = acls.map(function(acl) {
       return models.ACL.create({
         principalType: acl.principalType || ACL.ROLE,
         principalId: acl.principalId,
@@ -769,7 +760,7 @@ describe('authorized roles propagation in RemotingContext', function() {
         permission: acl.permission,
       });
     });
-    return Promise.all(acls);
+    return Promise.all(aclPromises);
   }
 
   function makeAuthorizedHttpRequestOnMyTestModel() {

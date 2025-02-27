@@ -30,10 +30,9 @@
  Map to oAuth 2.0 scopes
  */
 
-const assert = require('node:assert');
-const async = require('async');
-const g = require('../../lib/globalize');
-const loopback = require('../../lib/loopback');
+const assert = require('node:assert')
+const g = require('../../lib/globalize')
+const loopback = require('../../lib/loopback')
 const debug = require('debug')('loopback:security:acl');
 const ctx = require('../../lib/access-context');
 
@@ -371,18 +370,9 @@ module.exports = function(ACL) {
    * @param {String} model The model name.
    * @param {String} property The property/method/relation name.
    * @param {String} accessType The access type.
-   * @callback {Function} callback Callback function.
-   * @param {String|Error} err The error object.
-   * @param {AccessRequest} result The resolved access request.
+   * @returns {Promise<AccessRequest>} The resolved access request.
    */
-  ACL.checkPermission = function(principalType, principalId, model, property, accessType, callback) {
-    if (!callback) {
-      return new Promise((resolve, reject) => {
-        this.checkPermission(principalType, principalId, model, property, accessType, 
-          (err, result) => err ? reject(err) : resolve(result))
-      })
-    }
-    
+  ACL.checkPermission = async function(principalType, principalId, model, property, accessType) {
     if (principalId !== null && principalId !== undefined && (typeof principalId !== 'string')) {
       principalId = principalId.toString()
     }
@@ -400,35 +390,23 @@ module.exports = function(ACL) {
     let resolved = this.resolvePermission(acls, req)
 
     if (resolved && resolved.permission === ACL.DENY) {
-      return new Promise(resolve => {
-        process.nextTick(() => {
-          callback(null, resolved)
-          resolve(resolved)
-        })
-      })
+      return resolved
     }
 
-    const self = this
-    return new Promise((resolve, reject) => {
-      self.find({
-        where: {
-          principalType: principalType, 
-          principalId: principalId,
-          model: model, 
-          property: propertyQuery, 
-          accessType: accessTypeQuery
-        }
-      }, function(err, dynACLs) {
-        if (err) {
-          callback(err)
-          return reject(err)
-        }
-        acls = acls.concat(dynACLs)
-        resolved = self.resolvePermission(acls, req)
-        callback(null, resolved)
-        resolve(resolved)
-      })
+    // Find dynamic ACLs
+    const dynACLs = await this.find({
+      where: {
+        principalType: principalType, 
+        principalId: principalId,
+        model: model, 
+        property: propertyQuery, 
+        accessType: accessTypeQuery
+      }
     })
+    
+    acls = acls.concat(dynACLs)
+    resolved = this.resolvePermission(acls, req)
+    return resolved
   }
 
   ACL.prototype.debug = function() {
@@ -481,16 +459,9 @@ module.exports = function(ACL) {
    * @property {String} property The property/method/relation name.
    * @property {String} accessType The access type:
    * READ, REPLICATE, WRITE, or EXECUTE.
-   * @callback {Function} callback Callback function
-   * @param {String|Error} err The error object.
-   * @param {AccessRequest} result The resolved access request.
+   * @returns {Promise<AccessRequest>} The resolved access request.
    */
-  ACL.checkAccessForContext = function(context, callback) {
-    if (!callback) {
-      return new Promise((resolve, reject) => {
-        this.checkAccessForContext(context, (err, result) => err ? reject(err) : resolve(result))
-      })
-    }
+  ACL.checkAccessForContext = async function(context) {
     const self = this
     self.resolveRelatedModels()
     const roleModel = self.roleModel
@@ -532,7 +503,7 @@ module.exports = function(ACL) {
       debug('Scopes allowed:', context.accessToken.scopes || ctx.DEFAULT_SCOPES)
       debug('Scope required:', context.getScopes())
       context.debug()
-      return callback(null, req)
+      return req
     }
 
     const effectiveACLs = []
@@ -546,46 +517,52 @@ module.exports = function(ACL) {
       }
     }
 
-    this.find(query, function(err, acls) {
-      if (err) return callback(err)
-      const inRoleTasks = []
-      acls = acls.concat(staticACLs)
-
-      acls.forEach(function(acl) {
-        // Check exact matches
-        for (let i = 0; i < context.principals.length; i++) {
-          const p = context.principals[i]
-          if (p.type === acl.principalType && String(p.id) === String(acl.principalId)) {
-            effectiveACLs.push(acl)
-            return
-          }
+    const acls = [...staticACLs, ...await this.find(query)]
+    
+    // First add exact principal matches to effectiveACLs
+    acls.forEach(acl => {
+      // Check exact matches
+      for (let i = 0; i < context.principals.length; i++) {
+        const p = context.principals[i]
+        if (p.type === acl.principalType && String(p.id) === String(acl.principalId)) {
+          effectiveACLs.push(acl)
+          return
         }
-
-        // Check role matches
-        if (acl.principalType === ACL.ROLE) {
-          inRoleTasks.push(function(done) {
-            roleModel.isInRole(acl.principalId, context, function(err, inRole) {
-              if (!err && inRole) {
-                effectiveACLs.push(acl)
-                if (acl.isAllowed(modelDefaultPermission))
-                  authorizedRoles[acl.principalId] = true
-              }
-              done(err, acl)
-            })
-          })
-        }
-      })
-
-      async.parallel(inRoleTasks, function(err, results) {
-        if (err) return callback(err, null)
-        const resolved = self.resolvePermission(effectiveACLs, req)
-        debug('---Resolved---')
-        resolved.debug()
-        authorizedRoles = resolved.isAllowed() ? authorizedRoles : {}
-        saveAuthorizedRolesToRemotingContext(remotingContext, authorizedRoles)
-        callback(null, resolved)
-      })
+      }
     })
+    
+    // Then process role-based permissions in parallel
+    const roleChecks = acls
+      .filter(acl => acl.principalType === ACL.ROLE)
+      .map(async acl => {
+        try {
+          const inRole = await roleModel.isInRole(acl.principalId, context)
+          if (inRole) {
+            effectiveACLs.push(acl)
+            if (acl.isAllowed(modelDefaultPermission)) {
+              authorizedRoles[acl.principalId] = true
+            }
+          }
+          return acl
+        } catch (err) {
+          debug('Error checking role membership: %j', err)
+          throw err
+        }
+      })
+
+    // Wait for all role checks to complete
+    await Promise.all(roleChecks)
+    
+    // Resolve the final permission
+    const resolved = self.resolvePermission(effectiveACLs, req)
+    debug('---Resolved---')
+    resolved.debug()
+    
+    // Store authorized roles in the remoting context
+    authorizedRoles = resolved.isAllowed() ? authorizedRoles : {}
+    saveAuthorizedRolesToRemotingContext(remotingContext, authorizedRoles)
+    
+    return resolved
   }
 
   function saveAuthorizedRolesToRemotingContext(remotingContext, authorizedRoles) {
@@ -601,25 +578,23 @@ module.exports = function(ACL) {
    * @param {String} model The model name
    * @param {*} modelId The model id
    * @param {String} method The method name
-   * @callback {Function} callback Callback function
-   * @param {String|Error} err The error object
-   * @param {Boolean} allowed is the request allowed
+   * @returns {Promise<Boolean>} is the request allowed
    */
-  ACL.checkAccessForToken = function(token, model, modelId, method, callback) {
-    assert(token, 'Access token is required');
-    if (!callback) {
-      return new Promise((resolve, reject) => {
-        this.checkAccessForToken(token, model, modelId, method, 
-          (err, result) => err ? reject(err) : resolve(result))
-      })
-    }
-    const context = new AccessContext({registry: this.registry, accessToken: token, model: model, property: method, method: method, modelId: modelId})
-    this.checkAccessForContext(context, function(err, accessRequest) {
-      if (err) callback(err);
-      else callback(null, accessRequest.isAllowed());
+  ACL.checkAccessForToken = async function(token, model, modelId, method) {
+    assert(token, 'Access token is required')
+    
+    const context = new AccessContext({
+      registry: this.registry, 
+      accessToken: token, 
+      model: model, 
+      property: method, 
+      method: method, 
+      modelId: modelId
     })
-    return
-  };
+    
+    const accessRequest = await this.checkAccessForContext(context)
+    return accessRequest.isAllowed()
+  }
 
   ACL.resolveRelatedModels = function() {
     if (!this.roleModel) {
@@ -635,40 +610,28 @@ module.exports = function(ACL) {
    * Resolve a principal by type/id
    * @param {String} type Principal type - ROLE/APP/USER
    * @param {String|Number} id Principal id or name
-   * @callback {Function} callback Callback function
-   * @param {String|Error} err The error object
-   * @param {Object} result An instance of principal (Role, Application or User)
+   * @returns {Promise<Object>} An instance of principal (Role, Application or User)
    */
-  ACL.resolvePrincipal = function(type, id, cb) {
-    if (!cb) {
-      return new Promise((resolve, reject) => {
-        this.resolvePrincipal(type, id, 
-          (err, result) => err ? reject(err) : resolve(result))
-      })
-    }
+  ACL.resolvePrincipal = async function(type, id) {
     type = type || ACL.ROLE
     this.resolveRelatedModels()
+    
     switch (type) {
       case ACL.ROLE:
-        this.roleModel.findOne({where: {or: [{name: id}, {id: id}]}}, cb)
-        break
+        return this.roleModel.findOne({where: {or: [{name: id}, {id: id}]}})
       case ACL.USER:
-        this.userModel.findOne({where: {or: [{username: id}, {email: id}, {id: id}]}}, cb)
-        break
+        return this.userModel.findOne({where: {or: [{username: id}, {email: id}, {id: id}]}})
       case ACL.APP:
-        this.applicationModel.findOne({where: {or: [{name: id}, {email: id}, {id: id}]}}, cb)
-        break
+        return this.applicationModel.findOne({where: {or: [{name: id}, {email: id}, {id: id}]}})
       default:
         const userModel = this.registry.findModel(type)
         if (userModel) {
-          userModel.findOne({where: {or: [{username: id}, {email: id}, {id: id}]}}, cb)
+          return userModel.findOne({where: {or: [{username: id}, {email: id}, {id: id}]}})
         } else {
-          process.nextTick(function() {
-            const err = new Error(g.f('Invalid principal type: %s', type))
-            err.statusCode = 400
-            err.code = 'INVALID_PRINCIPAL_TYPE'
-            cb(err)
-          })
+          const err = new Error(g.f('Invalid principal type: %s', type))
+          err.statusCode = 400
+          err.code = 'INVALID_PRINCIPAL_TYPE'
+          throw err
         }
     }
   }
@@ -678,37 +641,29 @@ module.exports = function(ACL) {
    * @param {String} principalType Principal type
    * @param {String|*} principalId Principal id/name
    * @param {String|*} role Role id/name
-   * @callback {Function} callback Callback function
-   * @param {String|Error} err The error object
-   * @param {Boolean} isMapped is the ACL mapped to the role
+   * @returns {Promise<Boolean>} is the ACL mapped to the role
    */
-  ACL.isMappedToRole = function(principalType, principalId, role, cb) {
-    if (!cb) {
-      return new Promise((resolve, reject) => {
-        this.isMappedToRole(principalType, principalId, role, 
-          (err, result) => err ? reject(err) : resolve(result))
-      })
+  ACL.isMappedToRole = async function(principalType, principalId, role) {
+    const principal = await this.resolvePrincipal(principalType, principalId)
+    if (principal != null) {
+      principalId = principal.id
     }
-    const self = this
-    this.resolvePrincipal(principalType, principalId, function(err, principal) {
-      if (err) return cb(err)
-      if (principal != null) {
-        principalId = principal.id
+    
+    principalType = principalType || 'ROLE'
+    const roleInstance = await this.resolvePrincipal('ROLE', role)
+    
+    if (!roleInstance) {
+      return false
+    }
+    
+    const result = await this.roleMappingModel.findOne({
+      where: {
+        roleId: roleInstance.id,
+        principalType: principalType,
+        principalId: String(principalId)
       }
-      principalType = principalType || 'ROLE'
-      self.resolvePrincipal('ROLE', role, function(err, roleInstance) {
-        if (err || !roleInstance) return cb(err, roleInstance)
-        self.roleMappingModel.findOne({
-          where: {
-            roleId: roleInstance.id,
-            principalType: principalType,
-            principalId: String(principalId)
-          }
-        }, function(err, result) {
-          if (err) return cb(err)
-          return cb(null, !!result)
-        })
-      })
     })
+    
+    return !!result
   }
 };
