@@ -608,7 +608,7 @@ describe('Replication over REST', function() {
     console.log('--- Server App Models after setup ---');
     const models = serverApp.models();
     Object.keys(models).forEach(modelName => {
-      console.log(`Model: ${modelName}, settings:`, models[modelName].settings);
+      // console.log(`Model: ${modelName}, settings:`, models[modelName].settings);
     });
     console.log('--- End Server App Models ---');
 
@@ -637,45 +637,43 @@ describe('Replication over REST', function() {
   }
 
   function setupClient() {
-    clientApp = loopback({localRegistry: true, loadBuiltinModels: true});
-    clientApp.dataSource('db', {connector: 'memory'});
-    clientApp.dataSource('remote', {
-      connector: 'remote',
-      url: serverUrl,
-    });
-
+    clientApp = loopback({localRegistry: true, loadBuiltinModels: true})
+    clientApp.dataSource('db', {connector: 'memory'})
+    clientApp.dataSource('remote', { connector: 'remote', url: serverUrl })
+    
     // Set up custom checkpoint model
-    const ClientCheckpoint = clientApp.registry.createModel({
-      name: 'ClientCheckpoint',
-      base: 'Checkpoint',
-    });
-    ClientCheckpoint.attachTo(clientApp.dataSources.db);
-
+    const ClientCheckpoint = clientApp.registry.createModel({ name: 'ClientCheckpoint', base: 'Checkpoint' })
+    ClientCheckpoint.attachTo(clientApp.dataSources.db)
+    
     // Setup LocalUser
-    LocalUser = clientApp.registry.createModel('LocalUser', USER_PROPS, USER_OPTS);
-    if (LocalUser.Change) LocalUser.Change.Checkpoint = ClientCheckpoint;
-    clientApp.model(LocalUser, {dataSource: 'db'});
-
+    LocalUser = clientApp.registry.createModel('LocalUser', USER_PROPS, USER_OPTS)
+    if (LocalUser.Change) LocalUser.Change.Checkpoint = ClientCheckpoint
+    clientApp.model(LocalUser, {dataSource: 'db'})
+    
     // Setup LocalCar
-    LocalCar = clientApp.registry.createModel('LocalCar', CAR_PROPS, CAR_OPTS);
-    LocalCar.Change.Checkpoint = ClientCheckpoint;
-    clientApp.model(LocalCar, {dataSource: 'db'});
+    LocalCar = clientApp.registry.createModel('LocalCar', CAR_PROPS, CAR_OPTS)
+    LocalCar.Change.Checkpoint = ClientCheckpoint
+    clientApp.model(LocalCar, {dataSource: 'db'})
     
     // Enable change tracking on LocalCar
-    LocalCar.enableChangeTracking();
-    debug('Enabled change tracking for LocalCar');
-
+    LocalCar.enableChangeTracking()
+    debug('Enabled change tracking for LocalCar')
+    
     // Create remote models with correct options
-    let remoteUserOpts = createRemoteModelOpts(USER_OPTS);
-    RemoteUser = clientApp.registry.createModel('RemoteUser', USER_PROPS, remoteUserOpts);
-    clientApp.model(RemoteUser, {dataSource: 'remote'});
-    debug('RemoteUser defined');
-
-    let remoteCarOpts = createRemoteModelOpts(CAR_OPTS);
-    RemoteCar = clientApp.registry.createModel('RemoteCar', CAR_PROPS, remoteCarOpts);
-    clientApp.model(RemoteCar, {dataSource: 'remote'});
-    debug('Setting up client-side replication...');
-    debug('Client setup complete');
+    let remoteUserOpts = createRemoteModelOpts(USER_OPTS)
+    RemoteUser = clientApp.registry.createModel('RemoteUser', USER_PROPS, remoteUserOpts)
+    clientApp.model(RemoteUser, {dataSource: 'remote'})
+    // Ensure remote Change model is defined
+    RemoteUser._defineChangeModel()
+    debug('RemoteUser defined')
+    
+    let remoteCarOpts = createRemoteModelOpts(CAR_OPTS)
+    RemoteCar = clientApp.registry.createModel('RemoteCar', CAR_PROPS, remoteCarOpts)
+    clientApp.model(RemoteCar, {dataSource: 'remote'})
+    // Ensure remote Change model is defined
+    RemoteCar._defineChangeModel()
+    debug('Setting up client-side replication...')
+    debug('Client setup complete')
   }
 
   function createRemoteModelOpts(modelOpts) {
@@ -729,32 +727,34 @@ describe('Replication over REST', function() {
 
   async function seedConflict() {
     try {
-      const conflictId = 'Ford-Mustang';
+      const conflictId = 'Ford-Mustang'
       // Save the ID we're using for the conflict
-      conflictedCarId = conflictId;
+      conflictedCarId = conflictId
       
-      // First ensure model exists
+      // First ensure model exists on the server side: clean up and create remote record
       await ServerCar.destroyById(conflictId) // Clean up any existing record
-      
       await ServerCar.create({
         id: conflictId,
         model: 'Mustang',
         maker: 'Ford'
       })
       
-      // Then update
+      // Update local record with a client-specific change
       const sourceInst = await LocalCar.findById(conflictId)
       if (sourceInst) {
-        await sourceInst.updateAttribute('model', 'Updated Mustang')
+        await sourceInst.updateAttributes({model: 'Client Updated Mustang'})
       } else {
         await LocalCar.create({
           id: conflictId,
-          model: 'Updated Mustang',
+          model: 'Client Updated Mustang',
           maker: 'Ford'
         })
       }
       
-      debug(`Seeded conflict with ID: ${conflictId}`);
+      // Now update the remote server record with a different value
+      await ServerCar.updateAll({id: conflictId}, {model: 'Server Updated Mustang'})
+      
+      debug(`Seeded conflict with ID: ${conflictId}`)
     } catch (err) {
       debug('Error in seedConflict:', err)
       throw err
