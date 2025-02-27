@@ -8,14 +8,16 @@
  */
 
 'use strict';
+const assert = require('node:assert')
+const path = require('node:path')
+const crypto = require('node:crypto')
+const qs = require('querystring')
+const isEmail = require('isemail')
+const debug = require('debug')('loopback:user')
 const g = require('../../lib/globalize');
-const isEmail = require('isemail');
 const loopback = require('../../lib/loopback');
-const utils = require('../../lib/utils');
-const path = require('path');
-const qs = require('querystring');
+
 const SALT_WORK_FACTOR = 10;
-const crypto = require('crypto');
 // bcrypt's max length is 72 bytes;
 // See https://github.com/kelektiv/node.bcrypt.js/blob/45f498ef6dc6e8234e58e07834ce06a50ff16352/src/node_blf.h#L59
 const MAX_PASSWORD_LENGTH = 72;
@@ -35,9 +37,6 @@ try {
 const DEFAULT_TTL = 1209600; // 2 weeks in seconds
 const DEFAULT_RESET_PW_TTL = 15 * 60; // 15 mins in seconds
 const DEFAULT_MAX_TTL = 31556926; // 1 year in seconds
-const assert = require('assert');
-
-const debug = require('debug')('loopback:user');
 
 /**
  * Built-in User model.
@@ -84,11 +83,10 @@ module.exports = function(User) {
    * Supported flavours:
    *
    * ```js
-   * createAccessToken(ttl, cb)
-   * createAccessToken(ttl, options, cb);
-   * createAccessToken(options, cb);
-   * // recent addition:
-   * createAccessToken(data, options, cb);
+   * await createAccessToken(ttl)
+   * await createAccessToken(ttl, options)
+   * await createAccessToken(options)
+   * await createAccessToken(data, options)
    * ```
    *
    * @options {Number|Object} [ttl|data] Either the requested ttl,
@@ -96,38 +94,25 @@ module.exports = function(User) {
    * @property {Number} [ttl] The requested ttl
    * @property {String[]} [scopes] The access scopes granted to the token.
    * @param {Object} [options] Additional options including remoting context
-   * @callback {Function} cb The callback function
-   * @param {String|Error} err The error string or object
-   * @param {AccessToken} token The generated access token object
-   * @promise
+   * @returns {Promise<AccessToken>} A promise that resolves to the generated access token
    *
    */
-  User.prototype.createAccessToken = function(ttl, options, cb) {
-    if (cb === undefined && typeof options === 'function') {
-      cb = options;
-      options = undefined;
-    }
+  User.prototype.createAccessToken = async function(ttl, options) {
+    let tokenData
 
-    if (!cb) {
-      return new Promise((resolve, reject) => {
-        this.createAccessToken(ttl, options, (err, result) => 
-          err ? reject(err) : resolve(result))
-      })
-    }
-
-    let tokenData;
     if (typeof ttl !== 'object') {
-      tokenData = {ttl};
+      tokenData = {ttl}
     } else if (options) {
-      tokenData = ttl;
+      tokenData = ttl
     } else {
-      tokenData = {};
+      tokenData = {}
+      options = ttl
     }
 
-    const userSettings = this.constructor.settings;
-    tokenData.ttl = Math.min(tokenData.ttl || userSettings.ttl, userSettings.maxTTL);
-    this.accessTokens.create(tokenData, options, cb);
-  };
+    const userSettings = this.constructor.settings
+    tokenData.ttl = Math.min(tokenData.ttl || userSettings.ttl, userSettings.maxTTL)
+    return this.accessTokens.create(tokenData, options)
+  }
 
   function splitPrincipal(name, realmDelimiter) {
     const parts = [null, name];
@@ -184,9 +169,8 @@ module.exports = function(User) {
    * Login a user by with the given `credentials`.
    *
    * ```js
-   *    User.login({username: 'foo', password: 'bar'}, function (err, token) {
-   *      console.log(token.id);
-   *    });
+   *    const token = await User.login({username: 'foo', password: 'bar'})
+   *    console.log(token.id)
    * ```
    *
    * If the `emailVerificationRequired` flag is set for the inherited user model
@@ -198,323 +182,229 @@ module.exports = function(User) {
    * @param {Object} credentials username/password or email/password
    * @param {String[]|String} [include] Optionally set it to "user" to include
    * the user info
-   * @callback {Function} callback Callback function
-   * @param {Error} err Error object
-   * @param {AccessToken} token Access token if login is successful
-   * @promise
+   * @returns {Promise<AccessToken>} A promise that resolves to the access token if login is successful
    */
+  User.login = async function(credentials, include) {
+    const self = this
 
-  User.login = function(credentials, include, fn) {
-    const self = this;
-    if (typeof include === 'function') {
-      fn = include;
-      include = undefined;
-    }
-
-    if (!fn) {
-      return new Promise((resolve, reject) => {
-        this.login(credentials, include, (err, result) => 
-          err ? reject(err) : resolve(result))
-      })
-    }
-
-    include = (include || '');
+    include = (include || '')
     if (Array.isArray(include)) {
       include = include.map(function(val) {
-        return val.toLowerCase();
-      });
+        return val.toLowerCase()
+      })
     } else {
-      include = include.toLowerCase();
+      include = include.toLowerCase()
     }
 
-    let realmDelimiter;
+    let realmDelimiter
     // Check if realm is required
     const realmRequired = !!(self.settings.realmRequired ||
-      self.settings.realmDelimiter);
+      self.settings.realmDelimiter)
     if (realmRequired) {
-      realmDelimiter = self.settings.realmDelimiter;
+      realmDelimiter = self.settings.realmDelimiter
     }
     const query = self.normalizeCredentials(credentials, realmRequired,
-      realmDelimiter);
+      realmDelimiter)
 
     if (realmRequired) {
       if (!query.realm) {
-        const err1 = new Error(g.f('{{realm}} is required'));
-        err1.statusCode = 400;
-        err1.code = 'REALM_REQUIRED';
-        fn(err1);
-        return fn.promise;
+        const err1 = new Error(g.f('{{realm}} is required'))
+        err1.statusCode = 400
+        err1.code = 'REALM_REQUIRED'
+        throw err1
       } else if (typeof query.realm !== 'string') {
-        const err5 = new Error(g.f('Invalid realm'));
-        err5.statusCode = 400;
-        err5.code = 'INVALID_REALM';
-        fn(err5);
-        return fn.promise;
+        const err5 = new Error(g.f('Invalid realm'))
+        err5.statusCode = 400
+        err5.code = 'INVALID_REALM'
+        throw err5
       }
     }
     if (!query.email && !query.username) {
-      const err2 = new Error(g.f('{{username}} or {{email}} is required'));
-      err2.statusCode = 400;
-      err2.code = 'USERNAME_EMAIL_REQUIRED';
-      fn(err2);
-      return fn.promise;
+      const err2 = new Error(g.f('{{username}} or {{email}} is required'))
+      err2.statusCode = 400
+      err2.code = 'USERNAME_EMAIL_REQUIRED'
+      throw err2
     }
     if (query.username && typeof query.username !== 'string') {
-      const err3 = new Error(g.f('Invalid username'));
-      err3.statusCode = 400;
-      err3.code = 'INVALID_USERNAME';
-      fn(err3);
-      return fn.promise;
+      const err3 = new Error(g.f('Invalid username'))
+      err3.statusCode = 400
+      err3.code = 'INVALID_USERNAME'
+      throw err3
     } else if (query.email && typeof query.email !== 'string') {
-      const err4 = new Error(g.f('Invalid email'));
-      err4.statusCode = 400;
-      err4.code = 'INVALID_EMAIL';
-      fn(err4);
-      return fn.promise;
+      const err4 = new Error(g.f('Invalid email'))
+      err4.statusCode = 400
+      err4.code = 'INVALID_EMAIL'
+      throw err4
     }
 
-    self.findOne({where: query}, function(err, user) {
-      const defaultError = new Error(g.f('login failed'));
-      defaultError.statusCode = 401;
-      defaultError.code = 'LOGIN_FAILED';
+    const defaultError = new Error(g.f('login failed'))
+    defaultError.statusCode = 401
+    defaultError.code = 'LOGIN_FAILED'
 
-      function tokenHandler(err, token) {
-        if (err) return fn(err);
-        if (Array.isArray(include) ? include.indexOf('user') !== -1 : include === 'user') {
-          // NOTE(bajtos) We can't set token.user here:
-          //  1. token.user already exists, it's a function injected by
-          //     "AccessToken belongsTo User" relation
-          //  2. ModelBaseClass.toJSON() ignores own properties, thus
-          //     the value won't be included in the HTTP response
-          // See also loopback#161 and loopback#162
-          token.__data.user = user;
+    try {
+      const user = await self.findOne({where: query})
+      
+      if (!user) {
+        debug('No matching record is found for user %s', query.email || query.username)
+        throw defaultError
+      }
+      
+      const isMatch = await user.hasPassword(credentials.password)
+      
+      if (!isMatch) {
+        debug('The password is invalid for user %s', query.email || query.username)
+        throw defaultError
+      }
+      
+      if (self.settings.emailVerificationRequired && !user.emailVerified) {
+        // Fail to log in if email verification is not done yet
+        debug('User email has not been verified')
+        const err = new Error(g.f('login failed as the email has not been verified'))
+        err.statusCode = 401
+        err.code = 'LOGIN_FAILED_EMAIL_NOT_VERIFIED'
+        err.details = {
+          userId: user.id,
         }
-        fn(err, token);
+        throw err
       }
-
-      if (err) {
-        debug('An error is reported from User.findOne: %j', err);
-        fn(defaultError);
-      } else if (user) {
-        user.hasPassword(credentials.password, function(err, isMatch) {
-          if (err) {
-            debug('An error is reported from User.hasPassword: %j', err);
-            fn(defaultError);
-          } else if (isMatch) {
-            if (self.settings.emailVerificationRequired && !user.emailVerified) {
-              // Fail to log in if email verification is not done yet
-              debug('User email has not been verified');
-              err = new Error(g.f('login failed as the email has not been verified'));
-              err.statusCode = 401;
-              err.code = 'LOGIN_FAILED_EMAIL_NOT_VERIFIED';
-              err.details = {
-                userId: user.id,
-              };
-              fn(err);
-            } else {
-              if (user.createAccessToken.length === 2) {
-                user.createAccessToken(credentials.ttl, tokenHandler);
-              } else {
-                user.createAccessToken(credentials.ttl, credentials, tokenHandler);
-              }
-            }
-          } else {
-            debug('The password is invalid for user %s', query.email || query.username);
-            fn(defaultError);
-          }
-        });
+      
+      // Create the access token
+      let token
+      if (user.createAccessToken.length === 1) {
+        token = await user.createAccessToken(credentials.ttl)
       } else {
-        debug('No matching record is found for user %s', query.email || query.username);
-        fn(defaultError);
+        token = await user.createAccessToken(credentials.ttl, credentials)
       }
-    });
-    return fn.promise;
-  };
+      
+      // Include user info if requested
+      if (Array.isArray(include) ? include.indexOf('user') !== -1 : include === 'user') {
+        // NOTE(bajtos) We can't set token.user here:
+        //  1. token.user already exists, it's a function injected by
+        //     "AccessToken belongsTo User" relation
+        //  2. ModelBaseClass.toJSON() ignores own properties, thus
+        //     the value won't be included in the HTTP response
+        // See also loopback#161 and loopback#162
+        token.__data.user = user
+      }
+      
+      return token
+    } catch (err) {
+      debug('An error occurred during login: %j', err)
+      throw err
+    }
+  }
 
   /**
    * Logout a user with the given accessToken id.
    *
-   * ```js
-   *    User.logout('asd0a9f8dsj9s0s3223mk', function (err) {
-  *      console.log(err || 'Logged out');
-   * ```
-   *
    * @param {String} accessTokenID
-   * @callback {Function} callback
-   * @param {Error} err
-   * @promise
+   * @returns {Promise<Object>} A promise that resolves when the user is successfully logged out
    */
-
-  User.logout = function(tokenId, fn) {
-    if (!fn) {
-      return new Promise((resolve, reject) => {
-        this.logout(tokenId, (err, result) => err ? reject(err) : resolve(result))
-      })
-    }
-
-    let err;
+  User.logout = async function(tokenId) {
     if (!tokenId) {
-      err = new Error(g.f('{{accessToken}} is required to logout'));
-      err.statusCode = 401;
-      process.nextTick(fn, err);
-      return;
+      const err = new Error(g.f('{{accessToken}} is required to logout'))
+      err.statusCode = 401
+      throw err
     }
 
-    this.relations.accessTokens.modelTo.destroyById(tokenId, function(err, info) {
-      if (err) {
-        fn(err);
-      } else if ('count' in info && info.count === 0) {
-        err = new Error(g.f('Could not find {{accessToken}}'));
-        err.statusCode = 401;
-        fn(err);
-      } else {
-        fn();
+    try {
+      const info = await this.relations.accessTokens.modelTo.destroyById(tokenId)
+      
+      if ('count' in info && info.count === 0) {
+        const err = new Error(g.f('Could not find {{accessToken}}'))
+        err.statusCode = 401
+        throw err
       }
-    });
-  };
+      
+      return info
+    } catch (err) {
+      throw err
+    }
+  }
 
-  User.observe('before delete', function(ctx, next) {
+  User.observe('before delete', async function(ctx) {
     // Do nothing when the access control was disabled for this user model.
-    if (!ctx.Model.relations.accessTokens) return next();
+    if (!ctx.Model.relations.accessTokens) return
 
-    const AccessToken = ctx.Model.relations.accessTokens.modelTo;
-    const pkName = ctx.Model.definition.idName() || 'id';
-    ctx.Model.find({where: ctx.where, fields: [pkName]}, function(err, list) {
-      if (err) return next(err);
+    const AccessToken = ctx.Model.relations.accessTokens.modelTo
+    const pkName = ctx.Model.definition.idName() || 'id'
+    
+    const list = await ctx.Model.find({where: ctx.where, fields: [pkName]})
+    
+    const ids = list.map(function(u) { return u[pkName] })
+    ctx.where = {}
+    ctx.where[pkName] = {inq: ids}
 
-      const ids = list.map(function(u) { return u[pkName]; });
-      ctx.where = {};
-      ctx.where[pkName] = {inq: ids};
-
-      AccessToken.destroyAll({userId: {inq: ids}}, next);
-    });
-  });
+    await AccessToken.destroyAll({userId: {inq: ids}})
+  })
 
   /**
    * Compare the given `password` with the users hashed password.
    *
    * @param {String} password The plain text password
-   * @callback {Function} callback Callback function
-   * @param {Error} err Error object
-   * @param {Boolean} isMatch Returns true if the given `password` matches record
-   * @promise
+   * @returns {Promise<Boolean>} Returns true if the given `password` matches record
    */
-
-  User.prototype.hasPassword = function(plain, fn) {
-    if (!fn) {
-      return new Promise((resolve, reject) => {
-        this.hasPassword(plain, (err, result) => err ? reject(err) : resolve(result))
-      })
-    }
-
+  User.prototype.hasPassword = async function(plain) {
     if (this.password && plain) {
-      bcrypt.compare(plain, this.password, function(err, isMatch) {
-        if (err) return fn(err);
-        fn(null, isMatch);
-      });
+      return await bcrypt.compare(plain, this.password)
     } else {
-      fn(null, false);
+      return false
     }
-  };
+  }
 
   /**
    * Change this user's password.
    *
    * @param {*} userId Id of the user changing the password
-   * @param {string} oldPassword Current password, required in order
-   *   to strongly verify the identity of the requesting user
-   * @param {string} newPassword The new password to use.
-   * @param {object} [options]
-   * @callback {Function} callback
-   * @param {Error} err Error object
-   * @promise
+   * @param {string} oldPassword Current password, required to verify user identity
+   * @param {string} newPassword The new password to use
+   * @param {object} [options] Additional options
+   * @returns {Promise<Object>} The updated user instance
    */
-  User.changePassword = function(userId, oldPassword, newPassword, options, cb) {
-    if (typeof options === 'function') {
-      cb = options
-      options = undefined
+  User.changePassword = async function(userId, oldPassword, newPassword, options) {
+    // Use the instance method on the appropriate (sub)class
+    const inst = await this.findById(userId, options)
+    
+    if (!inst) {
+      const err = new Error(`User ${userId} not found`)
+      Object.assign(err, {code: 'USER_NOT_FOUND', statusCode: 401})
+      throw err
     }
-    if (!cb) {
-      return new Promise((resolve, reject) => {
-        this.changePassword(userId, oldPassword, newPassword, options, (err, result) =>
-          err ? reject(err) : resolve(result)
-        )
-      })
-    }
-
-    // Use the instance method on the appropriate (sub)class.
-    this.findById(userId, options, (err, inst) => {
-      if (err) return cb(err)
-      if (!inst) {
-        const err = new Error(`User ${userId} not found`)
-        Object.assign(err, {code: 'USER_NOT_FOUND', statusCode: 401})
-        return cb(err)
-      }
-      inst.changePassword(oldPassword, newPassword, options, cb)
-    })
+    
+    return await inst.changePassword(oldPassword, newPassword, options)
   }
 
   /**
    * Change this user's password (prototype/instance version).
    *
-   * @param {string} oldPassword Current password, required in order
-   *   to strongly verify the identity of the requesting user
-   * @param {string} newPassword The new password to use.
-   * @param {object} [options]
-   * @callback {Function} callback
-   * @param {Error} err Error object
-   * @promise
+   * @param {string} oldPassword Current password, required to verify user identity
+   * @param {string} newPassword The new password to use
+   * @param {object} [options] Additional options
+   * @returns {Promise<Object>} The updated user instance
    */
-  User.prototype.changePassword = function(oldPassword, newPassword, options, cb) {
-    if (typeof options === 'function') {
-      cb = options
-      options = undefined
+  User.prototype.changePassword = async function(oldPassword, newPassword, options) {
+    const isMatch = await this.hasPassword(oldPassword)
+    
+    if (!isMatch) {
+      const err = new Error('Invalid current password')
+      Object.assign(err, {code: 'INVALID_PASSWORD', statusCode: 400})
+      throw err
     }
-    if (!cb) {
-      return new Promise((resolve, reject) => {
-        this.changePassword(oldPassword, newPassword, options, (err, result) =>
-          err ? reject(err) : resolve(result)
-        )
-      })
-    }
-
-    this.hasPassword(oldPassword, (err, isMatch) => {
-      if (err) return cb(err)
-      if (!isMatch) {
-        const err = new Error('Invalid current password')
-        Object.assign(err, {code: 'INVALID_PASSWORD', statusCode: 400})
-        return cb(err)
-      }
-      this.setPassword(newPassword, options, cb)
-    })
+    
+    return await this.setPassword(newPassword, options)
   }
 
   /**
    * Set this user's password after a password-reset request was made.
    *
    * @param {*} userId Id of the user changing the password
-   * @param {string} newPassword The new password to use.
+   * @param {string} newPassword The new password to use
    * @param {Object} [options] Additional options including remoting context
-   * @callback {Function} callback
-   * @param {Error} err Error object
-   * @promise
+   * @returns {Promise<Object>} The updated user instance
    */
-  User.setPassword = function(userId, newPassword, options, cb) {
+  User.setPassword = async function(userId, newPassword, options) {
     assert(userId != null && userId !== '', 'userId is a required argument')
     assert(!!newPassword, 'newPassword is a required argument')
-
-    if (typeof options === 'function') {
-      cb = options
-      options = undefined
-    }
-
-    if (!cb) {
-      return new Promise((resolve, reject) => {
-        this.setPassword(userId, newPassword, options, (err, result) =>
-          err ? reject(err) : resolve(result)
-        )
-      })
-    }
 
     // Validate token scope first. When the settings flag is enabled and an
     // access token is provided, the token must have the 'reset-password' scope.
@@ -525,72 +415,22 @@ module.exports = function(User) {
         const err = new Error('Invalid token scope')
         err.statusCode = 403
         err.code = 'INVALID_TOKEN_SCOPE'
-        process.nextTick(() => cb(err))
-        return
+        throw err
       }
     }
 
-    try {
-      this.validatePassword(newPassword)
-    } catch (err) {
-      process.nextTick(() => cb(err))
-      return
+    // Validate the password
+    this.validatePassword(newPassword)
+
+    // Find the user and set the password
+    const inst = await this.findById(userId, options)
+    if (!inst) {
+      const err = new Error(`User ${userId} not found`)
+      Object.assign(err, {code: 'USER_NOT_FOUND', statusCode: 401})
+      throw err
     }
-
-    this.findById(userId, options, (err, inst) => {
-      if (err) return cb(err)
-      if (!inst) {
-        const err = new Error(`User ${userId} not found`)
-        Object.assign(err, {code: 'USER_NOT_FOUND', statusCode: 401})
-        return cb(err)
-      }
-      inst.setPassword(newPassword, options, cb)
-    })
-  }
-
-  /**
-   * Set this user's password. The callers of this method
-   * must ensure the client making the request is authorized
-   * to change the password, typically by providing the correct
-   * current password or a password-reset token.
-   *
-   * @param {string} newPassword The new password to use.
-   * @param {Object} [options] Additional options including remoting context
-   * @callback {Function} callback
-   * @param {Error} err Error object
-   * @promise
-   */
-  User.prototype.setPassword = function(newPassword, options, cb) {
-    assert(!!newPassword, 'newPassword is a required argument')
-
-    if (typeof options === 'function') {
-      cb = options
-      options = undefined
-    }
-
-    if (!cb) {
-      return new Promise((resolve, reject) => {
-        this.setPassword(newPassword, options, (err, result) =>
-          err ? reject(err) : resolve(result)
-        )
-      })
-    }
-
-    try {
-      this.constructor.validatePassword(newPassword)
-    } catch (err) {
-      process.nextTick(() => cb(err))
-      return
-    }
-
-    options = Object.assign({}, options)
-    options.setPassword = true
-
-    const delta = {password: newPassword}
-    this.patchAttributes(delta, options, (err, updated) => {
-      if (err) return cb(err)
-      cb(null, updated)
-    })
+    
+    return await inst.setPassword(newPassword, options)
   }
 
   /**
@@ -671,224 +511,208 @@ module.exports = function(User) {
    * NOTE: Currently only email verification is supported
    *
    * ```js
-   * var verifyOptions = {
+   * const verifyOptions = {
    *   type: 'email',
    *   from: 'noreply@example.com'
    *   template: 'verify.ejs',
-   *   redirect: '/',
-   *   generateVerificationToken: function (user, options, cb) {
-   *     cb('random-token');
-   *   }
-   * };
+   *   redirect: '/'
+   * }
    *
-   * user.verify(verifyOptions);
+   * await user.verify(verifyOptions)
    * ```
    *
    * NOTE: the User.getVerifyOptions() method can also be used to ease the
    * building of identity verification options.
    *
    * ```js
-   * var verifyOptions = MyUser.getVerifyOptions();
-   * user.verify(verifyOptions);
+   * const verifyOptions = MyUser.getVerifyOptions()
+   * await user.verify(verifyOptions)
    * ```
    *
    * @options {Object} verifyOptions
-   * @property {String} type Must be `'email'` in the current implementation.
-   * @property {Function} mailer A mailer function with a static `.send() method.
-   *  The `.send()` method must accept the verifyOptions object, the method's
-   *  remoting context options object and a callback function with `(err, email)`
-   *  as parameters.
-   *  Defaults to provided `userModel.email` function, or ultimately to LoopBack's
-   *  own mailer function.
-   * @property {String} to Email address to which verification email is sent.
-   *  Defaults to user's email. Can also be overriden to a static value for test
-   *  purposes.
+   * @property {String} type Must be `'email'` in the current implementation
+   * @property {Function} mailer A mailer function with a static `.send() method
+   * @property {String} to Email address to which verification email is sent
    * @property {String} from Sender email address
-   *  For example `'noreply@example.com'`.
-   * @property {String} subject Subject line text.
-   *  Defaults to `'Thanks for Registering'` or a local equivalent.
-   * @property {String} text Text of email.
-   *  Defaults to `'Please verify your email by opening this link in a web browser:`
-   *  followed by the verify link.
-   * @property {Object} headers Email headers. None provided by default.
-   * @property {String} template Relative path of template that displays verification
-   *  page. Defaults to `'../../templates/verify.ejs'`.
+   * @property {String} subject Subject line text
+   * @property {String} text Text of email
+   * @property {Object} headers Email headers
+   * @property {String} template Relative path of template
    * @property {Function} templateFn A function generating the email HTML body
-   *  from `verify()` options object and generated attributes like `options.verifyHref`.
-   *  It must accept the verifyOptions object, the method's remoting context options
-   *  object and a callback function with `(err, html)` as parameters.
-   *  A default templateFn function is provided, see `createVerificationEmailBody()`
-   *  for implementation details.
-   * @property {String} redirect Page to which user will be redirected after
-   *  they verify their email. Defaults to `'/'`.
-   * @property {String} verifyHref The link to include in the user's verify message.
-   *  Defaults to an url analog to:
-   *  `http://host:port/restApiRoot/userRestPath/confirm?uid=userId&redirect=/``
-   * @property {String} host The API host. Defaults to app's host or `localhost`.
-   * @property {String} protocol The API protocol. Defaults to `'http'`.
-   * @property {Number} port The API port. Defaults to app's port or `3000`.
-   * @property {String} restApiRoot The API root path. Defaults to app's restApiRoot
-   *  or `'/api'`
-   * @property {Function} generateVerificationToken A function to be used to
-   *  generate the verification token.
-   *  It must accept the verifyOptions object, the method's remoting context options
-   *  object and a callback function with `(err, hexStringBuffer)` as parameters.
-   *  This function should NOT add the token to the user object, instead simply
-   *  execute the callback with the token! User saving and email sending will be
-   *  handled in the `verify()` method.
-   *  A default token generation function is provided, see `generateVerificationToken()`
-   *  for implementation details.
-   * @callback {Function} cb Callback function.
-   * @param {Object} options remote context options.
-   * @param {Error} err Error object.
-   * @param {Object} object Contains email, token, uid.
-   * @promise
+   * @property {String} redirect Page to which user will be redirected
+   * @property {String} verifyHref The link to include in the user's verify message
+   * @property {String} host The API host
+   * @property {String} protocol The API protocol
+   * @property {Number} port The API port
+   * @property {String} restApiRoot The API root path
+   * @property {Function} generateVerificationToken A function to generate the verification token
+   * @param {Object} options Remote context options
+   * @returns {Promise<Object>} Contains email, token, uid
    */
+  User.prototype.verify = async function(verifyOptions, options) {
+    const user = this
+    const userModel = this.constructor
+    const registry = userModel.registry
+    verifyOptions = Object.assign({}, verifyOptions)
+    
+    // Set a default template generation function if none provided
+    verifyOptions.templateFn = verifyOptions.templateFn || createVerificationEmailBody
 
-  User.prototype.verify = function(verifyOptions, options, cb) {
-    if (cb === undefined && typeof options === 'function') {
-      cb = options
-      options = undefined
+    // Set a default token generation function if none provided
+    verifyOptions.generateVerificationToken = verifyOptions.generateVerificationToken ||
+      User.generateVerificationToken
+
+    // Set a default mailer function if none provided
+    verifyOptions.mailer = verifyOptions.mailer || userModel.email ||
+      registry.getModelByType(loopback.Email)
+
+    const pkName = userModel.definition.idName() || 'id'
+    verifyOptions.redirect = verifyOptions.redirect || '/'
+    const defaultTemplate = path.join(__dirname, '..', '..', 'templates', 'verify.ejs')
+    verifyOptions.template = path.resolve(verifyOptions.template || defaultTemplate)
+    verifyOptions.user = user
+    verifyOptions.protocol = verifyOptions.protocol || 'http'
+
+    const app = userModel.app
+    verifyOptions.host = verifyOptions.host || (app && app.get('host')) || 'localhost'
+    verifyOptions.port = verifyOptions.port || (app && app.get('port')) || 3000
+    verifyOptions.restApiRoot = verifyOptions.restApiRoot || (app && app.get('restApiRoot')) || '/api'
+
+    const displayPort = (
+      (verifyOptions.protocol === 'http' && verifyOptions.port == '80') ||
+      (verifyOptions.protocol === 'https' && verifyOptions.port == '443')
+    ) ? '' : ':' + verifyOptions.port
+
+    if (!verifyOptions.verifyHref) {
+      const confirmMethod = userModel.sharedClass.findMethodByName('confirm')
+      if (!confirmMethod) {
+        throw new Error(
+          'Cannot build user verification URL, ' +
+          'the default confirm method is not public. ' +
+          'Please provide the URL in verifyOptions.verifyHref.'
+        )
+      }
+
+      const urlPath = joinUrlPath(
+        verifyOptions.restApiRoot,
+        userModel.http.path,
+        confirmMethod.http.path
+      )
+
+      verifyOptions.verifyHref =
+        verifyOptions.protocol +
+        '://' +
+        verifyOptions.host +
+        displayPort +
+        urlPath +
+        '?' + qs.stringify({
+          uid: '' + verifyOptions.user[pkName],
+          redirect: verifyOptions.redirect,
+        })
     }
 
-    const verifyPromise = new Promise((resolve, reject) => {
-      const user = this
-      const userModel = this.constructor
-      const registry = userModel.registry
-      verifyOptions = Object.assign({}, verifyOptions)
-      
-      // Set a default template generation function if none provided
-      verifyOptions.templateFn = verifyOptions.templateFn || createVerificationEmailBody
+    verifyOptions.to = verifyOptions.to || user.email
+    verifyOptions.subject = verifyOptions.subject || g.f('Thanks for Registering')
+    verifyOptions.headers = verifyOptions.headers || {}
 
-      // Set a default token generation function if none provided
-      verifyOptions.generateVerificationToken = verifyOptions.generateVerificationToken ||
-        User.generateVerificationToken
+    // assert the verifyOptions params that might have been badly defined
+    assertVerifyOptions(verifyOptions)
 
-      // Set a default mailer function if none provided
-      verifyOptions.mailer = verifyOptions.mailer || userModel.email ||
-        registry.getModelByType(loopback.Email)
+    // Generate verification token
+    const token = await generateVerificationToken(user, options, verifyOptions.generateVerificationToken)
+    
+    // Add the token to the user and save
+    user.verificationToken = token
+    await user.save(options)
+    
+    // Send verification email
+    verifyOptions.verifyHref +=
+      verifyOptions.verifyHref.indexOf('?') === -1 ? '?' : '&'
+    verifyOptions.verifyHref += 'token=' + user.verificationToken
 
-      const pkName = userModel.definition.idName() || 'id'
-      verifyOptions.redirect = verifyOptions.redirect || '/'
-      const defaultTemplate = path.join(__dirname, '..', '..', 'templates', 'verify.ejs')
-      verifyOptions.template = path.resolve(verifyOptions.template || defaultTemplate)
-      verifyOptions.user = user
-      verifyOptions.protocol = verifyOptions.protocol || 'http'
+    verifyOptions.verificationToken = user.verificationToken
+    verifyOptions.text = verifyOptions.text || g.f('Please verify your email by opening ' +
+      'this link in a web browser:\n\t%s', verifyOptions.verifyHref)
+    verifyOptions.text = verifyOptions.text.replace(/\{href\}/g, verifyOptions.verifyHref)
 
-      const app = userModel.app
-      verifyOptions.host = verifyOptions.host || (app && app.get('host')) || 'localhost'
-      verifyOptions.port = verifyOptions.port || (app && app.get('port')) || 3000
-      verifyOptions.restApiRoot = verifyOptions.restApiRoot || (app && app.get('restApiRoot')) || '/api'
+    // Generate email HTML content
+    const html = await generateEmailTemplate(verifyOptions, options)
+    verifyOptions.html = html
 
-      const displayPort = (
-        (verifyOptions.protocol === 'http' && verifyOptions.port == '80') ||
-        (verifyOptions.protocol === 'https' && verifyOptions.port == '443')
-      ) ? '' : ':' + verifyOptions.port
+    // Remove verifyOptions.template to prevent rejection by certain
+    // nodemailer transport plugins.
+    delete verifyOptions.template
 
-      if (!verifyOptions.verifyHref) {
-        const confirmMethod = userModel.sharedClass.findMethodByName('confirm')
-        if (!confirmMethod) {
-          throw new Error(
-            'Cannot build user verification URL, ' +
-            'the default confirm method is not public. ' +
-            'Please provide the URL in verifyOptions.verifyHref.'
-          )
-        }
+    // Send the email
+    const email = await sendVerificationEmail(verifyOptions, options)
+    
+    return {
+      email: email, 
+      token: user.verificationToken, 
+      uid: user[pkName]
+    }
+  }
 
-        const urlPath = joinUrlPath(
-          verifyOptions.restApiRoot,
-          userModel.http.path,
-          confirmMethod.http.path
-        )
-
-        verifyOptions.verifyHref =
-          verifyOptions.protocol +
-          '://' +
-          verifyOptions.host +
-          displayPort +
-          urlPath +
-          '?' + qs.stringify({
-            uid: '' + verifyOptions.user[pkName],
-            redirect: verifyOptions.redirect,
-          })
-      }
-
-      verifyOptions.to = verifyOptions.to || user.email
-      verifyOptions.subject = verifyOptions.subject || g.f('Thanks for Registering')
-      verifyOptions.headers = verifyOptions.headers || {}
-
-      // assert the verifyOptions params that might have been badly defined
-      assertVerifyOptions(verifyOptions)
-
-      // argument "options" is passed depending on verifyOptions.generateVerificationToken function requirements
-      const tokenGenerator = verifyOptions.generateVerificationToken
-      if (tokenGenerator.length == 3) {
-        tokenGenerator(user, options, addTokenToUserAndSave)
-      } else {
-        tokenGenerator(user, addTokenToUserAndSave)
-      }
-
-      function addTokenToUserAndSave(err, token) {
-        if (err) return reject(err)
-        user.verificationToken = token
-        user.save(options, function(err) {
+  /**
+   * Helper function to generate verification token
+   */
+  async function generateVerificationToken(user, options, tokenGenerator) {
+    return new Promise((resolve, reject) => {
+      // Call the token generator based on its expected arity
+      if (tokenGenerator.length === 3) {
+        tokenGenerator(user, options, (err, token) => {
           if (err) return reject(err)
-          sendEmail(user)
+          resolve(token)
+        })
+      } else {
+        tokenGenerator(user, (err, token) => {
+          if (err) return reject(err)
+          resolve(token)
         })
       }
+    })
+  }
 
-      function sendEmail(user) {
-        verifyOptions.verifyHref +=
-          verifyOptions.verifyHref.indexOf('?') === -1 ? '?' : '&'
-        verifyOptions.verifyHref += 'token=' + user.verificationToken
-
-        verifyOptions.verificationToken = user.verificationToken
-        verifyOptions.text = verifyOptions.text || g.f('Please verify your email by opening ' +
-          'this link in a web browser:\n\t%s', verifyOptions.verifyHref)
-        verifyOptions.text = verifyOptions.text.replace(/\{href\}/g, verifyOptions.verifyHref)
-
-        // argument "options" is passed depending on templateFn function requirements
-        const templateFn = verifyOptions.templateFn
-        if (templateFn.length == 3) {
-          templateFn(verifyOptions, options, setHtmlContentAndSend)
-        } else {
-          templateFn(verifyOptions, setHtmlContentAndSend)
-        }
-
-        function setHtmlContentAndSend(err, html) {
+  /**
+   * Helper function to generate email template
+   */
+  async function generateEmailTemplate(verifyOptions, options) {
+    return new Promise((resolve, reject) => {
+      const templateFn = verifyOptions.templateFn
+      // Call the template generator based on its expected arity
+      if (templateFn.length === 3) {
+        templateFn(verifyOptions, options, (err, html) => {
           if (err) return reject(err)
-
-          verifyOptions.html = html
-
-          // Remove verifyOptions.template to prevent rejection by certain
-          // nodemailer transport plugins.
-          delete verifyOptions.template
-
-          // argument "options" is passed depending on Email.send function requirements
-          const Email = verifyOptions.mailer
-          if (Email.send.length == 3) {
-            Email.send(verifyOptions, options, handleAfterSend)
-          } else {
-            Email.send(verifyOptions, handleAfterSend)
-          }
-
-          function handleAfterSend(err, email) {
-            if (err) return reject(err)
-            resolve({email: email, token: user.verificationToken, uid: user[pkName]})
-          }
-        }
+          resolve(html)
+        })
+      } else {
+        templateFn(verifyOptions, (err, html) => {
+          if (err) return reject(err)
+          resolve(html)
+        })
       }
     })
+  }
 
-    // Support both callback and promise styles
-    if (cb) {
-      verifyPromise
-        .then(result => cb(null, result))
-        .catch(err => cb(err))
-      return
-    }
-
-    return verifyPromise
+  /**
+   * Helper function to send verification email
+   */
+  async function sendVerificationEmail(verifyOptions, options) {
+    return new Promise((resolve, reject) => {
+      const Email = verifyOptions.mailer
+      // Call the email sender based on its expected arity
+      if (Email.send.length === 3) {
+        Email.send(verifyOptions, options, (err, email) => {
+          if (err) return reject(err)
+          resolve(email)
+        })
+      } else {
+        Email.send(verifyOptions, (err, email) => {
+          if (err) return reject(err)
+          resolve(email)
+        })
+      }
+    })
   }
 
   function createVerificationEmailBody(verifyOptions, options, cb) {
@@ -909,20 +733,23 @@ module.exports = function(User) {
 
   /**
    * A default verification token generator which accepts the user the token is
-   * being generated for and a callback function to indicate completion.
-   * This one uses the crypto library and 64 random bytes (converted to hex)
-   * for the token. When used in combination with the user.verify() method this
-   * function will be called with the `user` object as it's context (`this`).
+   * being generated for. This one uses the crypto library and 64 random bytes
+   * (converted to hex) for the token. When used in combination with the
+   * user.verify() method this function will be called with the `user` object
+   * as it's context (`this`).
    *
-   * @param {object} user The User this token is being generated for.
-   * @param {object} options remote context options.
-   * @param {Function} cb The generator must pass back the new token with this function call.
+   * @param {object} user The User this token is being generated for
+   * @param {object} options Remote context options
+   * @returns {Promise<string>} The generated token
    */
-  User.generateVerificationToken = function(user, options, cb) {
-    crypto.randomBytes(64, function(err, buf) {
-      cb(err, buf && buf.toString('hex'));
-    });
-  };
+  User.generateVerificationToken = async function(user, options) {
+    return new Promise((resolve, reject) => {
+      crypto.randomBytes(64, (err, buf) => {
+        if (err) return reject(err)
+        resolve(buf.toString('hex'))
+      })
+    })
+  }
 
   /**
    * Confirm the user's identity.
@@ -930,149 +757,108 @@ module.exports = function(User) {
    * @param {Any} userId
    * @param {String} token The validation token
    * @param {String} redirect URL to redirect the user to once confirmed
-   * @callback {Function} callback
-   * @param {Error} err
-   * @promise
+   * @returns {Promise<Object>} Returns the user object if redirect is true
    */
-  User.confirm = function(userId, token, redirect, fn) {
-    // Handle optional redirect param
-    if (typeof redirect === 'function') {
-      fn = redirect
-      redirect = undefined
+  User.confirm = async function(userId, token, redirect) {
+    const user = await this.findById(userId)
+    
+    if (!user) {
+      const err = new Error(g.f('User not found: %s', userId))
+      err.statusCode = 404
+      err.code = 'USER_NOT_FOUND'
+      throw err
     }
 
-    const confirmPromise = this.findById(userId)
-      .then(user => {
-        if (!user) {
-          const err = new Error(g.f('User not found: %s', userId))
-          err.statusCode = 404
-          err.code = 'USER_NOT_FOUND'
-          throw err
-        }
-
-        if (user.verificationToken !== token) {
-          const err = new Error(g.f('Invalid token: %s', token))
-          err.statusCode = 400
-          err.code = 'INVALID_TOKEN'
-          throw err
-        }
-
-        return user.updateAttributes({
-          verificationToken: null,
-          emailVerified: true
-        })
-      })
-      .then(user => {
-        // Match the original behavior - only return user for redirect case
-        if (redirect) {
-          return { user }
-        }
-        return undefined
-      })
-
-    // Support both callback and promise styles
-    if (fn) {
-      confirmPromise
-        .then(result => fn(null, result))
-        .catch(err => fn(err))
-      return
+    if (user.verificationToken !== token) {
+      const err = new Error(g.f('Invalid token: %s', token))
+      err.statusCode = 400
+      err.code = 'INVALID_TOKEN'
+      throw err
     }
 
-    return confirmPromise
+    const updatedUser = await user.updateAttributes({
+      verificationToken: null,
+      emailVerified: true
+    })
+
+    // Match the original behavior - only return user for redirect case
+    if (redirect) {
+      return { user: updatedUser }
+    }
+    return undefined
   }
 
   /**
    * Create a short lived access token for temporary login. Allows users
    * to change passwords if forgotten.
    *
-   * @options {Object} options
-   * @prop {String} email The user's email address
-   * @property {String} realm The user's realm (optional)
-   * @callback {Function} callback
-   * @param {Error} err
-   * @promise
+   * @param {Object} options
+   * @param {String} options.email The user's email address
+   * @param {String} [options.realm] The user's realm (optional)
+   * @returns {Promise<Object>} Access token object
    */
-
-  User.resetPassword = function(options, cb) {
-    if (!cb) {
-      return new Promise((resolve, reject) => {
-        this.resetPassword(options, (err, result) => err ? reject(err) : resolve(result))
-      })
-    }
-
-    const UserModel = this;
-    const ttl = UserModel.settings.resetPasswordTokenTTL || DEFAULT_RESET_PW_TTL;
-    options = options || {};
+  User.resetPassword = async function(options) {
+    const UserModel = this
+    const ttl = UserModel.settings.resetPasswordTokenTTL || DEFAULT_RESET_PW_TTL
+    options = options || {}
+    
     if (typeof options.email !== 'string') {
-      const err = new Error(g.f('Email is required'));
-      err.statusCode = 400;
-      err.code = 'EMAIL_REQUIRED';
-      cb(err);
-      return cb.promise;
+      const err = new Error(g.f('Email is required'))
+      err.statusCode = 400
+      err.code = 'EMAIL_REQUIRED'
+      throw err
     }
 
-    try {
-      if (options.password) {
-        UserModel.validatePassword(options.password);
-      }
-    } catch (err) {
-      return cb(err);
+    if (options.password) {
+      UserModel.validatePassword(options.password)
     }
+    
     const where = {
       email: options.email,
-    };
-    if (options.realm) {
-      where.realm = options.realm;
     }
-    UserModel.findOne({where: where}, function(err, user) {
-      if (err) {
-        return cb(err);
-      }
-      if (!user) {
-        err = new Error(g.f('Email not found'));
-        err.statusCode = 404;
-        err.code = 'EMAIL_NOT_FOUND';
-        return cb(err);
-      }
-      // create a short lived access token for temp login to change password
-      // TODO(ritch) - eventually this should only allow password change
-      if (UserModel.settings.emailVerificationRequired && !user.emailVerified) {
-        err = new Error(g.f('Email has not been verified'));
-        err.statusCode = 401;
-        err.code = 'RESET_FAILED_EMAIL_NOT_VERIFIED';
-        return cb(err);
-      }
+    if (options.realm) {
+      where.realm = options.realm
+    }
+    
+    const user = await UserModel.findOne({where: where})
+    
+    if (!user) {
+      const err = new Error(g.f('Email not found'))
+      err.statusCode = 404
+      err.code = 'EMAIL_NOT_FOUND'
+      throw err
+    }
+    
+    // create a short lived access token for temp login to change password
+    // TODO(ritch) - eventually this should only allow password change
+    if (UserModel.settings.emailVerificationRequired && !user.emailVerified) {
+      const err = new Error(g.f('Email has not been verified'))
+      err.statusCode = 401
+      err.code = 'RESET_FAILED_EMAIL_NOT_VERIFIED'
+      throw err
+    }
 
-      if (UserModel.settings.restrictResetPasswordTokenScope) {
-        const tokenData = {
-          ttl: ttl,
-          scopes: ['reset-password'],
-        };
-        user.createAccessToken(tokenData, options, onTokenCreated);
-      } else {
-        // We need to preserve backwards-compatibility with
-        // user-supplied implementations of "createAccessToken"
-        // that may not support "options" argument (we have such
-        // examples in our test suite).
-        user.createAccessToken(ttl, onTokenCreated);
+    let accessToken
+    if (UserModel.settings.restrictResetPasswordTokenScope) {
+      const tokenData = {
+        ttl: ttl,
+        scopes: ['reset-password'],
       }
+      accessToken = await user.createAccessToken(tokenData, options)
+    } else {
+      // Backward compatibility: createAccessToken with only ttl
+      accessToken = await user.createAccessToken(ttl)
+    }
 
-      function onTokenCreated(err, accessToken) {
-        if (err) {
-          return cb(err);
-        }
-        cb();
-        UserModel.emit('resetPasswordRequest', {
-          email: options.email,
-          accessToken: accessToken,
-          user: user,
-          options: options,
-        });
-      }
-    });
+    UserModel.emit('resetPasswordRequest', {
+      email: options.email,
+      accessToken: accessToken,
+      user: user,
+      options: options,
+    })
 
-    return cb.promise;
-  };
+    return accessToken
+  }
 
   /*!
    * Hash the plain password
@@ -1108,35 +894,43 @@ module.exports = function(User) {
     return true
   };
 
-  User._invalidateAccessTokensOfUsers = function(userIds, options, cb) {
-    if (typeof options === 'function' && cb === undefined) {
-      cb = options;
-      options = {};
-    }
+  /**
+   * Invalidate access tokens for users matching the given ID array
+   * 
+   * @param {Array} userIds Array of user IDs
+   * @param {Object} options Additional options
+   * @returns {Promise<Object>} Result of token deletion
+   */
+  User._invalidateAccessTokensOfUsers = async function(userIds, options) {
+    options = options || {}
 
     if (!Array.isArray(userIds) || !userIds.length)
-      return process.nextTick(cb);
+      return Promise.resolve()
 
-    const accessTokenRelation = this.relations.accessTokens;
+    const accessTokenRelation = this.relations.accessTokens
     if (!accessTokenRelation)
-      return process.nextTick(cb);
+      return Promise.resolve()
 
-    const AccessToken = accessTokenRelation.modelTo;
-    const query = {userId: {inq: userIds}};
-    const tokenPK = AccessToken.definition.idName() || 'id';
+    const AccessToken = accessTokenRelation.modelTo
+    const query = {userId: {inq: userIds}}
+    const tokenPK = AccessToken.definition.idName() || 'id'
+    
     if (options.accessToken && tokenPK in options.accessToken) {
-      query[tokenPK] = {neq: options.accessToken[tokenPK]};
+      query[tokenPK] = {neq: options.accessToken[tokenPK]}
     }
+    
     // add principalType in AccessToken.query if using polymorphic relations
     // between AccessToken and User
-    const relatedUser = AccessToken.relations.user;
+    const relatedUser = AccessToken.relations.user
     const isRelationPolymorphic = relatedUser && relatedUser.polymorphic &&
-      !relatedUser.modelTo;
+      !relatedUser.modelTo
+      
     if (isRelationPolymorphic) {
-      query.principalType = this.modelName;
+      query.principalType = this.modelName
     }
-    AccessToken.deleteAll(query, options, cb);
-  };
+    
+    return await AccessToken.deleteAll(query, options)
+  }
 
   /*!
    * Setup an extended user model.
@@ -1360,27 +1154,26 @@ module.exports = function(User) {
   // therefore they must be registered outside of setup() function
 
   // Access token to normalize email credentials
-  User.observe('access', function normalizeEmailCase(ctx, next) {
+  User.observe('access', async function normalizeEmailCase(ctx) {
     if (!ctx.Model.settings.caseSensitiveEmail && ctx.query.where &&
         ctx.query.where.email && typeof(ctx.query.where.email) === 'string') {
-      ctx.query.where.email = ctx.query.where.email.toLowerCase();
+      ctx.query.where.email = ctx.query.where.email.toLowerCase()
     }
-    next();
-  });
+  })
 
-  User.observe('before save', function rejectInsecurePasswordChange(ctx, next) {
-    const UserModel = ctx.Model;
+  User.observe('before save', async function rejectInsecurePasswordChange(ctx) {
+    const UserModel = ctx.Model
     if (!UserModel.settings.rejectPasswordChangesViaPatchOrReplace) {
       // In legacy password flow, any DAO method can change the password
-      return next();
+      return
     }
 
     if (ctx.isNewInstance) {
       // The password can be always set when creating a new User instance
-      return next();
+      return
     }
-    const data = ctx.data || ctx.instance;
-    const isPasswordChange = 'password' in data;
+    const data = ctx.data || ctx.instance
+    const isPasswordChange = 'password' in data
 
     // This is the option set by `setPassword()` API
     // when calling `this.patchAttritubes()` to change user's password
@@ -1388,94 +1181,116 @@ module.exports = function(User) {
       // Verify that only the password is changed and nothing more or less.
       if (Object.keys(data).length > 1 || !isPasswordChange) {
         // This is a programmer's error, use the default status code 500
-        return next(new Error(
+        throw new Error(
           'Invalid use of "options.setPassword". Only "password" can be ' +
-          'changed when using this option.',
-        ));
+          'changed when using this option.'
+        )
       }
 
-      return next();
+      return
     }
 
     if (!isPasswordChange) {
-      return next();
+      return
     }
 
     const err = new Error(
       'Changing user password via patch/replace API is not allowed. ' +
-      'Use changePassword() or setPassword() instead.',
-    );
-    err.statusCode = 401;
-    err.code = 'PASSWORD_CHANGE_NOT_ALLOWED';
-    next(err);
-  });
+      'Use changePassword() or setPassword() instead.'
+    )
+    err.statusCode = 401
+    err.code = 'PASSWORD_CHANGE_NOT_ALLOWED'
+    throw err
+  })
 
-  User.observe('before save', function prepareForTokenInvalidation(ctx, next) {
-    if (ctx.isNewInstance) return next();
-    if (!ctx.where && !ctx.instance) return next();
+  User.observe('before save', async function prepareForTokenInvalidation(ctx) {
+    if (ctx.isNewInstance) return
+    if (!ctx.where && !ctx.instance) return
 
-    const pkName = ctx.Model.definition.idName() || 'id';
-    let where = ctx.where;
+    const pkName = ctx.Model.definition.idName() || 'id'
+    let where = ctx.where
     if (!where) {
-      where = {};
-      where[pkName] = ctx.instance[pkName];
+      where = {}
+      where[pkName] = ctx.instance[pkName]
     }
 
-    ctx.Model.find({where: where}, ctx.options, function(err, userInstances) {
-      if (err) return next(err);
-      ctx.hookState.originalUserData = userInstances.map(function(u) {
-        const user = {};
-        user[pkName] = u[pkName];
-        user.email = u.email;
-        user.password = u.password;
-        return user;
-      });
-      let emailChanged;
-      if (ctx.instance) {
-        // Check if map does not return an empty array
-        // Fix server crashes when try to PUT a non existent id
-        if (ctx.hookState.originalUserData.length > 0) {
-          emailChanged = ctx.instance.email !== ctx.hookState.originalUserData[0].email;
-        } else {
-          emailChanged = true;
-        }
-
-        if (emailChanged && ctx.Model.settings.emailVerificationRequired) {
-          ctx.instance.emailVerified = false;
-        }
-      } else if (ctx.data.email) {
-        emailChanged = ctx.hookState.originalUserData.some(function(data) {
-          return data.email != ctx.data.email;
-        });
-        if (emailChanged && ctx.Model.settings.emailVerificationRequired) {
-          ctx.data.emailVerified = false;
-        }
+    const userInstances = await ctx.Model.find({where: where}, ctx.options)
+    
+    ctx.hookState.originalUserData = userInstances.map(function(u) {
+      const user = {}
+      user[pkName] = u[pkName]
+      user.email = u.email
+      user.password = u.password
+      return user
+    })
+    
+    let emailChanged
+    if (ctx.instance) {
+      // Check if map does not return an empty array
+      // Fix server crashes when try to PUT a non existent id
+      if (ctx.hookState.originalUserData.length > 0) {
+        emailChanged = ctx.instance.email !== ctx.hookState.originalUserData[0].email
+      } else {
+        emailChanged = true
       }
 
-      next();
-    });
-  });
+      if (emailChanged && ctx.Model.settings.emailVerificationRequired) {
+        ctx.instance.emailVerified = false
+      }
+    } else if (ctx.data.email) {
+      emailChanged = ctx.hookState.originalUserData.some(function(data) {
+        return data.email != ctx.data.email
+      })
+      if (emailChanged && ctx.Model.settings.emailVerificationRequired) {
+        ctx.data.emailVerified = false
+      }
+    }
+  })
 
-  User.observe('after save', function invalidateOtherTokens(ctx, next) {
-    if (!ctx.instance && !ctx.data) return next();
-    if (!ctx.hookState.originalUserData) return next();
+  User.observe('after save', async function invalidateOtherTokens(ctx) {
+    if (!ctx.instance && !ctx.data) return
+    if (!ctx.hookState.originalUserData) return
 
-    const pkName = ctx.Model.definition.idName() || 'id';
-    const newEmail = (ctx.instance || ctx.data).email;
-    const newPassword = (ctx.instance || ctx.data).password;
+    const pkName = ctx.Model.definition.idName() || 'id'
+    const newEmail = (ctx.instance || ctx.data).email
+    const newPassword = (ctx.instance || ctx.data).password
 
-    if (!newEmail && !newPassword) return next();
+    if (!newEmail && !newPassword) return
 
-    if (ctx.options.preserveAccessTokens) return next();
+    if (ctx.options.preserveAccessTokens) return
 
     const userIdsToExpire = ctx.hookState.originalUserData.filter(function(u) {
       return (newEmail && u.email !== newEmail) ||
-        (newPassword && u.password !== newPassword);
+        (newPassword && u.password !== newPassword)
     }).map(function(u) {
-      return u[pkName];
-    });
-    ctx.Model._invalidateAccessTokensOfUsers(userIdsToExpire, ctx.options, next);
-  });
+      return u[pkName]
+    })
+    
+    await ctx.Model._invalidateAccessTokensOfUsers(userIdsToExpire, ctx.options)
+  })
+
+  /**
+   * Set this user's password. The callers of this method
+   * must ensure the client making the request is authorized
+   * to change the password, typically by providing the correct
+   * current password or a password-reset token.
+   *
+   * @param {string} newPassword The new password to use
+   * @param {Object} [options] Additional options including remoting context
+   * @returns {Promise<Object>} The updated user instance
+   */
+  User.prototype.setPassword = async function(newPassword, options) {
+    assert(!!newPassword, 'newPassword is a required argument')
+
+    // Validate the password
+    this.constructor.validatePassword(newPassword)
+
+    options = Object.assign({}, options)
+    options.setPassword = true
+
+    const delta = {password: newPassword}
+    return await this.patchAttributes(delta, options)
+  }
 };
 
 function emailValidator(err) {
@@ -1512,3 +1327,4 @@ function assertVerifyOptions(verifyOptions) {
   assert(verifyOptions.mailer, 'A mailer function must be provided')
   assert(typeof verifyOptions.mailer.send === 'function', 'mailer.send must be a function ')
 }
+
