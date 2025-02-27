@@ -108,29 +108,39 @@ _beforeEach.givenUser = function(attrs, optionalHandler) {
 
 _beforeEach.givenLoggedInUser = function(credentials, optionalHandler) {
   _beforeEach.givenUser(credentials, function(done) {
-    const test = this;
-    this.user.constructor.login(credentials, function(err, token) {
-      if (err) {
-        done(err);
-      } else {
-        test.loggedInAccessToken = token;
+    const test = this
+    
+    // Handle the promise response but maintain callback compatibility
+    this.user.constructor.login(credentials)
+      .then(function(token) {
+        test.loggedInAccessToken = token
+        done()
+      })
+      .catch(function(err) {
+        done(err)
+      })
+  })
 
-        done();
-      }
-    });
-  });
+  if (typeof optionalHandler === 'function') {
+    beforeEach(optionalHandler)
+  }
 
   afterEach(function(done) {
-    const test = this;
-    this.loggedInAccessToken.destroy(function(err) {
-      if (err) return done(err);
-
-      test.loggedInAccessToken = undefined;
-
-      done();
-    });
-  });
-};
+    const test = this
+    if (!test.loggedInAccessToken) {
+      return done()
+    }
+    
+    test.loggedInAccessToken.destroy()
+      .then(function() {
+        test.loggedInAccessToken = undefined
+        done()
+      })
+      .catch(function(err) {
+        done(err)
+      })
+  })
+}
 
 _beforeEach.givenAnUnauthenticatedToken = function(attrs, optionalHandler) {
   _beforeEach.givenModel('accessToken', attrs, optionalHandler);
@@ -205,8 +215,8 @@ _describe.whenLoggedInAsUser = function(credentials, cb) {
 
 _describe.whenCalledByUser = function(credentials, verb, url, data, cb) {
   describe('when called by logged in user', function() {
-    _beforeEach.givenLoggedInUser(credentials);
-    _describe.whenCalledRemotely(verb, url, data, cb);
+    _beforeEach.givenLoggedInUser(credentials)
+    _describe.whenCalledRemotely(verb, url, data, cb)
   });
 };
 

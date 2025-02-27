@@ -159,21 +159,38 @@ describe('access control - integration', function() {
       const userModel = app.registry.getModel('user');
 
       roleModel.registerResolver('$dynamic-role', function(role, context, callback) {
-        if (!(context && context.accessToken && context.accessToken.userId)) {
-          return process.nextTick(function() {
-            if (callback) callback(null, false);
-          });
+        // Handle both Promise and callback patterns
+        const promise = new Promise(function(resolve) {
+          if (!(context && context.accessToken && context.accessToken.userId)) {
+            resolve(false)
+            return
+          }
+          
+          const accessToken = context.accessToken
+          
+          // Use findById without callback, since it's now Promise-based
+          userModel.findById(accessToken.userId)
+            .then(function(user) {
+              if (user && user.email === SPECIAL_USER.email) {
+                resolve(true)
+              } else {
+                resolve(false)
+              }
+            })
+            .catch(function(err) {
+              resolve(false)
+            })
+        })
+        
+        // If callback is provided, use it with the promise result
+        if (callback && typeof callback === 'function') {
+          promise.then(function(result) {
+            callback(null, result)
+          })
         }
-        const accessToken = context.accessToken;
-        userModel.findById(accessToken.userId, function(err, user) {
-          if (err) {
-            return callback(err, false);
-          }
-          if (user && user.email === SPECIAL_USER.email) {
-            return callback(null, true);
-          }
-          return callback(null, false);
-        });
+        
+        // Always return the promise for Promise-based usage
+        return promise
       });
     });
 
