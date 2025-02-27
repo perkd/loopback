@@ -4,17 +4,13 @@
 // License text available at https://opensource.org/licenses/MIT
 
 'use strict';
-const assert = require('assert');
-const loopback = require('../');
-const { Change, PersistedModel } = loopback
-const expect = require('./helpers/expect');
+const assert = require('node:assert');
+const sinon = require('sinon')
 const debug = require('debug')('test');
+const loopback = require('../');
+const { Memory, PersistedModel } = loopback
+const expect = require('./helpers/expect');
 const runtime = require('./../lib/runtime');
-const sinon = require('sinon');
-const async = require('async');
-const DataSource = loopback.DataSource;
-const ModelBuilder = loopback.ModelBuilder || (loopback.registry && loopback.registry.Schema && loopback.registry.Schema.ModelBuilder);
-const Memory = loopback.Memory
 
 // Constants used in the tests
 const REPLICATION_CHUNK_SIZE = 2;
@@ -106,7 +102,8 @@ async function replicateExpectingSuccess(source, target, filter, options) {
   try {
     const result = await source.replicate(target, filter, resolveOptions)
     return result
-  } catch (err) {
+  }
+  catch (err) {
     debug('Replication failed: %s', err.message)
     if (err.details && err.details.conflicts) {
       debug('Conflicts: %j', err.details.conflicts)
@@ -122,10 +119,9 @@ describe('Replication / Change APIs', function() {
   beforeEach(async function() {
     tid++ // Increment tid for unique model names
     useSinceFilter = false // Reset for each test
-    const test = this;
 
     dataSource = this.dataSource = loopback.createDataSource({
-      connector: loopback.Memory,
+      connector: Memory,
     });
 
     // Create checkpoint model first
@@ -1209,10 +1205,9 @@ describe('Replication / Change APIs with custom change properties', function() {
 
   beforeEach(async function() {
     tid++
-    const test = this
 
     dataSource = this.dataSource = loopback.createDataSource({
-      connector: loopback.Memory,
+      connector: Memory,
     })
 
     // Create checkpoint model first
