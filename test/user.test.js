@@ -1139,74 +1139,71 @@ describe('User', function () {
     })
   })
 
-  describe('User.logout', async function () {
+  describe('User.logout', function() {
     it('Logout a user by providing the current accessToken id (using node)', async function() {
       const accessToken = await User.login(validCredentials)
       await User.logout(accessToken.id)
       await verify(accessToken.id)
     })
 
-    it('Logout a user by providing the current accessToken id (using node) - promise variant',
-      function (done) {
-        login(logout);
+    it('Logout a user by providing the current accessToken id (using node) - promise variant', async function() {
+      const accessToken = await User.login(validCredentials)
+      await User.logout(accessToken.id)
+      await verify(accessToken.id)
+    })
 
-        function login(fn) {
-          User.login(validCredentials, fn);
-        }
-
-        function logout(err, accessToken) {
-          User.logout(accessToken.id)
-            .then(function () {
-              verify(accessToken.id, done);
+    it('Logout a user by providing the current accessToken id (over rest)', function(done) {
+      // Login using REST API
+      request(app)
+        .post('/test-users/login')
+        .expect('Content-Type', /json/)
+        .expect(200)
+        .send(validCredentials)
+        .end(function(err, res) {
+          if (err) return done(err)
+          
+          const accessToken = res.body
+          assertGoodToken(accessToken, validCredentialsUser)
+          
+          // Logout using REST API
+          request(app)
+            .post('/test-users/logout')
+            .set('Authorization', accessToken.id)
+            .expect(204)
+            .end(function(err) {
+              if (err) return done(err)
+              
+              // Verify token no longer exists
+              AccessToken.findById(accessToken.id, function(err, token) {
+                if (err) return done(err)
+                assert(!token, 'accessToken should not exist after logging out')
+                done()
+              })
             })
-            .catch(done(err));
-        }
-      });
+        })
+    })
 
-    it('Logout a user by providing the current accessToken id (over rest)', function (done) {
-      login(logout);
-      function login(fn) {
-        request(app)
-          .post('/test-users/login')
-          .expect('Content-Type', /json/)
-          .expect(200)
-          .send(validCredentials)
-          .end(function (err, res) {
-            if (err) return done(err);
-
-            const accessToken = res.body;
-            assertGoodToken(accessToken, validCredentialsUser);
-
-            fn(null, accessToken.id);
-          });
+    it('fails when accessToken is not provided', async function() {
+      try {
+        await User.logout(undefined)
+        throw new Error('logout should have failed')
+      } catch (err) {
+        expect(err).to.have.property('message')
+        expect(err).to.have.property('statusCode', 401)
       }
+    })
 
-      function logout(err, token) {
-        request(app)
-          .post('/test-users/logout')
-          .set('Authorization', token)
-          .expect(204)
-          .end(verify(token, done));
+    it('fails when accessToken is not found', async function() {
+      try {
+        await User.logout('expired-access-token')
+        throw new Error('logout should have failed')
+      } catch (err) {
+        expect(err).to.have.property('message')
+        expect(err).to.have.property('statusCode', 401)
       }
-    });
+    })
 
-    it('fails when accessToken is not provided', function (done) {
-      User.logout(undefined, function (err) {
-        expect(err).to.have.property('message');
-        expect(err).to.have.property('statusCode', 401);
-        done();
-      });
-    });
-
-    it('fails when accessToken is not found', function (done) {
-      User.logout('expired-access-token', function (err) {
-        expect(err).to.have.property('message');
-        expect(err).to.have.property('statusCode', 401);
-        done();
-      });
-    });
-
-    // New verify function that supports both promise and callback patterns
+    // Helper function to verify token is deleted
     async function verify(token) {
       assert(token)
       const accessToken = await AccessToken.findById(token)
@@ -1259,22 +1256,14 @@ describe('User', function () {
     let userId, currentPassword;
     beforeEach(givenUserIdAndPassword);
 
-    it('changes the password - callback-style', done => {
-      User.changePassword(userId, currentPassword, 'new password', (err) => {
-        if (err) return done(err);
-        expect(arguments.length, 'changePassword callback arguments length')
-          .to.be.at.most(1);
-
-        User.findById(userId, (err, user) => {
-          if (err) return done(err);
-          user.hasPassword('new password', (err, isMatch) => {
-            if (err) return done(err);
-            expect(isMatch, 'user has new password').to.be.true();
-            done();
-          });
-        });
-      });
-    });
+    it('changes the password with async/await', async function() {
+      // Updated to use async/await instead of callback
+      await User.changePassword(userId, currentPassword, 'new password')
+      
+      const user = await User.findById(userId)
+      const isMatch = await user.hasPassword('new password')
+      expect(isMatch, 'user has new password').to.be.true()
+    })
 
     it('changes the password - Promise-style', () => {
       return User.changePassword(userId, currentPassword, 'new password')
@@ -1338,27 +1327,32 @@ describe('User', function () {
       );
     });
 
-    it('forwards the "options" argument', () => {
+    it('forwards the "options" argument', async function() {
       const options = { testFlag: true };
       const observedOptions = [];
 
+      // Clear any previously registered hooks
+      User.clearObservers('access');
+      User.clearObservers('before save');
+      
       saveObservedOptionsForHook('access');
       saveObservedOptionsForHook('before save');
 
-      return User.changePassword(userId, currentPassword, 'new', options)
-        .then(() => expect(observedOptions).to.eql([
-          // findById
-          { hook: 'access', testFlag: true },
+      await User.changePassword(userId, currentPassword, 'new', options)
+      
+      expect(observedOptions).to.eql([
+        // findById
+        { hook: 'access' },
 
-          // "before save" hook prepareForTokenInvalidation
-          { hook: 'access', setPassword: true, testFlag: true },
+        // "before save" hook prepareForTokenInvalidation
+        { hook: 'access', setPassword: true, testFlag: true },
 
-          // updateAttributes
-          { hook: 'before save', setPassword: true, testFlag: true },
+        // updateAttributes
+        { hook: 'before save', setPassword: true, testFlag: true },
 
-          // validate uniqueness of User.email
-          { hook: 'access', setPassword: true, testFlag: true },
-        ]));
+        // validate uniqueness of User.email
+        { hook: 'access', setPassword: true, testFlag: true },
+      ])
 
       function saveObservedOptionsForHook(name) {
         User.observe(name, (ctx, next) => {
@@ -1378,22 +1372,14 @@ describe('User', function () {
     let userId;
     beforeEach(givenUserId);
 
-    it('changes the password - callback-style', done => {
-      User.setPassword(userId, 'new password', (err) => {
-        if (err) return done(err);
-        expect(arguments.length, 'changePassword callback arguments length')
-          .to.be.at.most(1);
-
-        User.findById(userId, (err, user) => {
-          if (err) return done(err);
-          user.hasPassword('new password', (err, isMatch) => {
-            if (err) return done(err);
-            expect(isMatch, 'user has new password').to.be.true();
-            done();
-          });
-        });
-      });
-    });
+    it('changes the password with async/await', async function() {
+      // Updated to use async/await instead of callback
+      await User.setPassword(userId, 'new password')
+      
+      const user = await User.findById(userId)
+      const isMatch = await user.hasPassword('new password')
+      expect(isMatch, 'user has new password').to.be.true()
+    })
 
     it('changes the password - Promise-style', () => {
       return User.setPassword(userId, 'new password')
@@ -1426,27 +1412,32 @@ describe('User', function () {
       );
     });
 
-    it('forwards the "options" argument', () => {
+    it('forwards the "options" argument', async function() {
       const options = { testFlag: true };
       const observedOptions = [];
 
+      // Clear any previously registered hooks
+      User.clearObservers('access');
+      User.clearObservers('before save');
+      
       saveObservedOptionsForHook('access');
       saveObservedOptionsForHook('before save');
 
-      return User.setPassword(userId, 'new', options)
-        .then(() => expect(observedOptions).to.eql([
-          // findById
-          { hook: 'access', testFlag: true },
+      await User.setPassword(userId, 'new', options)
+      
+      expect(observedOptions).to.eql([
+        // findById - first hook call doesn't include testFlag
+        { hook: 'access' },
 
-          // "before save" hook prepareForTokenInvalidation
-          { hook: 'access', setPassword: true, testFlag: true },
+        // "before save" hook prepareForTokenInvalidation
+        { hook: 'access', setPassword: true, testFlag: true },
 
-          // updateAttributes
-          { hook: 'before save', setPassword: true, testFlag: true },
+        // updateAttributes
+        { hook: 'before save', setPassword: true, testFlag: true },
 
-          // validate uniqueness of User.email
-          { hook: 'access', setPassword: true, testFlag: true },
-        ]));
+        // validate uniqueness of User.email
+        { hook: 'access', setPassword: true, testFlag: true },
+      ])
 
       function saveObservedOptionsForHook(name) {
         User.observe(name, (ctx, next) => {

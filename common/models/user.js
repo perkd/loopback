@@ -406,6 +406,9 @@ module.exports = function(User) {
     assert(userId != null && userId !== '', 'userId is a required argument')
     assert(!!newPassword, 'newPassword is a required argument')
 
+    // Ensure options is always an object
+    options = Object.assign({}, options)
+
     // Validate token scope first. When the settings flag is enabled and an
     // access token is provided, the token must have the 'reset-password' scope.
     const tokenId = options && options.accessToken && options.accessToken.id
