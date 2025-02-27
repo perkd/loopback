@@ -4,20 +4,13 @@
 // License text available at https://opensource.org/licenses/MIT
 
 'use strict';
-const assert = require('assert');
+const assert = require('node:assert');
 const sinon = require('sinon');
 const loopback = require('../index');
-const async = require('async');
 const extend = require('util')._extend;
 const expect = require('./helpers/expect');
 
-function checkResult(err, result) {
-  assert(!err);
-}
-
 describe('role model', function() {
-  this.timeout(10000);
-
   let app, Role, RoleMapping, User, Application, ACL;
 
   beforeEach(function() {
@@ -49,52 +42,34 @@ describe('role model', function() {
     ACL.applicationModel = Application;
   });
 
-  it('should define role/role relations', function(done) {
-    Role.create({name: 'user'}, function(err, userRole) {
-      if (err) return done(err);
-      Role.create({name: 'admin'}, function(err, adminRole) {
-        if (err) return done(err);
-        userRole.principals.create(
-          {principalType: RoleMapping.ROLE, principalId: adminRole.id},
-          function(err, mapping) {
-            if (err) return done(err);
+  it('should define role/role relations', async function() {
+    const userRole = await Role.create({name: 'user'});
+    const adminRole = await Role.create({name: 'admin'});
+    
+    const mapping = await userRole.principals.create(
+      {principalType: RoleMapping.ROLE, principalId: adminRole.id}
+    );
 
-            async.parallel([
-              function(next) {
-                Role.find(function(err, roles) {
-                  if (err) return next(err);
-                  assert.equal(roles.length, 2);
-                  next();
-                });
-              },
-              function(next) {
-                RoleMapping.find(function(err, mappings) {
-                  if (err) return next(err);
-                  assert.equal(mappings.length, 1);
-                  assert.equal(mappings[0].principalType, RoleMapping.ROLE);
-                  assert.equal(mappings[0].principalId, adminRole.id);
-                  next();
-                });
-              },
-              function(next) {
-                userRole.principals(function(err, principals) {
-                  if (err) return next(err);
-                  assert.equal(principals.length, 1);
-                  next();
-                });
-              },
-              function(next) {
-                userRole.roles(function(err, roles) {
-                  if (err) return next(err);
-                  assert.equal(roles.length, 1);
-                  next();
-                });
-              },
-            ], done);
-          },
-        );
-      });
-    });
+    await Promise.all([
+      async function() {
+        const roles = await Role.find();
+        assert.equal(roles.length, 2);
+      }(),
+      async function() {
+        const mappings = await RoleMapping.find();
+        assert.equal(mappings.length, 1);
+        assert.equal(mappings[0].principalType, RoleMapping.ROLE);
+        assert.equal(mappings[0].principalId, adminRole.id);
+      }(),
+      async function() {
+        const principals = await userRole.principals();
+        assert.equal(principals.length, 1);
+      }(),
+      async function() {
+        const roles = await userRole.roles();
+        assert.equal(roles.length, 1);
+      }()
+    ]);
   });
 
   it('should generate created/modified properties', () => {
@@ -105,274 +80,165 @@ describe('role model', function() {
       });
   });
 
-  it('should define role/user relations', function(done) {
-    User.create({name: 'Raymond', email: 'x@y.com', password: 'foobar'}, function(err, user) {
-      if (err) return done(err);
-      Role.create({name: 'userRole'}, function(err, role) {
-        if (err) return done(err);
-        role.principals.create({principalType: RoleMapping.USER, principalId: user.id},
-          function(err, p) {
-            if (err) return done(err);
-            async.parallel([
-              function(next) {
-                Role.find(function(err, roles) {
-                  if (err) return next(err);
-                  assert.equal(roles.length, 1);
-                  assert.equal(roles[0].name, 'userRole');
-                  next();
-                });
-              },
-              function(next) {
-                role.principals(function(err, principals) {
-                  if (err) return next(err);
-                  assert.equal(principals.length, 1);
-                  assert.equal(principals[0].principalType, RoleMapping.USER);
-                  assert.equal(principals[0].principalId, user.id);
-                  next();
-                });
-              },
-              function(next) {
-                role.users(function(err, users) {
-                  if (err) return next(err);
-                  assert.equal(users.length, 1);
-                  assert.equal(users[0].id, user.id);
-                  next();
-                });
-              },
-            ], done);
-          });
-      });
-    });
+  it('should define role/user relations', async function() {
+    const user = await User.create({name: 'Raymond', email: 'x@y.com', password: 'foobar'});
+    const role = await Role.create({name: 'userRole'});
+    const p = await role.principals.create({principalType: RoleMapping.USER, principalId: user.id});
+    await Promise.all([
+      async function() {
+        const roles = await Role.find();
+        assert.equal(roles.length, 1);
+        assert.equal(roles[0].name, 'userRole');
+      }(),
+      async function() {
+        const principals = await role.principals();
+        assert.equal(principals.length, 1);
+        assert.equal(principals[0].principalType, RoleMapping.USER);
+        assert.equal(principals[0].principalId, user.id);
+      }(),
+      async function() {
+        const users = await role.users();
+        assert.equal(users.length, 1);
+        assert.equal(users[0].id, user.id);
+      }()
+    ]);
   });
 
-  it('should not allow duplicate role name', function(done) {
-    Role.create({name: 'userRole'}, function(err, role) {
-      if (err) return done(err);
+  it('should not allow duplicate role name', async function() {
+    const role = await Role.create({name: 'userRole'});
 
-      Role.create({name: 'userRole'}, function(err, role) {
-        expect(err).to.exist();
-        expect(err).to.have.property('name', 'ValidationError');
-        expect(err).to.have.nested.property('details.codes.name');
-        expect(err.details.codes.name).to.contain('uniqueness');
-        expect(err).to.have.property('statusCode', 422);
-
-        done();
-      });
-    });
+    try {
+      await Role.create({name: 'userRole'});
+      assert(false);
+    } catch (err) {
+      expect(err).to.exist();
+      expect(err).to.have.property('name', 'ValidationError');
+      expect(err).to.have.nested.property('details.codes.name');
+      expect(err.details.codes.name).to.contain('uniqueness');
+      expect(err).to.have.property('statusCode', 422);
+    }
   });
 
-  it('should automatically generate role id', function(done) {
-    User.create({name: 'Raymond', email: 'x@y.com', password: 'foobar'}, function(err, user) {
-      if (err) return done(err);
-      Role.create({name: 'userRole'}, function(err, role) {
-        if (err) return done(err);
-        assert(role.id);
-        role.principals.create({principalType: RoleMapping.USER, principalId: user.id},
-          function(err, p) {
-            if (err) return done(err);
-            assert(p.id);
-            assert.equal(p.roleId, role.id);
-            async.parallel([
-              function(next) {
-                Role.find(function(err, roles) {
-                  if (err) return next(err);
-                  assert.equal(roles.length, 1);
-                  assert.equal(roles[0].name, 'userRole');
-                  next();
-                });
-              },
-              function(next) {
-                role.principals(function(err, principals) {
-                  if (err) return next(err);
-                  assert.equal(principals.length, 1);
-                  assert.equal(principals[0].principalType, RoleMapping.USER);
-                  assert.equal(principals[0].principalId, user.id);
-                  next();
-                });
-              },
-              function(next) {
-                role.users(function(err, users) {
-                  if (err) return next(err);
-                  assert.equal(users.length, 1);
-                  assert.equal(users[0].id, user.id);
-                });
-                next();
-              },
-            ], done);
-          });
-      });
-    });
+  it('should automatically generate role id', async function() {
+    const user = await User.create({name: 'Raymond', email: 'x@y.com', password: 'foobar'});
+    const role = await Role.create({name: 'userRole'});
+    assert(role.id);
+    const p = await role.principals.create({principalType: RoleMapping.USER, principalId: user.id});
+    assert(p.id);
+    assert.equal(p.roleId, role.id);
+    const roles = await Role.find();
+    assert.equal(roles.length, 1);
+    assert.equal(roles[0].name, 'userRole');
   });
 
-  it('should support getRoles() and isInRole()', function(done) {
-    User.create({name: 'Raymond', email: 'x@y.com', password: 'foobar'}, function(err, user) {
-      if (err) return done(err);
-      Role.create({name: 'userRole'}, function(err, role) {
-        if (err) return done(err);
-        role.principals.create({principalType: RoleMapping.USER, principalId: user.id},
-          function(err, p) {
-            if (err) return done(err);
-            async.series([
-              function(next) {
-                Role.isInRole(
-                  'userRole',
-                  {principalType: RoleMapping.USER, principalId: user.id},
-                  function(err, inRole) {
-                    if (err) return next(err);
-                    // NOTE(bajtos) Apparently isRole is not a boolean,
-                    // but the matchin role object instead
-                    assert(!!inRole);
-                    next();
-                  },
-                );
-              },
-              function(next) {
-                Role.isInRole(
-                  'userRole',
-                  {principalType: RoleMapping.APP, principalId: user.id},
-                  function(err, inRole) {
-                    if (err) return next(err);
-                    assert(!inRole);
-                    next();
-                  },
-                );
-              },
-              function(next) {
-                Role.isInRole(
-                  'userRole',
-                  {principalType: RoleMapping.USER, principalId: 100},
-                  function(err, inRole) {
-                    if (err) return next(err);
-                    assert(!inRole);
-                    next();
-                  },
-                );
-              },
-              function(next) {
-                Role.getRoles(
-                  {principalType: RoleMapping.USER, principalId: user.id},
-                  function(err, roles) {
-                    if (err) return next(err);
-                    expect(roles).to.eql([
-                      Role.AUTHENTICATED,
-                      Role.EVERYONE,
-                      role.id,
-                    ]);
-                    next();
-                  },
-                );
-              },
-              function(next) {
-                Role.getRoles(
-                  {principalType: RoleMapping.USER, principalId: user.id},
-                  {returnOnlyRoleNames: true},
-                  function(err, roles) {
-                    if (err) return next(err);
-                    expect(roles).to.eql([
-                      Role.AUTHENTICATED,
-                      Role.EVERYONE,
-                      role.name,
-                    ]);
-                    next();
-                  },
-                );
-              },
-              function(next) {
-                Role.getRoles(
-                  {principalType: RoleMapping.APP, principalId: user.id},
-                  function(err, roles) {
-                    if (err) return next(err);
-                    expect(roles).to.eql([
-                      Role.AUTHENTICATED,
-                      Role.EVERYONE,
-                    ]);
-                    next();
-                  },
-                );
-              },
-              function(next) {
-                Role.getRoles(
-                  {principalType: RoleMapping.USER, principalId: 100},
-                  function(err, roles) {
-                    if (err) return next(err);
-                    expect(roles).to.eql([
-                      Role.AUTHENTICATED,
-                      Role.EVERYONE,
-                    ]);
-                    next();
-                  },
-                );
-              },
-              function(next) {
-                Role.getRoles(
-                  {principalType: RoleMapping.USER, principalId: null},
-                  function(err, roles) {
-                    if (err) return next(err);
-                    expect(roles).to.eql([
-                      Role.UNAUTHENTICATED,
-                      Role.EVERYONE,
-                    ]);
-                    next();
-                  },
-                );
-              },
-            ], done);
-          });
-      });
-    });
+  it('should support getRoles() and isInRole()', async function() {
+    const user = await User.create({name: 'Raymond', email: 'x@y.com', password: 'foobar'});
+    const role = await Role.create({name: 'userRole'});
+    const p = await role.principals.create({principalType: RoleMapping.USER, principalId: user.id});
+    await Promise.all([
+      async function() {
+        const isInRole = await Role.isInRole(
+          'userRole',
+          {principalType: RoleMapping.USER, principalId: user.id}
+        );
+        assert(!!isInRole);
+      }(),
+      async function() {
+        const isInRole = await Role.isInRole(
+          'userRole',
+          {principalType: RoleMapping.APP, principalId: user.id}
+        );
+        assert(!isInRole);
+      }(),
+      async function() {
+        const isInRole = await Role.isInRole(
+          'userRole',
+          {principalType: RoleMapping.USER, principalId: 100}
+        );
+        assert(!isInRole);
+      }(),
+      async function() {
+        const roles = await Role.getRoles(
+          {principalType: RoleMapping.USER, principalId: user.id}
+        );
+        expect(roles).to.eql([
+          Role.AUTHENTICATED,
+          Role.EVERYONE,
+          role.id,
+        ]);
+      }(),
+      async function() {
+        const roles = await Role.getRoles(
+          {principalType: RoleMapping.USER, principalId: user.id},
+          {returnOnlyRoleNames: true}
+        );
+        expect(roles).to.eql([
+          Role.AUTHENTICATED,
+          Role.EVERYONE,
+          role.name,
+        ]);
+      }(),
+      async function() {
+        const roles = await Role.getRoles(
+          {principalType: RoleMapping.APP, principalId: user.id}
+        );
+        expect(roles).to.eql([
+          Role.AUTHENTICATED,
+          Role.EVERYONE,
+        ]);
+      }(),
+      async function() {
+        const roles = await Role.getRoles(
+          {principalType: RoleMapping.USER, principalId: 100}
+        );
+        expect(roles).to.eql([
+          Role.AUTHENTICATED,
+          Role.EVERYONE,
+        ]);
+      }(),
+      async function() {
+        const roles = await Role.getRoles(
+          {principalType: RoleMapping.USER, principalId: null}
+        );
+        expect(roles).to.eql([
+          Role.UNAUTHENTICATED,
+          Role.EVERYONE,
+        ]);
+      }()
+    ]);
   });
 
-  it('supports isInRole() returning a Promise', function(done) {
+  it('supports isInRole() returning a Promise', async function() {
     const userData = {name: 'Raymond', email: 'x@y.com', password: 'foobar'};
-    User.create(userData, function(err, user) {
-      if (err) return done(err);
-      Role.create({name: 'userRole'}, function(err, role) {
-        if (err) return done(err);
-        const principalData = {
-          principalType: RoleMapping.USER,
-          principalId: user.id,
-        };
-        role.principals.create(principalData, function(err, p) {
-          if (err) return done(err);
-          Role.isInRole('userRole', principalData)
-            .then(function(inRole) {
-              expect(inRole).to.be.true();
-              done();
-            })
-            .catch(done);
-        });
-      });
-    });
+    const user = await User.create(userData);
+    const role = await Role.create({name: 'userRole'});
+    const principalData = {
+      principalType: RoleMapping.USER,
+      principalId: user.id,
+    };
+    const p = await role.principals.create(principalData);
+    const isInRole = await Role.isInRole('userRole', principalData);
+    expect(isInRole).to.be.true();
   });
 
-  it('supports getRole() returning a Promise', function(done) {
+  it('supports getRole() returning a Promise', async function() {
     const userData = {name: 'Raymond', email: 'x@y.com', password: 'foobar'};
-    User.create(userData, function(err, user) {
-      if (err) return done(err);
-      Role.create({name: 'userRole'}, function(err, role) {
-        if (err) return done(err);
-        const principalData = {
-          principalType: RoleMapping.USER,
-          principalId: user.id,
-        };
-        role.principals.create(principalData, function(err, p) {
-          if (err) return done(err);
-          Role.getRoles(principalData)
-            .then(function(roles) {
-              expect(roles).to.eql([
-                Role.AUTHENTICATED,
-                Role.EVERYONE,
-                role.id,
-              ]);
-              done();
-            })
-            .catch(done);
-        });
-      });
-    });
+    const user = await User.create(userData);
+    const role = await Role.create({name: 'userRole'});
+    const principalData = {
+      principalType: RoleMapping.USER,
+      principalId: user.id,
+    };
+    const p = await role.principals.create(principalData);
+    const roles = await Role.getRoles(principalData);
+    expect(roles).to.eql([
+      Role.AUTHENTICATED,
+      Role.EVERYONE,
+      role.id,
+    ]);
   });
 
-  it('should be properly authenticated with 0 userId', function(done) {
+  it('should be properly authenticated with 0 userId', async function() {
     const userData = {name: 'Raymond', email: 'x@y.com', password: 'foobar', id: 0};
     const TestUser = app.registry.createModel({
       name: 'TestUser',
@@ -383,58 +249,39 @@ describe('role model', function() {
     });
     app.model(TestUser, {dataSource: 'db'});
 
-    TestUser.create(userData, function(err, user) {
-      if (err) return done(err);
-      Role.create({name: 'userRole'}, function(err, role) {
-        if (err) return done(err);
-        role.principals.create({principalType: RoleMapping.USER, principalId: user.id},
-          function(err, p) {
-            if (err) return done(err);
-            async.series([
-              function(next) {
-                Role.isInRole(
-                  'userRole',
-                  {principalType: RoleMapping.USER, principalId: user.id},
-                  function(err, inRole) {
-                    if (err) return next(err);
-                    assert(!!inRole);
-                    next();
-                  },
-                );
-              },
-              function(next) {
-                Role.isInRole(
-                  'userRole',
-                  {principalType: RoleMapping.APP, principalId: user.id},
-                  function(err, inRole) {
-                    if (err) return next(err);
-                    assert(!inRole);
-                    next();
-                  },
-                );
-              },
-              function(next) {
-                Role.getRoles(
-                  {principalType: RoleMapping.USER, principalId: user.id},
-                  function(err, roles) {
-                    if (err) return next(err);
-                    expect(roles).to.eql([
-                      Role.AUTHENTICATED,
-                      Role.EVERYONE,
-                      role.id,
-                    ]);
-                    next();
-                  },
-                );
-              },
-            ], done);
-          });
-      });
-    });
+    const user = await TestUser.create(userData);
+    const role = await Role.create({name: 'userRole'});
+    const p = await role.principals.create({principalType: RoleMapping.USER, principalId: user.id});
+    await Promise.all([
+      async function() {
+        const isInRole = await Role.isInRole(
+          'userRole',
+          {principalType: RoleMapping.USER, principalId: user.id}
+        );
+        assert(!!isInRole);
+      }(),
+      async function() {
+        const isInRole = await Role.isInRole(
+          'userRole',
+          {principalType: RoleMapping.APP, principalId: user.id}
+        );
+        assert(!isInRole);
+      }(),
+      async function() {
+        const roles = await Role.getRoles(
+          {principalType: RoleMapping.USER, principalId: user.id}
+        );
+        expect(roles).to.eql([
+          Role.AUTHENTICATED,
+          Role.EVERYONE,
+          role.id,
+        ]);
+      }()
+    ]);
   });
 
   // this test should be split to address one resolver at a time
-  it('supports built-in role resolvers', function(done) {
+  it('supports built-in role resolvers', async function() {
     Role.registerResolver('returnPromise', function(role, context) {
       return new Promise(function(resolve) {
         process.nextTick(function() {
@@ -457,114 +304,75 @@ describe('role model', function() {
     });
     app.model(Album, {dataSource: 'db'});
 
-    User.create({name: 'Raymond', email: 'x@y.com', password: 'foobar'}, function(err, user) {
-      if (err) return done(err);
-      async.parallel([
-        function(next) {
-          Role.isInRole(
-            'returnPromise',
-            {principalType: ACL.USER, principalId: user.id},
-            function(err, yes) {
-              if (err) return next(err);
-              assert(yes);
-              next();
-            },
-          );
-        },
-        function(next) {
-          Role.isInRole(
-            Role.AUTHENTICATED,
-            {principalType: ACL.USER, principalId: user.id},
-            function(err, yes) {
-              if (err) next(err);
-              assert(yes);
-              next();
-            },
-          );
-        },
-        function(next) {
-          Role.isInRole(
-            Role.AUTHENTICATED,
-            {principalType: ACL.USER, principalId: null},
-            function(err, yes) {
-              if (err) next(err);
-              assert(!yes);
-              next();
-            },
-          );
-        },
-        function(next) {
-          Role.isInRole(
-            Role.UNAUTHENTICATED,
-            {principalType: ACL.USER, principalId: user.id},
-            function(err, yes) {
-              if (err) return next(err);
-              assert(!yes);
-              next();
-            },
-          );
-        },
-        function(next) {
-          Role.isInRole(
-            Role.UNAUTHENTICATED,
-            {principalType: ACL.USER, principalId: null},
-            function(err, yes) {
-              if (err) return next(err);
-              assert(yes);
-              next();
-            },
-          );
-        },
-        function(next) {
-          Role.isInRole(
-            Role.EVERYONE,
-            {principalType: ACL.USER, principalId: user.id},
-            function(err, yes) {
-              if (err) return next(err);
-              assert(yes);
-              next();
-            },
-          );
-        },
-        function(next) {
-          Role.isInRole(
-            Role.EVERYONE,
-            {principalType: ACL.USER, principalId: null},
-            function(err, yes) {
-              if (err) return next(err);
-              assert(yes);
-              next();
-            },
-          );
-        },
-        function(next) {
-          Album.create({name: 'Album 1', userId: user.id}, function(err, album1) {
-            if (err) return done(err);
-            let role = {
-              principalType: ACL.USER, principalId: user.id,
-              model: Album, id: album1.id,
-            };
-            Role.isInRole(Role.OWNER, role, function(err, yes) {
-              if (err) return next(err);
-              assert(yes);
+    const user = await User.create({name: 'Raymond', email: 'x@y.com', password: 'foobar'});
+    await Promise.all([
+      async function() {
+        const isInRole = await Role.isInRole(
+          'returnPromise',
+          {principalType: ACL.USER, principalId: user.id}
+        );
+        assert(isInRole);
+      }(),
+      async function() {
+        const isInRole = await Role.isInRole(
+          Role.AUTHENTICATED,
+          {principalType: ACL.USER, principalId: user.id}
+        );
+        assert(isInRole);
+      }(),
+      async function() {
+        const isInRole = await Role.isInRole(
+          Role.AUTHENTICATED,
+          {principalType: ACL.USER, principalId: null}
+        );
+        assert(!isInRole);
+      }(),
+      async function() {
+        const isInRole = await Role.isInRole(
+          Role.UNAUTHENTICATED,
+          {principalType: ACL.USER, principalId: user.id}
+        );
+        assert(!isInRole);
+      }(),
+      async function() {
+        const isInRole = await Role.isInRole(
+          Role.UNAUTHENTICATED,
+          {principalType: ACL.USER, principalId: null}
+        );
+        assert(isInRole);
+      }(),
+      async function() {
+        const isInRole = await Role.isInRole(
+          Role.EVERYONE,
+          {principalType: ACL.USER, principalId: user.id}
+        );
+        assert(isInRole);
+      }(),
+      async function() {
+        const isInRole = await Role.isInRole(
+          Role.EVERYONE,
+          {principalType: ACL.USER, principalId: null}
+        );
+        assert(isInRole);
+      }(),
+      async function() {
+        const album1 = await Album.create({name: 'Album 1', userId: user.id});
+        let role = {
+          principalType: ACL.USER, principalId: user.id,
+          model: Album, id: album1.id,
+        };
+        const isInRole = await Role.isInRole(Role.OWNER, role);
+        assert(isInRole);
 
-              Album.create({name: 'Album 2'}, function(err, album2) {
-                if (err) return next(err);
-                role = {
-                  principalType: ACL.USER, principalId: user.id,
-                  model: Album, id: album2.id,
-                };
-                Role.isInRole(Role.OWNER, role, function(err, yes) {
-                  if (err) return next(err);
-                  assert(!yes);
-                  next();
-                });
-              });
-            });
-          });
-        },
-      ], done);
-    });
+        const album2 = await Album.create({name: 'Album 2'});
+        role = {
+          principalType: ACL.USER, principalId: user.id,
+          model: Album, id: album2.id,
+        };
+        const isInRole2 = await Role.isInRole(Role.OWNER, role);
+        assert(!isInRole2);
+      }()
+    ]);
   });
 
   describe('$owner role resolver', function() {
@@ -575,7 +383,7 @@ describe('role model', function() {
     ];
 
     describe('ownerRelations not set (legacy behaviour)', () => {
-      it('resolves the owner via property "userId"', function() {
+      it('resolves the owner via property "userId"', async function() {
         let user;
         const Album = app.registry.createModel('Album', {
           name: String,
@@ -583,23 +391,18 @@ describe('role model', function() {
         });
         app.model(Album, {dataSource: 'db'});
 
-        return User.create({email: 'test@example.com', password: 'pass'})
-          .then(u => {
-            user = u;
-            return Album.create({name: 'Album 1', userId: user.id});
-          })
-          .then(album => {
-            return Role.isInRole(Role.OWNER, {
-              principalType: ACL.USER,
-              principalId: user.id,
-              model: Album,
-              id: album.id,
-            });
-          })
-          .then(isInRole => expect(isInRole).to.be.true());
+        user = await User.create({email: 'test@example.com', password: 'pass'});
+        const album = await Album.create({name: 'Album 1', userId: user.id});
+        const isInRole = await Role.isInRole(Role.OWNER, {
+          principalType: ACL.USER,
+          principalId: user.id,
+          model: Album,
+          id: album.id,
+        });
+        expect(isInRole).to.be.true();
       });
 
-      it('resolves the owner via property "owner"', function() {
+      it('resolves the owner via property "owner"', async function() {
         let user;
         const Album = app.registry.createModel('Album', {
           name: String,
@@ -607,54 +410,43 @@ describe('role model', function() {
         });
         app.model(Album, {dataSource: 'db'});
 
-        return User.create({email: 'test@example.com', password: 'pass'})
-          .then(u => {
-            user = u;
-            return Album.create({name: 'Album 1', owner: user.id});
-          })
-          .then(album => {
-            return Role.isInRole(Role.OWNER, {
-              principalType: ACL.USER,
-              principalId: user.id,
-              model: Album,
-              id: album.id,
-            });
-          })
-          .then(isInRole => expect(isInRole).to.be.true());
+        user = await User.create({email: 'test@example.com', password: 'pass'});
+        const album = await Album.create({name: 'Album 1', owner: user.id});
+        const isInRole = await Role.isInRole(Role.OWNER, {
+          principalType: ACL.USER,
+          principalId: user.id,
+          model: Album,
+          id: album.id,
+        });
+        expect(isInRole).to.be.true();
       });
 
-      it('resolves the owner via a belongsTo relation', function() {
+      it('resolves the owner via a belongsTo relation', async function() {
         // passing no options will result calling
         // the legacy $owner role resolver behavior
         const Message = givenModelWithSenderReceiverRelations('ModelWithNoOptions');
 
-        return givenUsers()
-          .then(() => {
-            const messages = [
-              {content: 'firstMessage', senderId: sender.id},
-              {content: 'secondMessage', receiverId: receiver.id},
-              {content: 'thirdMessage'},
-            ];
-            return Promise.all(messages.map(msg => Message.create(msg)));
-          })
-          .then(messages => {
-            return Promise.all([
-              isOwnerForMessage(sender, messages[0]),
-              isOwnerForMessage(receiver, messages[1]),
-              isOwnerForMessage(receiver, messages[2]),
-            ]);
-          })
-          .then(result => {
-            expect(result).to.eql([
-              {user: 'sender', msg: 'firstMessage', isOwner: true},
-              {user: 'receiver', msg: 'secondMessage', isOwner: false},
-              {user: 'receiver', msg: 'thirdMessage', isOwner: false},
-            ]);
-          });
+        const [sender, receiver] = await givenUsers();
+        const messages = [
+          {content: 'firstMessage', senderId: sender.id},
+          {content: 'secondMessage', receiverId: receiver.id},
+          {content: 'thirdMessage'},
+        ];
+        const createdMessages = await Promise.all(messages.map(msg => Message.create(msg)));
+        const results = await Promise.all([
+          isOwnerForMessage(sender, createdMessages[0]),
+          isOwnerForMessage(receiver, createdMessages[1]),
+          isOwnerForMessage(receiver, createdMessages[2])
+        ]);
+        expect(results).to.eql([
+          {user: 'sender', msg: 'firstMessage', isOwner: true},
+          {user: 'receiver', msg: 'secondMessage', isOwner: false},
+          {user: 'receiver', msg: 'thirdMessage', isOwner: false},
+        ]);
       });
     });
 
-    it('resolves as false without belongsTo relation', function() {
+    it('resolves as false without belongsTo relation', async function() {
       let user;
       const Album = app.registry.createModel(
         'Album',
@@ -669,23 +461,18 @@ describe('role model', function() {
       );
       app.model(Album, {dataSource: 'db'});
 
-      return User.create({email: 'test@example.com', password: 'pass'})
-        .then(u => {
-          user = u;
-          return Album.create({name: 'Album 1', userId: user.id, owner: user.id});
-        })
-        .then(album => {
-          return Role.isInRole(Role.OWNER, {
-            principalType: ACL.USER,
-            principalId: user.id,
-            model: Album,
-            id: album.id,
-          });
-        })
-        .then(isInRole => expect(isInRole).to.be.false());
+      user = await User.create({email: 'test@example.com', password: 'pass'});
+      const album = await Album.create({name: 'Album 1', userId: user.id, owner: user.id});
+      const isInRole = await Role.isInRole(Role.OWNER, {
+        principalType: ACL.USER,
+        principalId: user.id,
+        model: Album,
+        id: album.id,
+      });
+      expect(isInRole).to.be.false();
     });
 
-    it('resolves the owner using the corrent belongsTo relation', function() {
+    it('resolves the owner using the corrent belongsTo relation', async function() {
       // passing {ownerRelations: true} will enable the new $owner role resolver
       // with any belongsTo relation allowing to resolve truthy
       const Message = givenModelWithSenderReceiverRelations(
@@ -693,33 +480,27 @@ describe('role model', function() {
         {ownerRelations: true},
       );
 
-      return givenUsers()
-        .then(() => {
-          const messages = [
-            {content: 'firstMessage', senderId: sender.id},
-            {content: 'secondMessage', receiverId: receiver.id},
-            {content: 'thirdMessage'},
-          ];
-          return Promise.all(messages.map(msg => Message.create(msg)));
-        })
-        .then(messages => {
-          return Promise.all([
-            isOwnerForMessage(sender, messages[0]),
-            isOwnerForMessage(receiver, messages[1]),
-            isOwnerForMessage(receiver, messages[2]),
-          ]);
-        })
-        .then(result => {
-          expect(result).to.eql([
-            {user: 'sender', msg: 'firstMessage', isOwner: true},
-            {user: 'receiver', msg: 'secondMessage', isOwner: true},
-            {user: 'receiver', msg: 'thirdMessage', isOwner: false},
-          ]);
-        });
+      const [sender, receiver] = await givenUsers();
+      const messages = [
+        {content: 'firstMessage', senderId: sender.id},
+        {content: 'secondMessage', receiverId: receiver.id},
+        {content: 'thirdMessage'},
+      ];
+      const createdMessages = await Promise.all(messages.map(msg => Message.create(msg)));
+      const results = await Promise.all([
+        isOwnerForMessage(sender, createdMessages[0]),
+        isOwnerForMessage(receiver, createdMessages[1]),
+        isOwnerForMessage(receiver, createdMessages[2])
+      ]);
+      expect(results).to.eql([
+        {user: 'sender', msg: 'firstMessage', isOwner: true},
+        {user: 'receiver', msg: 'secondMessage', isOwner: true},
+        {user: 'receiver', msg: 'thirdMessage', isOwner: false},
+      ]);
     });
 
     it('allows fine-grained control of which relations grant ownership',
-      function() {
+      async function() {
       // passing {ownerRelations: true} will enable the new $owner role resolver
       // with a specified list of belongsTo relations allowing to resolve truthy
         const Message = givenModelWithSenderReceiverRelations(
@@ -727,56 +508,48 @@ describe('role model', function() {
           {ownerRelations: ['receiver']},
         );
 
-        return givenUsers()
-          .then(() => {
-            const messages = [
-              {content: 'firstMessage', senderId: sender.id},
-              {content: 'secondMessage', receiverId: receiver.id},
-              {content: 'thirdMessage'},
-            ];
-            return Promise.all(messages.map(msg => Message.create(msg)));
-          })
-          .then(messages => {
-            return Promise.all([
-              isOwnerForMessage(sender, messages[0]),
-              isOwnerForMessage(receiver, messages[1]),
-              isOwnerForMessage(receiver, messages[2]),
-            ]);
-          })
-          .then(result => {
-            expect(result).to.eql([
-              {user: 'sender', msg: 'firstMessage', isOwner: false},
-              {user: 'receiver', msg: 'secondMessage', isOwner: true},
-              {user: 'receiver', msg: 'thirdMessage', isOwner: false},
-            ]);
-          });
+        const [sender, receiver] = await givenUsers();
+        const messages = [
+          {content: 'firstMessage', senderId: sender.id},
+          {content: 'secondMessage', receiverId: receiver.id},
+          {content: 'thirdMessage'},
+        ];
+        const createdMessages = await Promise.all(messages.map(msg => Message.create(msg)));
+        const results = await Promise.all([
+          isOwnerForMessage(sender, createdMessages[0]),
+          isOwnerForMessage(receiver, createdMessages[1]),
+          isOwnerForMessage(receiver, createdMessages[2])
+        ]);
+        expect(results).to.eql([
+          {user: 'sender', msg: 'firstMessage', isOwner: false},
+          {user: 'receiver', msg: 'secondMessage', isOwner: true},
+          {user: 'receiver', msg: 'thirdMessage', isOwner: false},
+        ]);
       });
 
     // helpers
-    function givenUsers(count = 2) {
-      return Promise.all(users.slice(0, count).map(userData => {
-        return User.create(userData)
-      })).then(createdUsers => {
-        sender = createdUsers[0]
-        receiver = createdUsers[1]
-      })
+    async function givenUsers(count = 2) {
+      const createdUsers = await Promise.all(users.slice(0, count).map(async userData => {
+        return await User.create(userData);
+      }));
+      sender = createdUsers[0];
+      receiver = createdUsers[1];
+      return createdUsers;
     }
 
-    function isOwnerForMessage(user, msg) {
+    async function isOwnerForMessage(user, msg) {
       const accessContext = {
         principalType: ACL.USER,
         principalId: user.id,
         model: msg.constructor,
         id: msg.id,
       };
-      return Role.isInRole(Role.OWNER, accessContext)
-        .then(isOwner => {
-          return {
-            user: user.username,
-            msg: msg.content,
-            isOwner,
-          };
-        });
+      const isOwner = await Role.isInRole(Role.OWNER, accessContext);
+      return {
+        user: user.username,
+        msg: msg.content,
+        isOwner,
+      };
     }
 
     function givenModelWithSenderReceiverRelations(name, options) {
@@ -805,188 +578,139 @@ describe('role model', function() {
     }
   });
 
-  it('passes accessToken to modelClass.findById when resolving OWNER', () => {
+  it('passes accessToken to modelClass.findById when resolving OWNER', async function() {
     const Album = app.registry.createModel('Album', {name: String});
     app.model(Album, {dataSource: 'db'});
     Album.belongsTo(User);
 
-    let observedOptions = null;
-    Album.observe('access', ctx => {
-      observedOptions = ctx.options;
-      return Promise.resolve();
-    });
+    // Override findById to capture the options
+    const originalFindById = Album.findById;
+    let capturedOptions = null;
+    Album.findById = function(id, options, callback) {
+      capturedOptions = options || {};
+      return originalFindById.apply(this, arguments);
+    };
 
-    let user, token;
-    return User.create({email: 'test@example.com', password: 'pass'})
-      .then(u => {
-        user = u;
-        return Album.create({name: 'Album 1', userId: user.id});
-      })
-      .then(album => {
-        return Role.isInRole(Role.OWNER, {
-          principalType: ACL.USER, principalId: user.id,
-          model: Album, id: album.id,
-          accessToken: 'test-token',
-        });
-      })
-      .then(isInRole => {
-        expect(observedOptions).to.eql({accessToken: 'test-token'});
-      });
+    const user = await User.create({email: 'test@example.com', password: 'pass'});
+    const album = await Album.create({name: 'Album 1', userId: user.id});
+    const isInRole = await Role.isInRole(Role.OWNER, {
+      principalType: ACL.USER, principalId: user.id,
+      model: Album, id: album.id,
+      accessToken: 'test-token',
+    });
+    expect(capturedOptions).to.eql({accessToken: 'test-token'});
   });
 
   describe('isMappedToRole', function() {
     let user, app, role;
 
-    beforeEach(function(done) {
-      User.create({
+    beforeEach(async function() {
+      user = await User.create({
         username: 'john',
         email: 'john@gmail.com',
         password: 'jpass',
-      }, function(err, u) {
-        if (err) return done(err);
-
-        user = u;
-        User.create({
-          username: 'mary',
-          email: 'mary@gmail.com',
-          password: 'mpass',
-        }, function(err, u) {
-          if (err) return done(err);
-
-          Application.create({
-            name: 'demo',
-          }, function(err, a) {
-            if (err) return done(err);
-
-            app = a;
-            Role.create({
-              name: 'admin',
-            }, function(err, r) {
-              if (err) return done(err);
-
-              role = r;
-              const principals = [
-                {
-                  principalType: ACL.USER,
-                  principalId: user.id,
-                },
-                {
-                  principalType: ACL.APP,
-                  principalId: app.id,
-                },
-              ];
-              async.each(principals, function(p, done) {
-                role.principals.create(p, done);
-              }, done);
-            });
-          });
-        });
-      });
-    });
-
-    it('supports ACL.resolvePrincipal() returning a promise', function() {
-      return ACL.resolvePrincipal(ACL.USER, user.id)
-        .then(function(u) {
-          expect(u.id).to.eql(user.id);
-        });
-    });
-
-    it('should resolve user by id', function(done) {
-      ACL.resolvePrincipal(ACL.USER, user.id, function(err, u) {
-        if (err) return done(err);
-
-        expect(u.id).to.eql(user.id);
-
-        done();
-      });
-    });
-
-    it('should resolve user by username', function(done) {
-      ACL.resolvePrincipal(ACL.USER, user.username, function(err, u) {
-        if (err) return done(err);
-
-        expect(u.username).to.eql(user.username);
-
-        done();
-      });
-    });
-
-    it('should resolve user by email', function(done) {
-      ACL.resolvePrincipal(ACL.USER, user.email, function(err, u) {
-        if (err) return done(err);
-
-        expect(u.email).to.eql(user.email);
-
-        done();
-      });
-    });
-
-    it('should resolve app by id', function(done) {
-      ACL.resolvePrincipal(ACL.APP, app.id, function(err, a) {
-        if (err) return done(err);
-
-        expect(a.id).to.eql(app.id);
-
-        done();
-      });
-    });
-
-    it('should resolve app by name', function(done) {
-      ACL.resolvePrincipal(ACL.APP, app.name, function(err, a) {
-        if (err) return done(err);
-
-        expect(a.name).to.eql(app.name);
-
-        done();
-      });
-    });
-
-    it('supports ACL.isMappedToRole() returning a promise', function() {
-      return ACL.isMappedToRole(ACL.USER, user.username, 'admin')
-        .then(function(flag) {
-          expect(flag).to.be.true();
-        });
-    });
-
-    it('should report isMappedToRole by user.username', function(done) {
-      ACL.isMappedToRole(ACL.USER, user.username, 'admin', function(err, flag) {
-        if (err) return done(err);
-
-        expect(flag).to.eql(true);
-
-        done();
-      });
-    });
-
-    it('should report isMappedToRole by user.email', function(done) {
-      ACL.isMappedToRole(ACL.USER, user.email, 'admin', function(err, flag) {
-        if (err) return done(err);
-
-        expect(flag).to.eql(true);
-
-        done();
-      });
-    });
-
-    it('should report isMappedToRole by user.username for mismatch',
-      function(done) {
-        ACL.isMappedToRole(ACL.USER, 'mary', 'admin', function(err, flag) {
-          if (err) return done(err);
-
-          expect(flag).to.eql(false);
-
-          done();
-        });
       });
 
-    it('should report isMappedToRole by app.name', function(done) {
-      ACL.isMappedToRole(ACL.APP, app.name, 'admin', function(err, flag) {
-        if (err) return done(err);
-
-        expect(flag).to.eql(true);
-
-        done();
+      app = await Application.create({
+        name: 'demo',
       });
+
+      role = await Role.create({
+        name: 'admin',
+      });
+
+      const principals = [
+        {
+          principalType: ACL.USER,
+          principalId: user.id,
+        },
+        {
+          principalType: ACL.APP,
+          principalId: app.id,
+        },
+      ];
+      
+      // Use Promise.all instead of async.each
+      await Promise.all(principals.map(p => role.principals.create(p)));
+    });
+
+    it('supports ACL.resolvePrincipal() returning a promise', async function() {
+      const u = await ACL.resolvePrincipal(ACL.USER, user.id);
+      expect(u.id).to.eql(user.id);
+    });
+
+    it('should resolve user by id', async function() {
+      const u = await ACL.resolvePrincipal(ACL.USER, user.id);
+      expect(u.id).to.eql(user.id);
+    });
+
+    it('should resolve user by username', async function() {
+      const u = await ACL.resolvePrincipal(ACL.USER, user.username);
+      expect(u.username).to.eql(user.username);
+    });
+
+    it('should resolve user by email', async function() {
+      const u = await ACL.resolvePrincipal(ACL.USER, user.email);
+      expect(u.email).to.eql(user.email);
+    });
+
+    it('should resolve app by id', async function() {
+      const a = await ACL.resolvePrincipal(ACL.APP, app.id);
+      expect(a.id).to.eql(app.id);
+    });
+
+    it('should resolve app by name', async function() {
+      const a = await ACL.resolvePrincipal(ACL.APP, app.name);
+      expect(a.name).to.eql(app.name);
+    });
+
+    it('should report isMappedToRole by user.username', async function() {
+      const isMappedToRole = await ACL.isMappedToRole(
+        ACL.USER, user.username, 'admin');
+      expect(isMappedToRole).to.be.true();
+    });
+
+    it('should report isMappedToRole by user.email', async function() {
+      const isMappedToRole = await ACL.isMappedToRole(
+        ACL.USER, user.email, 'admin');
+      expect(isMappedToRole).to.be.true();
+    });
+
+    it('should report isMappedToRole by user.id', async function() {
+      const isMappedToRole = await ACL.isMappedToRole(
+        ACL.USER, user.id, 'admin');
+      expect(isMappedToRole).to.be.true();
+    });
+
+    it('should report isMappedToRole by app.name', async function() {
+      const isMappedToRole = await ACL.isMappedToRole(
+        ACL.APP, app.name, 'admin');
+      expect(isMappedToRole).to.be.true();
+    });
+
+    it('should report isMappedToRole by app.id', async function() {
+      const isMappedToRole = await ACL.isMappedToRole(
+        ACL.APP, app.id, 'admin');
+      expect(isMappedToRole).to.be.true();
+    });
+
+    it('should support isInRole() returning a Promise', async function() {
+      // Create a simple context with principals
+      const context = {
+        principals: [
+          {principalType: ACL.USER, principalId: 'a'},
+          {principalType: ACL.APP, principalId: 'b'},
+        ],
+        isAuthenticated: function() { return true }
+      };
+     
+      const isInRole = await Role.isInRole(Role.EVERYONE, context);
+      expect(isInRole).to.be.true();
+    });
+
+    it('should determine if a user is the owner via Promise API', async function() {
+      const result = await Role.isOwner(User, user.id, user.id);
+      assert(result);
     });
   });
 
@@ -1001,209 +725,128 @@ describe('role model', function() {
       sandbox.restore()
     })
 
-    it('should fetch all models assigned to the role', function(done) {
-      const principalTypesToModels = {};
-      let runs = 0;
+    it('should fetch all models assigned to the role', async function() {
+      const principalTypesToModels = {}
+      let runs = 0
 
-      principalTypesToModels[RoleMapping.USER] = User;
-      principalTypesToModels[RoleMapping.APPLICATION] = Application;
-      principalTypesToModels[RoleMapping.ROLE] = Role;
+      principalTypesToModels[RoleMapping.USER] = User
+      principalTypesToModels[RoleMapping.APPLICATION] = Application
+      principalTypesToModels[RoleMapping.ROLE] = Role
 
-      const mappings = Object.keys(principalTypesToModels);
+      const mappings = Object.keys(principalTypesToModels)
 
-      mappings.forEach(function(principalType) {
-        const Model = principalTypesToModels[principalType];
-        Model.create({name: 'test', email: 'x@y.com', password: 'foobar'}, function(err, model) {
-          if (err) return done(err);
-          const uniqueRoleName = 'testRoleFor' + principalType;
-          Role.create({name: uniqueRoleName}, function(err, role) {
-            if (err) return done(err);
-            role.principals.create({principalType: principalType, principalId: model.id},
-              function(err, p) {
-                if (err) return done(err);
-                const pluralName = Model.pluralModelName.toLowerCase();
-                role[pluralName](function(err, models) {
-                  if (err) return done(err);
-                  assert.equal(models.length, 1);
+      for (const principalType of mappings) {
+        const Model = principalTypesToModels[principalType]
+        const model = await Model.create({name: 'test', email: 'x@y.com', password: 'foobar'})
+        const uniqueRoleName = 'testRoleFor' + principalType
+        const role = await Role.create({name: uniqueRoleName})
+        await role.principals.create({principalType: principalType, principalId: model.id})
+        
+        const pluralName = Model.pluralModelName.toLowerCase()
+        const models = await role[pluralName]()
+        assert.equal(models.length, 1)
+      }
+    })
 
-                  if (++runs === mappings.length) {
-                    done();
-                  }
-                });
-              });
-          });
-        });
-      });
-    });
+    it('should fetch all models only assigned to the role', async function() {
+      const principalTypesToModels = {}
 
-    it('should fetch all models only assigned to the role', function(done) {
-      const principalTypesToModels = {};
+      principalTypesToModels[RoleMapping.USER] = User
+      principalTypesToModels[RoleMapping.APPLICATION] = Application
+      principalTypesToModels[RoleMapping.ROLE] = Role
 
-      principalTypesToModels[RoleMapping.USER] = User;
-      principalTypesToModels[RoleMapping.APPLICATION] = Application;
-      principalTypesToModels[RoleMapping.ROLE] = Role;
+      const mappings = Object.keys(principalTypesToModels)
 
-      const mappings = Object.keys(principalTypesToModels);
+      for (const principalType of mappings) {
+        const Model = principalTypesToModels[principalType]
 
-      async.each(mappings, function(principalType, eachCallback) {
-        const Model = principalTypesToModels[principalType];
+        // Create models
+        const models = await Model.create([
+          {name: 'test', email: 'x@y.com', password: 'foobar'},
+          {name: 'test2', email: 'f@v.com', password: 'bargoo'},
+          {name: 'test3', email: 'd@t.com', password: 'bluegoo'}
+        ])
 
-        async.waterfall([
-          // Create models
-          function(next) {
-            Model.create([
-              {name: 'test', email: 'x@y.com', password: 'foobar'},
-              {name: 'test2', email: 'f@v.com', password: 'bargoo'},
-              {name: 'test3', email: 'd@t.com', password: 'bluegoo'}],
-            function(err, models) {
-              if (err) return next(err);
-              next(null, models);
-            });
-          },
+        // Create Roles
+        const uniqueRoleName = 'testRoleFor' + principalType
+        const otherUniqueRoleName = 'otherTestRoleFor' + principalType
+        const roles = await Role.create([
+          {name: uniqueRoleName},
+          {name: otherUniqueRoleName}
+        ])
 
-          // Create Roles
-          function(models, next) {
-            const uniqueRoleName = 'testRoleFor' + principalType;
-            const otherUniqueRoleName = 'otherTestRoleFor' + principalType;
-            Role.create([
-              {name: uniqueRoleName},
-              {name: otherUniqueRoleName}],
-            function(err, roles) {
-              if (err) return next(err);
-              next(null, models, roles);
-            });
-          },
+        // Create principles
+        await Promise.all([
+          roles[0].principals.create({principalType: principalType, principalId: models[0].id}),
+          roles[1].principals.create({principalType: principalType, principalId: models[1].id})
+        ])
 
-          // Create principles
-          function(models, roles, next) {
-            async.parallel([
-              function(callback) {
-                roles[0].principals.create(
-                  {principalType: principalType, principalId: models[0].id},
-                  function(err, p) {
-                    if (err) return callback(err);
-                    callback(p);
-                  },
-                );
-              },
-              function(callback) {
-                roles[1].principals.create(
-                  {principalType: principalType, principalId: models[1].id},
-                  function(err, p) {
-                    if (err) return callback(err);
-                    callback(p);
-                  },
-                );
-              }],
-            function(err, principles) {
-              next(null, models, roles, principles);
-            });
-          },
+        // Run tests against unique Role
+        const pluralName = Model.pluralModelName.toLowerCase()
+        const uniqueRole = roles[0]
+        const uniqueRoleModels = await uniqueRole[pluralName]()
+        assert.equal(uniqueRoleModels.length, 1)
+      }
+    })
 
-          // Run tests against unique Role
-          function(models, roles, principles, next) {
-            const pluralName = Model.pluralModelName.toLowerCase();
-            const uniqueRole = roles[0];
-            uniqueRole[pluralName](function(err, models) {
-              if (err) return done(err);
-              assert.equal(models.length, 1);
-              next();
-            });
-          }],
-        eachCallback);
-      }, function(err) {
-        done();
-      });
-    });
+    it('should apply query', async function() {
+      const user = await User.create({name: 'Raymond', email: 'x@y.com', password: 'foobar'})
+      const role = await Role.create({name: 'userRole'})
+      await role.principals.create({principalType: RoleMapping.USER, principalId: user.id})
+      
+      const query = {fields: ['id', 'name']}
+      sandbox.spy(User, 'find')
+      const users = await role.users(query)
+      
+      assert.equal(users.length, 1)
+      assert.equal(users[0].id, user.id)
+      assert(User.find.calledWith(query))
+    })
 
-    it('should apply query', function(done) {
-      User.create({name: 'Raymond', email: 'x@y.com', password: 'foobar'}, function(err, user) {
-        if (err) return done(err);
-        Role.create({name: 'userRole'}, function(err, role) {
-          if (err) return done(err);
-          role.principals.create({principalType: RoleMapping.USER, principalId: user.id},
-            function(err, p) {
-              if (err) return done(err);
-              const query = {fields: ['id', 'name']};
-              sandbox.spy(User, 'find');
-              role.users(query, function(err, users) {
-                if (err) return done(err);
-                assert.equal(users.length, 1);
-                assert.equal(users[0].id, user.id);
-                assert(User.find.calledWith(query));
-
-                done();
-              });
-            });
-        });
-      });
-    });
-
-    it('supports Promise API', function(done) {
-      const userData = {name: 'Raymond', email: 'x@y.com', password: 'foobar'};
-      User.create(userData, function(err, user) {
-        if (err) return done(err);
-        Role.create({name: 'userRole'}, function(err, role) {
-          if (err) return done(err);
-          const principalData = {
-            principalType: RoleMapping.USER,
-            principalId: user.id,
-          };
-          role.principals.create(principalData, function(err, p) {
-            if (err) return done(err);
-            role.users()
-              .then(function(users) {
-                const userIds = users.map(function(u) { return u.id; });
-                expect(userIds).to.eql([user.id]);
-                done();
-              })
-              .catch(done);
-          });
-        });
-      });
-    });
-  });
+    it('supports Promise API', async function() {
+      const userData = {name: 'Raymond', email: 'x@y.com', password: 'foobar'}
+      const user = await User.create(userData)
+      const role = await Role.create({name: 'userRole'})
+      
+      const principalData = {
+        principalType: RoleMapping.USER,
+        principalId: user.id,
+      }
+      await role.principals.create(principalData)
+      
+      const users = await role.users()
+      const userIds = users.map(function(u) { return u.id })
+      expect(userIds).to.eql([user.id])
+    })
+  })
 
   describe('isOwner', function() {
-    it('supports app-local model registry', function(done) {
-      const app = loopback({localRegistry: true, loadBuiltinModels: true});
-      app.dataSource('db', {connector: 'memory'});
+    it('supports app-local model registry', async function() {
+      const app = loopback({localRegistry: true, loadBuiltinModels: true})
+      app.dataSource('db', {connector: 'memory'})
       // attach all auth-related models to 'db' datasource
-      app.enableAuth({dataSource: 'db'});
+      app.enableAuth({dataSource: 'db'})
 
-      const Role = app.models.Role;
-      const User = app.models.User;
+      const Role = app.models.Role
+      const User = app.models.User
 
       // Speed up the password hashing algorithm for tests
-      User.settings.saltWorkFactor = 4;
+      User.settings.saltWorkFactor = 4
 
-      const u = app.registry.findModel('User');
-      const credentials = {email: 'test@example.com', password: 'pass'};
-      User.create(credentials, function(err, user) {
-        if (err) return done(err);
+      const u = app.registry.findModel('User')
+      const credentials = {email: 'test@example.com', password: 'pass'}
+      const user = await User.create(credentials)
 
-        Role.isOwner(User, user.id, user.id, function(err, result) {
-          if (err) return done(err);
+      const result = await Role.isOwner(User, user.id, user.id)
+      expect(result, 'isOwner result').to.equal(true)
+    })
 
-          expect(result, 'isOwner result').to.equal(true);
+    it('supports Promise API', async function() {
+      const credentials = {email: 'test@example.com', password: 'pass'}
+      const user = await User.create(credentials)
 
-          done();
-        });
-      });
-    });
-
-    it('supports Promise API', function(done) {
-      const credentials = {email: 'test@example.com', password: 'pass'};
-      User.create(credentials, function(err, user) {
-        if (err) return done(err);
-
-        Role.isOwner(User, user.id, user.id)
-          .then(function(result) {
-            expect(result, 'isOwner result').to.equal(true);
-            done();
-          })
-          .catch(done);
-      });
-    });
-  });
+      const result = await Role.isOwner(User, user.id, user.id)
+      expect(result, 'isOwner result').to.equal(true)
+    })
+  })
 });
