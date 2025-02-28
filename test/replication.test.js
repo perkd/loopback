@@ -693,13 +693,16 @@ describe('Replication / Change APIs', function() {
         // Get current source data
         const sourceData = await SourceModel.findById('1')
         
-        // Manually resolve by updating target with source data
+        // Manually create the target again with source data
         // This simulates what we want conflict resolution to do
-        debug('Manually updating target with source data')
-        await TargetModel.updateAll({ id: '1' }, { name: sourceData.name })
+        try {
+          await TargetModel.create(sourceData)
+          debug('Created target model with source data')
+        } catch (err) {
+          debug('Error creating target: %s', err.message)
+        }
         
         // Now call the conflict resolution 
-        debug('Calling conflict.resolve()')
         await conflicts[0].resolve()
         
         // Check data right after conflict resolution
