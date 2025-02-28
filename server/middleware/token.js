@@ -22,34 +22,33 @@ module.exports = token;
 /*
  * Rewrite the url to replace current user literal with the logged in user id
  */
-function rewriteUserLiteral(req, currentUserLiteral, next) {
-  if (!currentUserLiteral) return next();
+async function rewriteUserLiteral(req, currentUserLiteral) {
+  if (!currentUserLiteral) return
+
   const literalRegExp = new RegExp('/' + currentUserLiteral + '(/|$|\\?)', 'g');
 
-  if (req.accessToken && req.accessToken.userId) {
+  if (req.accessToken?.userId) {
     // Replace /me/ with /current-user-id/
     const urlBeforeRewrite = req.url;
     req.url = req.url.replace(literalRegExp,
       '/' + req.accessToken.userId + '$1');
 
     if (req.url !== urlBeforeRewrite) {
-      debug('req.url has been rewritten from %s to %s', urlBeforeRewrite,
-        req.url);
+      debug('req.url has been rewritten from %s to %s', urlBeforeRewrite, req.url)
     }
-  } else if (!req.accessToken && literalRegExp.test(req.url)) {
+  }
+  else if (!req.accessToken && literalRegExp.test(req.url)) {
     debug(
       'URL %s matches current-user literal %s,' +
         ' but no (valid) access token was provided.',
       req.url, currentUserLiteral,
     );
 
-    const e = new Error(g.f('Authorization Required'));
-    e.status = e.statusCode = 401;
-    e.code = 'AUTHORIZATION_REQUIRED';
-    return next(e);
+    const error = new Error(g.f('Authorization Required'));
+    error.status = error.statusCode = 401;
+    error.code = 'AUTHORIZATION_REQUIRED';
+    throw error;
   }
-
-  next();
 }
 
 function escapeRegExp(str) {
@@ -128,24 +127,32 @@ function token(options) {
       if (!enableDoublecheck) {
         // req.accessToken is defined already (might also be "null" or "false") and enableDoublecheck
         // has not been set --> skip searching for credentials
-        return rewriteUserLiteral(req, currentUserLiteral, next);
+        rewriteUserLiteral(req, currentUserLiteral)
+          .then(() => next())
+          .catch(next)
       }
       if (req.accessToken && req.accessToken.id && !overwriteExistingToken) {
         // req.accessToken.id is defined, which means that some other middleware has identified a valid user.
         // when overwriteExistingToken is not set to a truthy value, skip searching for credentials.
-        return rewriteUserLiteral(req, currentUserLiteral, next);
+        rewriteUserLiteral(req, currentUserLiteral)
+          .then(() => next())
+          .catch(next)
       }
       // continue normal operation (as if req.accessToken was undefined)
     }
 
-    TokenModel.findForRequest(req, options, function(err, token) {
-      req.accessToken = token || null;
+    TokenModel.findForRequest(req, options).then(token => {
+      req.accessToken = token || null
 
-      const ctx = req.loopbackContext;
-      if (ctx && ctx.active) ctx.set('accessToken', token);
+      const ctx = req.loopbackContext
+      if (ctx && ctx.active) {
+        ctx.set('accessToken', token)
+      }
 
-      if (err) return next(err);
-      rewriteUserLiteral(req, currentUserLiteral, next);
-    });
-  };
+      rewriteUserLiteral(req, currentUserLiteral)
+        .then(() => next())
+        .catch(next)
+    })
+    .catch(next)
+  }
 }

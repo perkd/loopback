@@ -8,11 +8,10 @@
  */
 
 'use strict';
-const g = require('../../lib/globalize');
-const loopback = require('../../lib/loopback');
-const assert = require('assert');
-const uid = require('uid2');
-const DEFAULT_TOKEN_LEN = 64;
+const assert = require('node:assert')
+const uid = require('uid2/promises')
+const g = require('../../lib/globalize')
+const DEFAULT_TOKEN_LEN = 64
 
 /**
  * Token based authentication and access control.
@@ -47,36 +46,23 @@ module.exports = function(AccessToken) {
   /**
    * Create a cryptographically random access token id.
    *
-   * @callback {Function} callback
-   * @param {Error} err
-   * @param {String} token
+   * @return {String} token
    */
 
-  AccessToken.createAccessTokenId = function(fn) {
-    uid(this.settings.accessTokenIdLength || DEFAULT_TOKEN_LEN, function(err, guid) {
-      if (err) {
-        fn(err);
-      } else {
-        fn(null, guid);
-      }
-    });
-  };
+  AccessToken.createAccessTokenId = async function() {
+    return uid(this.settings.accessTokenIdLength || DEFAULT_TOKEN_LEN)
+  }
 
   /*!
    * Hook to create accessToken id.
    */
-  AccessToken.observe('before save', function(ctx, next) {
+  AccessToken.observe('before save', async function(ctx) {
     if (!ctx.instance || ctx.instance.id) {
       // We are running a partial update or the instance already has an id
-      return next();
+      return
     }
-
-    AccessToken.createAccessTokenId(function(err, id) {
-      if (err) return next(err);
-      ctx.instance.id = id;
-      next();
-    });
-  });
+    ctx.instance.id = await AccessToken.createAccessTokenId()
+  })
 
   /**
    * Extract the access token id from the HTTP request
@@ -134,12 +120,13 @@ module.exports = function(AccessToken) {
           id = id.substring(7);
           if (options.bearerTokenBase64Encoded) {
             // Decode from base64
-            const buf = new Buffer(id, 'base64');
-            id = buf.toString('utf8');
+            const buf = Buffer.from(id, 'base64')
+            id = buf.toString('utf8')
           }
-        } else if (/^Basic /i.test(id)) {
-          id = id.substring(6);
-          id = (new Buffer(id, 'base64')).toString('utf8');
+        }
+        else if (/^Basic /i.test(id)) {
+          id = id.substring(6)
+          id = Buffer.from(id, 'base64').toString('utf8')
           // The spec says the string is user:pass, so if we see both parts
           // we will assume the longer of the two is the token, so we will
           // extract "a2b2c3" from:
@@ -171,111 +158,79 @@ module.exports = function(AccessToken) {
   /**
    * Resolve and validate the access token by id
    * @param {String} id Access token
-   * @callback {Function} cb Callback function
-   * @param {Error} err Error information
-   * @param {Object} Resolved access token object
+   * @return {Object} Resolved access token object
    */
-  AccessToken.resolve = function(id, cb) {
-    this.findById(id, function(err, token) {
-      if (err) {
-        cb(err);
-      } else if (token) {
-        token.validate(function(err, isValid) {
-          if (err) {
-            cb(err);
-          } else if (isValid) {
-            cb(null, token);
-          } else {
-            const e = new Error(g.f('Invalid Access Token'));
-            e.status = e.statusCode = 401;
-            e.code = 'INVALID_TOKEN';
-            cb(e);
-          }
-        });
-      } else {
-        cb();
-      }
-    });
-  };
+  AccessToken.resolve = async function(id) {
+    try {
+      const token = await this.findById(id)
+      if (!token) throw 'invalid'
+
+      const isValid = await token.validate()
+      if (!isValid) throw 'invalid'
+      return token
+    }
+    catch (e) {
+      const error = new Error(g.f('Invalid Access Token'))
+      error.status = error.statusCode = 401
+      error.code = 'INVALID_TOKEN'
+      throw error
+    }
+  }
 
   /**
    * Find a token for the given `ServerRequest`.
    *
    * @param {ServerRequest} req
    * @param {Object} [options] Options for finding the token
-   * @callback {Function} callback
-   * @param {Error} err
    * @param {AccessToken} token
    */
-  AccessToken.findForRequest = function(req, options, cb) {
-    if (cb === undefined && typeof options === 'function') {
-      cb = options;
-      options = {};
-    }
-
-    const id = this.getIdForRequest(req, options);
-
-    if (id) {
-      this.resolve(id, cb);
-    } else {
-      process.nextTick(cb);
-    }
-  };
+  AccessToken.findForRequest = async function(req, options) {
+    const id = this.getIdForRequest(req, options)
+    return id ? this.resolve(id) : null
+  }
 
   /**
    * Validate the token.
    *
-   * @callback {Function} callback
-   * @param {Error} err
-   * @param {Boolean} isValid
+   * @return {Boolean} isValid
    */
-  AccessToken.prototype.validate = function(cb) {
-    try {
-      assert(
-        this.created && typeof this.created.getTime === 'function',
-        'token.created must be a valid Date',
-      );
-      assert(this.ttl !== 0, 'token.ttl must be not be 0');
-      assert(this.ttl, 'token.ttl must exist');
-      assert(this.ttl >= -1, 'token.ttl must be >= -1');
+  AccessToken.prototype.validate = async function() {
+    assert(
+      this.created && typeof this.created.getTime === 'function',
+      'token.created must be a valid Date',
+    );
+    assert(this.ttl !== 0, 'token.ttl must be not be 0');
+    assert(this.ttl, 'token.ttl must exist');
+    assert(this.ttl >= -1, 'token.ttl must be >= -1');
 
-      const AccessToken = this.constructor;
-      const userRelation = AccessToken.relations.user; // may not be set up
-      let User = userRelation && userRelation.modelTo;
+    const AccessToken = this.constructor;
+    const userRelation = AccessToken.relations.user; // may not be set up
+    let User = userRelation && userRelation.modelTo;
 
-      // redefine user model if accessToken's principalType is available
-      if (this.principalType) {
-        User = AccessToken.registry.findModel(this.principalType);
-        if (!User) {
-          process.nextTick(function() {
-            return cb(null, false);
-          });
-        }
+    // redefine user model if accessToken's principalType is available
+    if (this.principalType) {
+      User = AccessToken.registry.findModel(this.principalType);
+      if (!User) {
+        return false
       }
-
-      const now = Date.now();
-      const created = this.created.getTime();
-      const elapsedSeconds = (now - created) / 1000;
-      const secondsToLive = this.ttl;
-      const eternalTokensAllowed = !!(User && User.settings.allowEternalTokens);
-      const isEternalToken = secondsToLive === -1;
-      const isValid = isEternalToken ?
-        eternalTokensAllowed :
-        elapsedSeconds < secondsToLive;
-
-      if (isValid) {
-        process.nextTick(function() {
-          cb(null, isValid);
-        });
-      } else {
-        this.destroy(function(err) {
-          cb(err, isValid);
-        });
-      }
-    } catch (e) {
-      process.nextTick(function() {
-        cb(e);
-      });
     }
-  };
-};
+
+    const now = Date.now();
+    const created = this.created.getTime();
+    const elapsedSeconds = (now - created) / 1000;
+    const secondsToLive = this.ttl;
+    const eternalTokensAllowed = !!(User && User.settings.allowEternalTokens);
+    const isEternalToken = secondsToLive === -1;
+    const isValid = isEternalToken ?
+      eternalTokensAllowed :
+      elapsedSeconds < secondsToLive;
+
+    if (isValid) {
+      return true
+    }
+    else {
+      await this.destroy()
+      return false
+    }
+  }
+}
