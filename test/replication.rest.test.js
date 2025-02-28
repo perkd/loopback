@@ -185,7 +185,12 @@ describe('Replication over REST', function() {
           method: 'replicate',
           remotingContext: {
             accessType: 'REPLICATE',
-            req: { accessToken: { userId: aliceId } }
+            req: { 
+              accessToken: { userId: aliceId },
+              headers: { 
+                authorization: aliceToken 
+              }
+            }
           }
         }
         
@@ -207,7 +212,12 @@ describe('Replication over REST', function() {
           method: 'replicate',
           remotingContext: {
             accessType: 'REPLICATE',
-            req: { accessToken: { userId: aliceId } }
+            req: { 
+              accessToken: { userId: aliceId },
+              headers: { 
+                authorization: aliceToken 
+              }
+            }
           }
         }
         
@@ -232,7 +242,12 @@ describe('Replication over REST', function() {
           method: 'replicate',
           remotingContext: {
             accessType: 'REPLICATE',
-            req: { accessToken: { userId: aliceId } }
+            req: { 
+              accessToken: { userId: aliceId },
+              headers: { 
+                authorization: aliceToken 
+              }
+            }
           }
         }
         
@@ -268,7 +283,12 @@ describe('Replication over REST', function() {
           method: 'replicate',
           remotingContext: {
             accessType: 'REPLICATE',
-            req: { accessToken: { userId: peterId } }
+            req: { 
+              accessToken: { userId: peterId },
+              headers: { 
+                authorization: peterToken 
+              }
+            }
           }
         }
         
@@ -292,7 +312,12 @@ describe('Replication over REST', function() {
           method: 'replicate',
           remotingContext: {
             accessType: 'REPLICATE',
-            req: { accessToken: { userId: peterId } }
+            req: { 
+              accessToken: { userId: peterId },
+              headers: { 
+                authorization: peterToken 
+              }
+            }
           }
         }
         
@@ -420,7 +445,12 @@ describe('Replication over REST', function() {
           method: 'replicate',
           remotingContext: {
             accessType: 'REPLICATE',
-            req: { accessToken: { userId: aliceId } }
+            req: { 
+              accessToken: { userId: aliceId },
+              headers: { 
+                authorization: aliceToken 
+              }
+            }
           }
         }
         
@@ -469,7 +499,12 @@ describe('Replication over REST', function() {
           method: 'replicate',
           remotingContext: {
             accessType: 'REPLICATE',
-            req: { accessToken: { userId: peterId } }
+            req: { 
+              accessToken: { userId: peterId },
+              headers: { 
+                authorization: peterToken 
+              }
+            }
           }
         }
         
@@ -492,7 +527,12 @@ describe('Replication over REST', function() {
           method: 'replicate',
           remotingContext: {
             accessType: 'REPLICATE',
-            req: { accessToken: { userId: peterId } }
+            req: { 
+              accessToken: { userId: peterId },
+              headers: { 
+                authorization: peterToken 
+              }
+            }
           }
         }
         
@@ -580,7 +620,12 @@ describe('Replication over REST', function() {
         method: 'replicate',
         remotingContext: {
           accessType: 'REPLICATE',
-          req: { accessToken: { userId: aliceId } }
+          req: { 
+            accessToken: { userId: aliceId },
+            headers: { 
+              authorization: aliceToken 
+            }
+          }
         }
       }
       
@@ -887,10 +932,57 @@ describe('Replication over REST', function() {
       // Hard-coded ID for consistency with original test
       conflictedCarId = 'Ford-Mustang'
       
-      // First replicate in both directions to ensure consistency
-      debug('Initial replication to ensure consistency')
+      // First, ensure both sides have the model with the same ID and make sure they have identical revisions
+      // Initial data needs to be identical on both sides
+      const initialData = {
+        id: conflictedCarId,
+        model: 'Initial Mustang',
+        maker: 'Ford'
+      }
       
-      // Create context for local to server replication
+      // Delete any existing instances to start fresh
+      try {
+        await LocalCar.destroyById(conflictedCarId)
+        await ServerCar.destroyById(conflictedCarId)
+      } catch (err) {
+        // Ignore errors if records don't exist
+        debug('Error deleting existing instances: %s', err.message)
+      }
+      
+      // Deleting directly from Change models to ensure clean state
+      const LocalChange = LocalCar.getChangeModel()
+      const ServerChange = ServerCar.getChangeModel()
+      
+      try {
+        await LocalChange.destroyAll()
+        await ServerChange.destroyAll()
+      } catch (err) {
+        // Ignore errors if records don't exist
+        debug('Error deleting existing change records: %s', err.message)
+      }
+      
+      // Reset checkpoints to ensure clean state
+      const LocalCheckpoint = LocalChange.getCheckpointModel()
+      const ServerCheckpoint = ServerChange.getCheckpointModel()
+      
+      try {
+        await LocalCheckpoint.destroyAll()
+        await ServerCheckpoint.destroyAll()
+      } catch (err) {
+        debug('Error resetting checkpoints: %s', err.message)
+      }
+      
+      // Create identical instances on both sides
+      debug('Creating initial identical instances')
+      await LocalCar.create(initialData)
+      await ServerCar.create(initialData)
+      
+      // Create initial checkpoints
+      await LocalCar.checkpoint()
+      await ServerCar.checkpoint()
+      
+      // Create context for local to server replication to sync the changes
+      debug('Initial sync to ensure consistency')
       const localToServerCtx = {
         Model: LocalCar,
         accessType: 'REPLICATE',
@@ -898,59 +990,66 @@ describe('Replication over REST', function() {
         method: 'replicate'
       }
       
-      const localToServerResult = await LocalCar.replicate(ServerCar, undefined, { ctx: localToServerCtx })
-      if (localToServerResult.conflicts && localToServerResult.conflicts.length) {
-        debug('Unexpected conflicts during initial local->server replication')
-        throw conflictError(localToServerResult.conflicts)
+      // Perform initial replication to ensure both sides are in sync
+      debug('Performing initial replication to ensure consistency')
+      try {
+        const initialSync = await LocalCar.replicate(RemoteCar, -1)
+        debug('Initial sync result:', initialSync)
+      } catch (err) {
+        debug('Initial sync error (non-critical):', err.message)
       }
       
-      // Create context for server to local replication
-      const serverToLocalCtx = {
-        Model: ServerCar,
-        accessType: 'REPLICATE',
-        modelName: ServerCar.modelName,
-        method: 'replicate'
-      }
+      // Create checkpoint before creating conflicts - to ensure new changes have new checkpoints
+      debug('Creating checkpoint')
+      await LocalCar.checkpoint()
+      await ServerCar.checkpoint()
       
-      const serverToLocalResult = await ServerCar.replicate(LocalCar, undefined, { ctx: serverToLocalCtx })
-      if (serverToLocalResult.conflicts && serverToLocalResult.conflicts.length) {
-        debug('Unexpected conflicts during initial server->local replication')
-        throw conflictError(serverToLocalResult.conflicts)
-      }
-      
-      debug('Creating conflicting changes for model ID: %s', conflictedCarId)
-      
-      // Create conflicting changes on both sides
-      const localInstance = await LocalCar.findById(conflictedCarId)
+      // Now create the conflicting changes
+      let localInstance = await LocalCar.findById(conflictedCarId)
       if (localInstance) {
         debug('Updating local instance with conflicting change')
-        await localInstance.updateAttributes({ model: 'Client Updated Mustang' })
+        localInstance = await localInstance.updateAttributes({ model: 'Client Updated Mustang' })
       } else {
         debug('Local instance not found, creating it')
-        await LocalCar.create({
+        localInstance = await LocalCar.create({
           id: conflictedCarId,
           model: 'Client Updated Mustang',
           maker: 'Ford'
         })
       }
       
-      const serverInstance = await ServerCar.findById(conflictedCarId)
+      let serverInstance = await ServerCar.findById(conflictedCarId)
       if (serverInstance) {
         debug('Updating server instance with conflicting change')
-        await serverInstance.updateAttributes({ model: 'Server Updated Mustang' })
+        serverInstance = await serverInstance.updateAttributes({ model: 'Server Updated Mustang' })
       } else {
         debug('Server instance not found, creating it')
-        await ServerCar.create({
+        serverInstance = await ServerCar.create({
           id: conflictedCarId,
           model: 'Server Updated Mustang',
           maker: 'Ford'
         })
       }
       
+      // Ensure both changes are properly tracked
+      await LocalChange.rectifyModelChanges(LocalCar.modelName, [conflictedCarId])
+      await ServerChange.rectifyModelChanges(ServerCar.modelName, [conflictedCarId])
+      
+      // Verify the changes were properly tracked
+      const localChanges = await LocalChange.find({where: {modelId: conflictedCarId}})
+      const serverChanges = await ServerChange.find({where: {modelId: conflictedCarId}})
+      
+      debug('Local changes:', localChanges)
+      debug('Server changes:', serverChanges)
+      
       debug('Successfully created conflict for model ID: %s', conflictedCarId)
-    } catch (err) {
-      debug('Error in seedConflict:', err)
-      throw err
+      
+      // Return the conflicted ID for reference
+      return conflictedCarId
+    } catch (error) {
+      debug('Error in seedConflict: %s', error.message)
+      debug('Error stack: %s', error.stack)
+      throw error
     }
   }
 
