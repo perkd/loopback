@@ -1926,12 +1926,8 @@ describe('User', function () {
         assert(info.accessToken.id);
         assert.equal(info.accessToken.ttl / 60, 15)
 
-        await new Promise((resolve) => {
-          info.accessToken.user((err, user) => {
-            assert.equal(user.email, options.email)
-            resolve()
-          })
-        })
+        const user = await info.accessToken.user.get()
+        assert.equal(user.email, options.email)
       })
 
       it('calls createAccessToken() to create the token', async function () {

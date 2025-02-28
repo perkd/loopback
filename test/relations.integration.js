@@ -4,30 +4,28 @@
 // License text available at https://opensource.org/licenses/MIT
 
 'use strict';
+const path = require('node:path');
+const assert = require('node:assert');
 const loopback = require('../');
 const lt = require('./helpers/loopback-testing-helper');
-const path = require('path');
 const SIMPLE_APP = path.join(__dirname, 'fixtures', 'simple-integration-app');
 const app = require(path.join(SIMPLE_APP, 'server/server.js'));
-const assert = require('assert');
 const expect = require('./helpers/expect');
-const debug = require('debug')('loopback:test:relations.integration');
-const async = require('async');
+const debug = require('debug')('loopback:test:relations.integration')
 
 describe('relations - integration', function() {
-  lt.beforeEach.withApp(app);
+  lt.beforeEach.withApp(app)
+  lt.beforeEach.givenModel('store')
 
-  lt.beforeEach.givenModel('store');
-  beforeEach(function(done) {
+  beforeEach(async function() {
     this.widgetName = 'foo';
-    this.store.widgets.create({
-      name: this.widgetName,
-    }, function() {
-      done();
-    });
-  });
-  afterEach(function(done) {
-    this.app.models.widget.destroyAll(done);
+    await this.store.widgets.create({
+      name: this.widgetName
+    })
+  })
+
+  afterEach(async function() {
+    await this.app.models.widget.destroyAll();
   });
 
   describe('polymorphicHasMany', function() {
@@ -75,83 +73,69 @@ describe('relations - integration', function() {
         });
     });
 
-    after(function(done) {
-      this.app.models.Reader.destroyAll(done);
-    });
+    after(async function() {
+      await this.app.models.Reader.destroyAll()
+    })
 
-    it('includes the related child model', function(done) {
+    it('includes the related child model', async function() {
       const url = '/api/readers/' + this.reader.id;
-      this.get(url)
+      const res = await this.get(url)
         .query({'filter': {'include': 'pictures'}})
-        .expect(200, function(err, res) {
-          if (err) return done(err);
+        .expect(200)
 
-          expect(res.body.name).to.be.equal('Reader 1');
-          expect(res.body.pictures).to.be.eql([
-            {name: 'Picture 1', id: 1, imageableId: 1, imageableType: 'Reader'},
-            {name: 'Picture 2', id: 2, imageableId: 1, imageableType: 'Reader'},
-          ]);
+      expect(res.body.name).to.be.equal('Reader 1')
+      expect(res.body.pictures).to.be.eql([
+        {name: 'Picture 1', id: 1, imageableId: 1, imageableType: 'Reader'},
+        {name: 'Picture 2', id: 2, imageableId: 1, imageableType: 'Reader'},
+      ])
+    })
 
-          done();
-        });
-    });
-
-    it('includes the related parent model', function(done) {
+    it('includes the related parent model', async function() {
       const url = '/api/pictures';
-      this.get(url)
+      const res = await this.get(url)
         .query({'filter': {'include': 'imageable'}})
-        .expect(200, function(err, res) {
-          if (err) return done(err);
+        .expect(200)
 
-          expect(res.body[0].name).to.be.equal('Picture 1');
-          expect(res.body[1].name).to.be.equal('Picture 2');
-          expect(res.body[0].imageable).to.be.eql({name: 'Reader 1', id: 1, teamId: 1});
+      expect(res.body[0].name).to.be.equal('Picture 1')
+      expect(res.body[1].name).to.be.equal('Picture 2')
+      expect(res.body[0].imageable).to.be.eql({name: 'Reader 1', id: 1, teamId: 1})
+    })
 
-          done();
-        });
-    });
-
-    it('includes related models scoped to the related parent model', function(done) {
+    it('includes related models scoped to the related parent model', async function() {
       const url = '/api/pictures';
-      this.get(url)
+      const res = await this.get(url)
         .query({'filter': {'include': {
           'relation': 'imageable',
           'scope': {'include': 'team'},
         }}})
-        .expect(200, function(err, res) {
-          if (err) return done(err);
+        .expect(200)
 
-          expect(res.body[0].name).to.be.equal('Picture 1');
-          expect(res.body[1].name).to.be.equal('Picture 2');
-          expect(res.body[0].imageable.name).to.be.eql('Reader 1');
-          expect(res.body[0].imageable.team).to.be.eql({name: 'Team 1', id: 1});
-
-          done();
-        });
-    });
-  });
+      expect(res.body[0].name).to.be.equal('Picture 1')
+      expect(res.body[1].name).to.be.equal('Picture 2')
+      expect(res.body[0].imageable.name).to.be.eql('Reader 1')
+      expect(res.body[0].imageable.team).to.be.eql({name: 'Team 1', id: 1})
+    })
+  })
 
   describe('/store/superStores', function() {
-    it('should invoke scoped methods remotely', function(done) {
-      this.get('/api/stores/superStores')
-        .expect(200, function(err, res) {
-          if (err) return done(err);
+    it('should invoke scoped methods remotely', async function() {
+      const res = await this.get('/api/stores/superStores')
+        .expect(200)
 
-          expect(res.body).to.be.an('array');
-
-          done();
-        });
-    });
-  });
+      expect(res.body).to.be.an('array')
+    })
+  })
 
   describe('/store/:id/widgets', function() {
     beforeEach(function() {
       this.url = '/api/stores/' + this.store.id + '/widgets';
-    });
+    })
+
     lt.describe.whenCalledRemotely('GET', '/api/stores/:id/widgets', function() {
       it('should succeed with statusCode 200', function() {
         assert.equal(this.res.statusCode, 200);
-      });
+      })
+
       describe('widgets (response.body)', function() {
         beforeEach(function() {
           debug('GET /api/stores/:id/widgets response: %s' +
@@ -161,28 +145,33 @@ describe('relations - integration', function() {
           this.res.text);
           this.widgets = this.res.body;
           this.widget = this.res.body && this.res.body[0];
-        });
+        })
+
         it('should be an array', function() {
-          assert(Array.isArray(this.widgets));
-        });
+          assert(Array.isArray(this.widgets))
+        })
+
         it('should include a single widget', function() {
           assert(this.widgets.length === 1);
-          assert(this.widget);
-        });
+          assert(this.widget)
+        })
+
         it('should be a valid widget', function() {
-          assert(this.widget.id);
-          assert.equal(this.widget.storeId, this.store.id);
-          assert.equal(this.widget.name, this.widgetName);
-        });
-      });
-    });
+          assert(this.widget.id)
+          assert.equal(this.widget.storeId, this.store.id)
+          assert.equal(this.widget.name, this.widgetName)
+        })
+      })
+    })
+
     describe('POST /api/store/:id/widgets', function() {
       beforeEach(function() {
         this.newWidgetName = 'baz';
         this.newWidget = {
           name: this.newWidgetName,
         };
-      });
+      })
+
       beforeEach(function(done) {
         this.http = this.post(this.url, this.newWidget);
         this.http.send(this.newWidget);
@@ -194,63 +183,56 @@ describe('relations - integration', function() {
 
           done();
         }.bind(this));
-      });
+      })
+
       it('should succeed with statusCode 200', function() {
         assert.equal(this.res.statusCode, 200);
-      });
+      })
+
       describe('widget (response.body)', function() {
         beforeEach(function() {
           this.widget = this.res.body;
-        });
+        })
+
         it('should be an object', function() {
           assert(typeof this.widget === 'object');
           assert(!Array.isArray(this.widget));
-        });
+        })
+
         it('should be a valid widget', function() {
           assert(this.widget.id);
           assert.equal(this.widget.storeId, this.store.id);
-          assert.equal(this.widget.name, this.newWidgetName);
-        });
-      });
-      it('should have a single widget with storeId', function(done) {
-        this.app.models.widget.count({
+          assert.equal(this.widget.name, this.newWidgetName)
+        })
+      })
+
+      it('should have a single widget with storeId', async function() {
+        const count = await this.app.models.widget.count({
           storeId: this.store.id,
-        }, function(err, count) {
-          if (err) return done(err);
-
-          assert.equal(count, 2);
-
-          done();
-        });
-      });
-    });
+        })
+        assert.equal(count, 2)
+      })
+    })
 
     describe('PUT /api/store/:id/widgets/:fk', function() {
-      beforeEach(function(done) {
-        const self = this;
-        this.store.widgets.create({
+      beforeEach(async function() {
+        this.widget = await this.store.widgets.create({
           name: this.widgetName,
-        }, function(err, widget) {
-          self.widget = widget;
-          self.url = '/api/stores/' + self.store.id + '/widgets/' + widget.id;
-          done();
-        });
-      });
-      it('does not add default properties to request body', function(done) {
-        const self = this;
-        self.request.put(self.url)
+        })
+        this.url = '/api/stores/' + this.store.id + '/widgets/' + this.widget.id
+      })
+
+      it('does not add default properties to request body', async function() {
+        const res = await this.put(this.url)
           .send({active: true})
-          .end(function(err) {
-            if (err) return done(err);
-            app.models.Widget.findById(self.widget.id, function(err, w) {
-              if (err) return done(err);
-              expect(w.name).to.equal(self.widgetName);
-              done();
-            });
-          });
-      });
-    });
-  });
+          .expect(200)
+
+        const widget = await this.app.models.widget.findById(this.widget.id)
+        expect(widget.name).to.equal(this.widgetName)
+        expect(widget.active).to.equal(true)
+      })
+    })
+  })
 
   describe('/stores/:id/widgets/:fk - 200', function() {
     beforeEach(function(done) {
@@ -327,17 +309,13 @@ describe('relations - integration', function() {
   });
 
   describe('/widgets/:id/store', function() {
-    beforeEach(function(done) {
-      const self = this;
-      this.store.widgets.create({
+    beforeEach(async function() {
+      this.widget = await this.store.widgets.create({
         name: this.widgetName,
-      }, function(err, widget) {
-        self.widget = widget;
-        self.url = '/api/widgets/' + self.widget.id + '/store';
+      })
+      this.url = '/api/widgets/' + this.widget.id + '/store'
+    })
 
-        done();
-      });
-    });
     lt.describe.whenCalledRemotely('GET', '/api/widgets/:id/store', function() {
       it('should succeed with statusCode 200', function() {
         assert.equal(this.res.statusCode, 200);
@@ -347,69 +325,40 @@ describe('relations - integration', function() {
   });
 
   describe('hasMany through', function() {
-    function setup(connecting, cb) {
+    async function setup(connecting) {
       const root = {};
 
-      async.series([
-        // Clean up models
-        function(done) {
-          app.models.physician.destroyAll(function(err) {
-            app.models.patient.destroyAll(function(err) {
-              app.models.appointment.destroyAll(function(err) {
-                done();
-              });
-            });
-          });
-        },
+      // Clean up models
+      await app.models.physician.destroyAll()
+      await app.models.patient.destroyAll()
+      await app.models.appointment.destroyAll()
 
-        // Create a physician
-        function(done) {
-          app.models.physician.create({
-            name: 'ph1',
-          }, function(err, physician) {
-            root.physician = physician;
+      // Create a physician
+      root.physician = await app.models.physician.create({name: 'ph1'})
 
-            done();
-          });
-        },
+      // Create a patient based on "connecting" flag
+      if (connecting) {
+        root.patient = await root.physician.patients.create({name: 'pa1'})
+      }
+      else {
+        root.patient = await app.models.patient.create({name: 'pa1'})
+      }
+      root.relUrl =
+        '/api/physicians/' +
+        root.physician.id +
+        '/patients/rel/' +
+        root.patient.id;
 
-        // Create a patient
-        connecting ? function(done) {
-          root.physician.patients.create({
-            name: 'pa1',
-          }, function(err, patient) {
-            root.patient = patient;
-            root.relUrl = '/api/physicians/' + root.physician.id +
-              '/patients/rel/' + root.patient.id;
-
-            done();
-          });
-        } : function(done) {
-          app.models.patient.create({
-            name: 'pa1',
-          }, function(err, patient) {
-            root.patient = patient;
-            root.relUrl = '/api/physicians/' + root.physician.id +
-              '/patients/rel/' + root.patient.id;
-
-            done();
-          });
-        }], function(err, done) {
-        cb(err, root);
-      });
+      return root
     }
 
     describe('PUT /physicians/:id/patients/rel/:fk', function() {
-      before(function(done) {
-        const self = this;
-        setup(false, function(err, root) {
-          self.url = root.relUrl;
-          self.patient = root.patient;
-          self.physician = root.physician;
-
-          done(err);
-        });
-      });
+      before(async function() {
+        const root = await setup(false)
+        this.url = root.relUrl
+        this.patient = root.patient
+        this.physician = root.physician
+      })
 
       lt.describe.whenCalledRemotely('PUT', '/api/physicians/:id/patients/rel/:fk', function() {
         it('should succeed with statusCode 200', function() {
@@ -418,38 +367,30 @@ describe('relations - integration', function() {
           assert.equal(this.res.body.physicianId, this.physician.id);
         });
 
-        it('should create a record in appointment', function(done) {
-          const self = this;
-          app.models.appointment.find(function(err, apps) {
-            assert.equal(apps.length, 1);
-            assert.equal(apps[0].patientId, self.patient.id);
+        it('should create a record in appointment', async function() {
+          const apps = await this.app.models.appointment.find()
+          assert.equal(apps.length, 1)
+          assert.equal(apps[0].patientId, this.patient.id)
+        })
 
-            done();
-          });
-        });
-
-        it('should connect physician to patient', function(done) {
-          const self = this;
-          self.physician.patients(function(err, patients) {
-            assert.equal(patients.length, 1);
-            assert.equal(patients[0].id, self.patient.id);
-
-            done();
-          });
-        });
-      });
-    });
+        it('should connect physician to patient', async function() {
+          const patients = await this.physician.patients.find()
+          assert.equal(patients.length, 1)
+          assert.equal(patients[0].id, this.patient.id)
+        })
+      })
+    })
 
     describe('PUT /physicians/:id/patients/rel/:fk with data', function() {
       before(function(done) {
         const self = this;
-        setup(false, function(err, root) {
+        setup(false).then((root) => {
           self.url = root.relUrl;
           self.patient = root.patient;
           self.physician = root.physician;
 
-          done(err);
-        });
+          done();
+        }).catch(done);
       });
 
       const NOW = Date.now();
@@ -490,13 +431,13 @@ describe('relations - integration', function() {
     describe('HEAD /physicians/:id/patients/rel/:fk', function() {
       before(function(done) {
         const self = this;
-        setup(true, function(err, root) {
+        setup(true).then((root) => {
           self.url = root.relUrl;
           self.patient = root.patient;
           self.physician = root.physician;
 
-          done(err);
-        });
+          done();
+        }).catch(done);
       });
 
       lt.describe.whenCalledRemotely('HEAD', '/api/physicians/:id/patients/rel/:fk', function() {
@@ -509,14 +450,14 @@ describe('relations - integration', function() {
     describe('HEAD /physicians/:id/patients/rel/:fk that does not exist', function() {
       before(function(done) {
         const self = this;
-        setup(true, function(err, root) {
+        setup(true).then((root) => {
           self.url = '/api/physicians/' + root.physician.id +
             '/patients/rel/' + '999';
           self.patient = root.patient;
           self.physician = root.physician;
 
-          done(err);
-        });
+          done();
+        }).catch(done);
       });
 
       lt.describe.whenCalledRemotely('HEAD', '/api/physicians/:id/patients/rel/:fk', function() {
@@ -529,13 +470,13 @@ describe('relations - integration', function() {
     describe('DELETE /physicians/:id/patients/rel/:fk', function() {
       before(function(done) {
         const self = this;
-        setup(true, function(err, root) {
+        setup(true).then((root) => {
           self.url = root.relUrl;
           self.patient = root.patient;
           self.physician = root.physician;
 
-          done(err);
-        });
+          done();
+        }).catch(done);
       });
 
       it('should create a record in appointment', function(done) {
@@ -587,14 +528,14 @@ describe('relations - integration', function() {
     describe('GET /physicians/:id/patients/:fk', function() {
       before(function(done) {
         const self = this;
-        setup(true, function(err, root) {
+        setup(true).then((root) => {
           self.url = '/api/physicians/' + root.physician.id +
             '/patients/' + root.patient.id;
           self.patient = root.patient;
           self.physician = root.physician;
 
-          done(err);
-        });
+          done();
+        }).catch(done);
       });
 
       lt.describe.whenCalledRemotely('GET', '/api/physicians/:id/patients/:fk', function() {
@@ -608,14 +549,14 @@ describe('relations - integration', function() {
     describe('DELETE /physicians/:id/patients/:fk', function() {
       before(function(done) {
         const self = this;
-        setup(true, function(err, root) {
+        setup(true).then((root) => {
           self.url = '/api/physicians/' + root.physician.id +
             '/patients/' + root.patient.id;
           self.patient = root.patient;
           self.physician = root.physician;
 
-          done(err);
-        });
+          done();
+        }).catch(done);
       });
 
       lt.describe.whenCalledRemotely('DELETE', '/api/physicians/:id/patients/:fk', function() {
@@ -1329,20 +1270,15 @@ describe('relations - integration', function() {
         });
     });
 
-    it('creates/links a reference by id', function(done) {
+    it('creates/links a reference by id', async function() {
       let url = '/api/recipes/' + this.recipe.id + '/ingredients';
       url += '/rel/' + this.ingredient2;
-      const test = this;
 
-      this.put(url)
-        .expect(200, function(err, res) {
-          expect(res.body).to.be.eql(
-            {name: 'Sugar', id: test.ingredient2},
-          );
+      const res = await this.put(url)
+        .expect(200)
 
-          done();
-        });
-    });
+      expect(res.body).to.be.eql({name: 'Sugar', id: this.ingredient2})
+    })
 
     it('returns the referenced models - verify', function(done) {
       const url = '/api/recipes/' + this.recipe.id + '/ingredients';
