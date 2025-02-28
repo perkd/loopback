@@ -628,11 +628,10 @@ describe('role model', function() {
           principalType: ACL.APP,
           principalId: app.id,
         },
-      ];
-      
-      // Use Promise.all instead of async.each
-      await Promise.all(principals.map(p => role.principals.create(p)));
-    });
+      ]
+
+      await Promise.all(principals.map(p => role.principals.create(p)))
+    })
 
     it('supports ACL.resolvePrincipal() returning a promise', async function() {
       const u = await ACL.resolvePrincipal(ACL.USER, user.id);
