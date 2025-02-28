@@ -9,8 +9,7 @@
 
 'use strict';
 const g = require('../../lib/globalize');
-const loopback = require('../../lib/loopback');
-const async = require('async');
+const loopback = require('../../lib/loopback')
 
 /*!
  * Export the middleware.
@@ -45,7 +44,7 @@ function rest() {
         throw new Error(g.f(
           '%s was removed in version 3.0. See %s for more details.',
           'remoting.context option',
-          'http://loopback.io/doc/en/lb2/Using-current-context.html',
+          'http://loopback.io/doc/en/lb2/Using-current-context.html'
         ));
       }
 
@@ -62,8 +61,16 @@ function rest() {
     if (handlers.length === 1) {
       return handlers[0](req, res, next);
     }
-    async.eachSeries(handlers, function(handler, done) {
-      handler(req, res, done);
-    }, next);
+
+    // Use an async IIFE with a simple for...of loop to process handlers sequentially
+    (async () => {
+      for (const handler of handlers) {
+        await new Promise((resolve, reject) => {
+          handler(req, res, (err) => err ? reject(err) : resolve());
+        });
+      }
+    })()
+      .then(() => next())
+      .catch(next);
   };
 }
