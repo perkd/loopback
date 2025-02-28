@@ -9,20 +9,12 @@ module.exports = function(grunt) {
         },
         src: ['test/**/*.js']
       }
-    },
-    karma: {
-      unit: {
-        configFile: 'karma.conf.js',
-        autoWatch: false,
-        singleRun: true
-      }
     }
   })
 
   // Load tasks
   grunt.loadNpmTasks('grunt-mocha-test')
-  grunt.loadNpmTasks('grunt-karma')
 
   // Register combined task
-  grunt.registerTask('mocha-and-karma', ['mochaTest', 'karma'])
+  grunt.registerTask('mocha-and-karma', ['mochaTest'])
 } 

@@ -1,7 +1,17 @@
 {
-  "exclude":  [
-    "Gruntfile.js",
-    "test/**/*.js"
-  ],
-  "cache": true
+  
+  "include": ["server/**/*.js", "lib/**/*.js", "common/**/*.js"],
+  "exclude": ["**/test/**", "**/node_modules/**"],
+  "check-coverage": true,
+  "cache": true,
+  "lines": 80,
+  "functions": 80,
+  "branches": 80,
+  "statements": 80,
+  "watermarks": {
+    "lines": [80, 95],
+    "functions": [80, 95],
+    "branches": [80, 95],
+    "statements": [80, 95]
+  }
 }
