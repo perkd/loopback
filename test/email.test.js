@@ -64,26 +64,22 @@ describe('Email and SMTP', function() {
   });
 
   describe('MyEmail', function() {
-    it('MyEmail.send(options, callback)', function(done) {
+    it('MyEmail.send(options)', async function() {
       const options = {
         to: 'to@to.com',
         from: 'from@from.com',
         subject: 'subject',
         text: 'text',
         html: '<h1>html</h1>',
-      };
+      }
 
-      MyEmail.send(options, function(err, mail) {
-        assert(!err);
-        assert(mail.response);
-        assert(mail.envelope);
-        assert(mail.messageId);
+      const mail = await MyEmail.send(options)
+      assert(mail.response)
+      assert(mail.envelope)
+      assert(mail.messageId)
+    })
 
-        done(err);
-      });
-    });
-
-    it('myEmail.send(callback)', function(done) {
+    it('myEmail.send()', async function() {
       const message = new MyEmail({
         to: 'to@to.com',
         from: 'from@from.com',
@@ -92,13 +88,10 @@ describe('Email and SMTP', function() {
         html: '<h1>html</h1>',
       });
 
-      message.send(function(err, mail) {
-        assert(mail.response);
-        assert(mail.envelope);
-        assert(mail.messageId);
-
-        done(err);
-      });
-    });
-  });
-});
+      const mail = await message.send()
+      assert(mail.response)
+      assert(mail.envelope)
+      assert(mail.messageId)
+    })
+  })
+})
