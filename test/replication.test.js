@@ -6,7 +6,7 @@
 'use strict';
 const assert = require('node:assert');
 const sinon = require('sinon')
-const debug = require('debug')('test');
+const debug = require('debug')('test:replication');
 const loopback = require('../');
 const { Memory, PersistedModel } = loopback
 const expect = require('./helpers/expect');
