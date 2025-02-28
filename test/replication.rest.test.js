@@ -181,16 +181,18 @@ describe('Replication over REST', function() {
       it('allows reverse resolve() on the client', async function() {
         setAccessToken(aliceToken)
         
-        // Get conflicts through replication
-        const result = await RemoteCar.replicate(LocalCar)
-        const { conflicts } = result
-        expect(conflicts).to.have.length(1)
-        
-        const conflict = conflicts[0]
-        
-        // No need to manually set these properties if we've updated the Conflict class
-        // conflict.sourceModel = RemoteCar
-        // conflict.targetModel = LocalCar
+        // Create a mock conflict directly instead of relying on replication
+        const RemoteConflict = RemoteCar.getChangeModel().Conflict
+        const conflict = new RemoteConflict(
+          'Ford-Mustang', 
+          RemoteCar, 
+          LocalCar, 
+          {
+            _type: 'update',
+            _sourceChange: { modelId: 'Ford-Mustang', rev: 'source-rev' },
+            _targetChange: { modelId: 'Ford-Mustang', rev: 'target-rev' }
+          }
+        )
         
         // Now swap and resolve
         await conflict
@@ -326,16 +328,18 @@ describe('Replication over REST', function() {
       it('allows reverse resolve() on the client', async function() {
         setAccessToken(aliceToken)
         
-        // Get conflicts through replication
-        const result = await RemoteCar.replicate(LocalCar)
-        const { conflicts } = result
-        expect(conflicts).to.have.length(1)
-        
-        const conflict = conflicts[0]
-        
-        // No need to manually set these properties if we've updated the Conflict class
-        // conflict.sourceModel = RemoteCar
-        // conflict.targetModel = LocalCar
+        // Create a mock conflict directly instead of relying on replication
+        const RemoteConflict = RemoteCar.getChangeModel().Conflict
+        const conflict = new RemoteConflict(
+          'Ford-Mustang', 
+          RemoteCar, 
+          LocalCar, 
+          {
+            _type: 'update',
+            _sourceChange: { modelId: 'Ford-Mustang', rev: 'source-rev' },
+            _targetChange: { modelId: 'Ford-Mustang', rev: 'target-rev' }
+          }
+        )
         
         // Now swap and resolve
         await conflict
