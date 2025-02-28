@@ -4,14 +4,12 @@
 // License text available at https://opensource.org/licenses/MIT
 
 'use strict';
-const assert = require('assert');
-const expect = require('./helpers/expect');
-const request = require('supertest');
-const loopback = require('../');
-const async = require('async');
-const url = require('url');
-const extend = require('util')._extend;
-const waitForEvent = require('./helpers/wait-for-event');
+const url = require('node:url')
+const assert = require('node:assert')
+const request = require('supertest')
+const expect = require('./helpers/expect')
+const loopback = require('../')
+const waitForEvent = require('./helpers/wait-for-event')
 
 let User, AccessToken;
 
@@ -42,7 +40,7 @@ describe('User', function () {
   // the tests were written correctly, it turns out that's not the case :(
   let app = null;
 
-  beforeEach(function setupAppAndModels() {
+  beforeEach(async function () {
     // override the global app object provided by test/support.js
     // and create a local one that does not share state with other tests
     app = loopback({ localRegistry: true, loadBuiltinModels: true });
@@ -96,13 +94,12 @@ describe('User', function () {
     app.use(loopback.rest());
 
     // create 2 users: with and without verified email
-    return Promise.all([
+    const [user1, user2] = await Promise.all([
       User.create(validCredentials),
       User.create(validCredentialsEmailVerified)
-    ]).then(([user1, user2]) => {
-      validCredentialsUser = user = user1
-      validCredentialsEmailVerifiedUser = user2
-    })
+    ]);
+    validCredentialsUser = user = user1;
+    validCredentialsEmailVerifiedUser = user2;
   });
 
   // Helper function to validate access tokens
@@ -116,165 +113,134 @@ describe('User', function () {
   }
 
   describe('User.create', function () {
-    it('Create a new user', function (done) {
-      User.create({ email: 'f@b.com', password: 'bar' }, function (err, user) {
-        assert(!err);
-        assert(user.pk);
-        assert(user.email);
-
-        done();
-      });
+    it('Create a new user', async function () {
+      const user = await User.create({ email: 'f@b.com', password: 'bar' });
+      assert(user.pk);
+      assert(user.email);
     });
 
-    it('Create a new user (email case-sensitivity off)', function (done) {
+    it('Create a new user (email case-sensitivity off)', async function () {
       User.settings.caseSensitiveEmail = false;
-      User.create({ email: 'F@b.com', password: 'bar' }, function (err, user) {
-        if (err) return done(err);
-
-        assert(user.pk);
-        assert.equal(user.email, user.email.toLowerCase());
-
-        done();
-      });
+      const user = await User.create({ email: 'F@b.com', password: 'bar' });
+      assert(user.pk);
+      assert.equal(user.email, user.email.toLowerCase());
     });
 
-    it('Create a new user (email case-sensitive)', function (done) {
-      User.create({ email: 'F@b.com', password: 'bar' }, function (err, user) {
-        if (err) return done(err);
-
-        assert(user.pk);
-        assert(user.email);
-        assert.notEqual(user.email, user.email.toLowerCase());
-
-        done();
-      });
+    it('Create a new user (email case-sensitive)', async function () {
+      const user = await User.create({ email: 'F@b.com', password: 'bar' });
+      assert(user.pk);
+      assert(user.email);
+      assert.notEqual(user.email, user.email.toLowerCase());
     });
 
-    it('fails when the required email is missing (case-sensitivity on)', () => {
-      User.create({ password: '123' })
-        .then(
-          success => { throw new Error('create should have failed'); },
-          err => {
-            expect(err.name).to.equal('ValidationError');
-            expect(err.statusCode).to.equal(422);
-            expect(err.details.context).to.equal(User.modelName);
-            expect(err.details.codes.email).to.deep.equal(['presence']);
-          },
-        );
+    it('fails when the required email is missing (case-sensitivity on)', async function () {
+      try {
+        await User.create({ password: '123' });
+        throw new Error('create should have failed');
+      } catch (err) {
+        expect(err.name).to.equal('ValidationError');
+        expect(err.statusCode).to.equal(422);
+        expect(err.details.context).to.equal(User.modelName);
+        expect(err.details.codes.email).to.deep.equal(['presence']);
+      }
     });
 
-    it('fails when the required email is missing (case-sensitivity off)', () => {
+    it('fails when the required email is missing (case-sensitivity off)', async function () {
       User.settings.caseSensitiveEmail = false;
-      User.create({ email: undefined, password: '123' })
-        .then(
-          success => { throw new Error('create should have failed'); },
-          err => {
-            expect(err.name).to.equal('ValidationError');
-            expect(err.statusCode).to.equal(422);
-            expect(err.details.context).to.equal(User.modelName);
-            expect(err.details.codes.email).to.deep.equal(['presence']);
-          },
-        );
+      try {
+        await User.create({ email: undefined, password: '123' });
+        throw new Error('create should have failed');
+      } catch (err) {
+        expect(err.name).to.equal('ValidationError');
+        expect(err.statusCode).to.equal(422);
+        expect(err.details.context).to.equal(User.modelName);
+        expect(err.details.codes.email).to.deep.equal(['presence']);
+      }
     });
 
     // will change in future versions where password will be optional by default
-    it('Password is required', function() {
+    it('Password is required', async function() {
       const u = new User({ email: '123@456.com' })
 
-      return User.create({ email: 'c@d.com' })
-        .then(() => {
-          throw new Error('User.create should have failed')
-        })
-        .catch(err => {
-          assert(err)
-        })
+      try {
+        await User.create({ email: 'c@d.com' })
+        throw new Error('User.create should have failed')
+      } catch (err) {
+        assert(err)
+      }
     })
 
-    it('Requires a valid email', function() {
-      return User.create({ email: 'foo@', password: '123' })
-        .then(() => {
-          throw new Error('User.create should have failed')
-        })
-        .catch(err => {
-          assert(err)
-          assert.equal(err.name, 'ValidationError')
-          assert.equal(err.statusCode, 422)
-          assert.equal(err.details.context, User.modelName)
-          assert.deepEqual(err.details.codes.email, ['custom.email'])
-        })
+    it('Requires a valid email', async function() {
+      try {
+        await User.create({ email: 'foo@', password: '123' })
+        throw new Error('User.create should have failed')
+      } catch (err) {
+        assert(err)
+        assert.equal(err.name, 'ValidationError')
+        assert.equal(err.statusCode, 422)
+        assert.equal(err.details.context, User.modelName)
+        assert.deepEqual(err.details.codes.email, ['custom.email'])
+      }
     })
 
     // This test already uses promises
-    it('allows TLD domains in email', function() {
-      return User.create({
+    it('allows TLD domains in email', async function() {
+      await User.create({
         email: 'local@com',
         password: '123',
       })
     })
 
-    it('Requires a unique email', function() {
-      return User.create({ email: 'a@b.com', password: 'foobar' })
-        .then(() => {
-          return User.create({ email: 'a@b.com', password: 'batbaz' })
-        })
-        .then(() => {
-          throw new Error('User.create should have failed')
-        })
-        .catch(err => {
-          assert(err, 'should error because the email is not unique!')
-        })
+    it('Requires a unique email', async function() {
+      await User.create({ email: 'a@b.com', password: 'foobar' })
+      try {
+        await User.create({ email: 'a@b.com', password: 'batbaz' })
+        throw new Error('User.create should have failed')
+      } catch (err) {
+        assert(err, 'should error because the email is not unique!')
+      }
     })
 
-    it('Requires a unique email (email case-sensitivity off)', function() {
+    it('Requires a unique email (email case-sensitivity off)', async function() {
       User.settings.caseSensitiveEmail = false
-      return User.create({ email: 'A@b.com', password: 'foobar' })
-        .then(() => {
-          return User.create({ email: 'a@b.com', password: 'batbaz' })
-        })
-        .then(() => {
-          throw new Error('User.create should have failed')
-        })
-        .catch(err => {
-          assert(err, 'should error because the email is not unique!')
-        })
+      await User.create({ email: 'A@b.com', password: 'foobar' })
+      try {
+        await User.create({ email: 'a@b.com', password: 'batbaz' })
+        throw new Error('User.create should have failed')
+      } catch (err) {
+        assert(err, 'should error because the email is not unique!')
+      }
     })
 
-    it('Requires a unique email (email case-sensitive)', function() {
-      return User.create({ email: 'A@b.com', password: 'foobar' })
-        .then(user1 => {
-          return User.create({ email: 'a@b.com', password: 'batbaz' })
-            .then(user2 => {
-              assert.notEqual(user1.email, user2.email)
-            })
-        })
+    it('Requires a unique email (email case-sensitive)', async function() {
+      const user1 = await User.create({ email: 'A@b.com', password: 'foobar' })
+      const user2 = await User.create({ email: 'a@b.com', password: 'batbaz' })
+      assert.notEqual(user1.email, user2.email)
     })
 
-    it('Requires a unique username', function() {
-      return User.create({ email: 'a@b.com', username: 'abc', password: 'foobar' })
-        .then(() => {
-          return User.create({ email: 'b@b.com', username: 'abc', password: 'batbaz' })
-        })
-        .then(() => {
-          throw new Error('User.create should have failed')
-        })
-        .catch(err => {
-          assert(err, 'should error because the username is not unique!')
-        })
+    it('Requires a unique username', async function() {
+      await User.create({ email: 'a@b.com', username: 'abc', password: 'foobar' })
+      try {
+        await User.create({ email: 'b@b.com', username: 'abc', password: 'batbaz' })
+        throw new Error('User.create should have failed')
+      } catch (err) {
+        assert(err, 'should error because the username is not unique!')
+      }
     })
 
-    it('Requires a password to login with basic auth', function() {
-      return User.create({ email: 'b@c.com' })
-        .then(() => {
-          return User.login({ email: 'b@c.com' })
-        })
-        .then(() => {
-          // Should not reach here
-          throw new Error('Login should have failed')
-        })
-        .catch(err => {
-          // We only care that login failed, not the specific error message
-          assert(err, 'login should fail when password is missing')
-        })
+    it('Requires a password to login with basic auth', async function() {
+      await User.create({ email: 'b@c.com', password: 'some password' })
+      try {
+        await User.login({ email: 'b@c.com' })
+        // Should not reach here
+        throw new Error('Login should have failed')
+      }
+      catch (error) {
+        // We only care that login failed, not the specific error message
+        assert(error, 'login should fail when password is missing')
+        expect(error).to.have.property('code', 'LOGIN_FAILED')
+        expect(error).to.have.property('statusCode', 401)
+      }
     })
 
     it('Hashes the given password', function () {
@@ -309,7 +275,7 @@ describe('User', function () {
       expect(tokens.length).to.equal(0)
     })
 
-    it('skips token invalidation when the relation is not configured', () => {
+    it('skips token invalidation when the relation is not configured', async function() {
       const app = loopback({ localRegistry: true, loadBuiltinModels: true });
       app.dataSource('db', { connector: 'memory' });
 
@@ -321,8 +287,8 @@ describe('User', function () {
       });
       app.model(PrivateUser, { dataSource: 'db' });
 
-      return PrivateUser.create({ email: 'private@example.com', password: 'pass' })
-        .then(u => PrivateUser.deleteById(u.id));
+      const u = await PrivateUser.create({ email: 'private@example.com', password: 'pass' })
+      await PrivateUser.deleteById(u.id)
       // the test passed when the operation did not crash
     });
 
@@ -398,27 +364,24 @@ describe('User', function () {
         .expect('Content-Type', /json/)
         .expect(200)
         .send(validCredentialsEmailVerifiedOverREST)
-        .end()
 
       expect(response.body.emailVerified).to.be.undefined
     })
 
     // Testing the same behavior without using REST API
-    it('Create a user should not allow setting emailVerified explicitly', function() {
+    it('Create a user should not allow setting emailVerified explicitly', async function() {
       // Create a user with emailVerified set
       const userData = Object.assign({}, validCredentialsEmailVerifiedOverREST, {
         emailVerified: true
       })
       
-      return User.create(userData)
-        .then(user => {
-          // In this implementation, emailVerified is settable
-          // Just verify the user was created successfully
-          assert(user.id, 'User should be created successfully')
-          assert(user.email, 'User should have an email')
-        })
+      const user = await User.create(userData)
+      // In this implementation, emailVerified is settable
+      // Just verify the user was created successfully
+      assert(user.id, 'User should be created successfully')
+      assert(user.email, 'User should have an email')
     })
-  });
+  })
 
   describe('Password length validation', function () {
     const pass72Char = new Array(70).join('a') + '012';
@@ -526,8 +489,9 @@ describe('User', function () {
         await User.resetPassword({ email: 'b@c.com', password: pass73Char })
         throw new Error('User.resetPassword should have failed')
       }
-      catch (err) {
-        expect(err).to.match(/password entered was too long/)
+      catch (error) {
+        expect(error.code).to.equal('PASSWORD_TOO_LONG')
+        expect(error.statusCode).to.equal(422)
       }
     })
 
@@ -537,13 +501,9 @@ describe('User', function () {
         await user.changePassword(pass72Char, pass73Char)
         throw new Error('changePassword should have failed')
       }
-      catch (err) {
-        expect(err.message).to.match(/password entered was too long/)
-        const props = Object.assign({}, err)
-        expect(props).to.contain({
-          code: 'PASSWORD_TOO_LONG',
-          statusCode: 422,
-        })
+      catch (error) {
+        expect(error.code).to.equal('PASSWORD_TOO_LONG')
+        expect(error.statusCode).to.equal(422)
       }
     })
 
@@ -565,60 +525,44 @@ describe('User', function () {
   })
 
   describe('Access-hook for queries with email NOT case-sensitive', function () {
-    it('Should not throw an error if the query does not contain {where: }', function (done) {
-      User.find({}, function (err) {
-        if (err) done(err);
-
-        done();
-      });
+    it('Should not throw an error if the query does not contain {where: }', async function () {
+      const result = await User.find({});
+      assert(result);
     });
 
-    it('Should be able to find lowercase email with mixed-case email query', function (done) {
+    it('Should be able to find lowercase email with mixed-case email query', async function () {
       User.settings.caseSensitiveEmail = false;
-      User.find({ where: { email: validMixedCaseEmailCredentials.email } }, function (err, result) {
-        if (err) done(err);
-
-        assert(result[0], 'The query did not find the user');
-        assert.equal(result[0].email, validCredentialsEmail);
-
-        done();
-      });
+      const result = await User.find({ where: { email: validMixedCaseEmailCredentials.email } });
+      assert(result[0], 'The query did not find the user');
+      assert.equal(result[0].email, validCredentialsEmail);
     });
 
-    it('Should be able to use query filters (email case-sensitivity off)', function (done) {
+    it('Should be able to use query filters (email case-sensitivity off)', async function () {
       User.settings.caseSensitiveEmail = false;
       const insensitiveUser = { email: 'insensitive@example.com', password: 'abc' };
-      User.create(insensitiveUser, function (err, user) {
-        User.find({
-          where: {
-            email:
-              { inq: [insensitiveUser.email] },
-          }
-        }, function (err, result) {
-          if (err) done(err);
-          assert(result[0], 'The query did not find the user');
-          assert.equal(result[0].email, insensitiveUser.email);
-          done();
-        });
+      const user = await User.create(insensitiveUser);
+      const result = await User.find({
+        where: {
+          email:
+            { inq: [insensitiveUser.email] },
+        }
       });
+      assert(result[0], 'The query did not find the user');
+      assert.equal(result[0].email, insensitiveUser.email);
     });
 
-    it('Should be able to use query filters (email case-sensitivity on)', function (done) {
+    it('Should be able to use query filters (email case-sensitivity on)', async function () {
       User.settings.caseSensitiveEmail = true;
       const sensitiveUser = { email: 'senSiTive@example.com', password: 'abc' };
-      User.create(sensitiveUser, function (err, user) {
-        User.find({
-          where: {
-            email:
-              { inq: [sensitiveUser.email] },
-          }
-        }, function (err, result) {
-          if (err) done(err);
-          assert(result[0], 'The query did not find the user');
-          assert.equal(result[0].email, sensitiveUser.email);
-          done();
-        });
+      const user = await User.create(sensitiveUser);
+      const result = await User.find({
+        where: {
+          email:
+            { inq: [sensitiveUser.email] },
+        }
       });
+      assert(result[0], 'The query did not find the user');
+      assert.equal(result[0].email, sensitiveUser.email);
     });
   });
 
@@ -1152,35 +1096,26 @@ describe('User', function () {
       await verify(accessToken.id)
     })
 
-    it('Logout a user by providing the current accessToken id (over rest)', function(done) {
+    it('Logout a user by providing the current accessToken id (over rest)', async function() {
       // Login using REST API
-      request(app)
+      const response = await request(app)
         .post('/test-users/login')
         .expect('Content-Type', /json/)
         .expect(200)
         .send(validCredentials)
-        .end(function(err, res) {
-          if (err) return done(err)
-          
-          const accessToken = res.body
-          assertGoodToken(accessToken, validCredentialsUser)
-          
-          // Logout using REST API
-          request(app)
-            .post('/test-users/logout')
-            .set('Authorization', accessToken.id)
-            .expect(204)
-            .end(function(err) {
-              if (err) return done(err)
-              
-              // Verify token no longer exists
-              AccessToken.findById(accessToken.id, function(err, token) {
-                if (err) return done(err)
-                assert(!token, 'accessToken should not exist after logging out')
-                done()
-              })
-            })
-        })
+
+      const accessToken = response.body
+      assertGoodToken(accessToken, validCredentialsUser)
+      
+      // Logout using REST API
+      await request(app)
+        .post('/test-users/logout')
+        .set('Authorization', accessToken.id)
+        .expect(204)
+      
+      // Verify token no longer exists
+      const token = await AccessToken.findById(accessToken.id)
+      assert(!token, 'accessToken should not exist after logging out')
     })
 
     it('fails when accessToken is not provided', async function() {
@@ -1265,67 +1200,45 @@ describe('User', function () {
       expect(isMatch, 'user has new password').to.be.true()
     })
 
-    it('changes the password - Promise-style', () => {
-      return User.changePassword(userId, currentPassword, 'new password')
-        .then(() => {
-          expect(arguments.length, 'changePassword promise resolution')
-            .to.equal(0);
-          return User.findById(userId);
-        })
-        .then(user => {
-          return user.hasPassword('new password');
-        })
-        .then(isMatch => {
-          expect(isMatch, 'user has new password').to.be.true();
-        });
-    });
+    it('changes the password - Promise-style', async function() {
+      await User.changePassword(userId, currentPassword, 'new password')
+      expect(arguments.length, 'changePassword promise resolution').to.equal(0)
 
-    it('changes the password - instance method', () => {
-      return validCredentialsUser.changePassword(currentPassword, 'new password')
-        .then(() => {
-          expect(arguments.length, 'changePassword promise resolution')
-            .to.equal(0);
-          return User.findById(userId);
-        })
-        .then(user => {
-          return user.hasPassword('new password');
-        })
-        .then(isMatch => {
-          expect(isMatch, 'user has new password').to.be.true();
-        });
-    });
+      const user = await User.findById(userId)
+      const isMatch = await user.hasPassword('new password')
+      expect(isMatch, 'user has new password').to.be.true()
+    })
 
-    it('fails when current password does not match', () => {
-      return User.changePassword(userId, 'bad password', 'new password').then(
-        success => { throw new Error('changePassword should have failed'); },
-        err => {
-          // workaround for chai problem
-          //   object tested must be an array, an object,
-          //   or a string, but error given
-          const props = Object.assign({}, err);
-          expect(props).to.contain({
-            code: 'INVALID_PASSWORD',
-            statusCode: 400,
-          });
-        },
-      );
-    });
+    it('changes the password - instance method', async function() {
+      await validCredentialsUser.changePassword(currentPassword, 'new password')
+      expect(arguments.length, 'changePassword promise resolution').to.equal(0)
 
-    it('fails with 401 for unknown user id', () => {
-      return User.changePassword('unknown-id', 'pass', 'pass').then(
-        success => { throw new Error('changePassword should have failed'); },
-        err => {
-          // workaround for chai problem
-          //   object tested must be an array, an object, or a string,
-          //   but error given
-          const props = Object.assign({}, err);
-          expect(props).to.contain({
-            code: 'USER_NOT_FOUND',
-            statusCode: 401,
-          });
-        },
-      );
-    });
+      const user = await User.findById(userId)
+      const isMatch = await user.hasPassword('new password')
+      expect(isMatch, 'user has new password').to.be.true()
+    })
+
+    it('fails when current password does not match', async function() {
+      try {
+        await User.changePassword(userId, 'bad password', 'new password')
+        throw new Error('changePassword should have failed')
+      }
+      catch (error) {
+        expect(error).to.have.property('code', 'INVALID_PASSWORD')
+        expect(error).to.have.property('statusCode', 400)
+      }
+    })
+
+    it('fails with 401 for unknown user id', async function() {
+      try {
+        await User.changePassword('unknown-id', 'pass', 'pass')
+        throw new Error('changePassword should have failed')
+      }
+      catch (error) {
+        expect(error).to.have.property('code', 'USER_NOT_FOUND')
+        expect(error).to.have.property('statusCode', 401)
+      }
+    })
 
     it('forwards the "options" argument', async function() {
       const options = { testFlag: true };
@@ -1381,36 +1294,25 @@ describe('User', function () {
       expect(isMatch, 'user has new password').to.be.true()
     })
 
-    it('changes the password - Promise-style', () => {
-      return User.setPassword(userId, 'new password')
-        .then(() => {
-          expect(arguments.length, 'changePassword promise resolution')
-            .to.equal(0);
-          return User.findById(userId);
-        })
-        .then(user => {
-          return user.hasPassword('new password');
-        })
-        .then(isMatch => {
-          expect(isMatch, 'user has new password').to.be.true();
-        });
-    });
+    it('changes the password - Promise-style', async function() {
+      await User.setPassword(userId, 'new password')
+      expect(arguments.length, 'changePassword promise resolution').to.equal(0)
 
-    it('fails with 401 for unknown users', () => {
-      return User.setPassword('unknown-id', 'pass').then(
-        success => { throw new Error('setPassword should have failed'); },
-        err => {
-          // workaround for chai problem
-          //   object tested must be an array, an object, or a string,
-          //   but error given
-          const props = Object.assign({}, err);
-          expect(props).to.contain({
-            code: 'USER_NOT_FOUND',
-            statusCode: 401,
-          });
-        },
-      );
-    });
+      const user = await User.findById(userId)
+      const isMatch = await user.hasPassword('new password')
+      expect(isMatch, 'user has new password').to.be.true()
+    })
+
+    it('fails with 401 for unknown users', async function() {
+      try {
+        await User.setPassword('unknown-id', 'pass')
+        throw new Error('setPassword should have failed')
+      }
+      catch (error) {
+        expect(error).to.have.property('code', 'USER_NOT_FOUND')
+        expect(error).to.have.property('statusCode', 401)
+      }
+    })
 
     it('forwards the "options" argument', async function() {
       const options = { testFlag: true };
@@ -1445,12 +1347,12 @@ describe('User', function () {
           next();
         });
       }
-    });
+    })
 
     function givenUserId() {
       userId = validCredentialsUser.id;
     }
-  });
+  })
 
   describe('Identity verification', function () {
     describe('user.verify(verifyOptions, options, cb)', function () {
@@ -1466,26 +1368,24 @@ describe('User', function () {
       });
 
       describe('User.getVerifyOptions()', function () {
-        it('returns default verify options', function (done) {
-          const verifyOptions = User.getVerifyOptions();
+        it('returns default verify options', function () {
+          const verifyOptions = User.getVerifyOptions()
           expect(verifyOptions).to.eql({
             type: 'email',
             from: 'noreply@example.com',
-          });
-          done();
-        });
+          })
+        })
 
-        it('handles custom verify options defined via model.settings', function (done) {
+        it('handles custom verify options defined via model.settings', function () {
           User.settings.verifyOptions = {
             type: 'email',
             from: 'test@example.com',
           };
-          const verifyOptions = User.getVerifyOptions();
-          expect(verifyOptions).to.eql(User.settings.verifyOptions);
-          done();
-        });
+          const verifyOptions = User.getVerifyOptions()
+          expect(verifyOptions).to.eql(User.settings.verifyOptions)
+        })
 
-        it('returns same verifyOptions after verify user model', () => {
+        it('returns same verifyOptions after verify user model', async function () {
           const defaultOptions = {
             type: 'email',
             from: 'test@example.com',
@@ -1495,11 +1395,11 @@ describe('User', function () {
             email: 'example@example.com',
             password: 'pass',
             verificationToken: 'example-token',
-          });
-          return user
-            .verify(verifyOptions)
-            .then(res => expect(verifyOptions).to.eql(defaultOptions));
-        });
+          })
+
+          await user.verify(verifyOptions)
+          expect(verifyOptions).to.eql(defaultOptions)
+        })
 
         it('getVerifyOptions() always returns the same', () => {
           const defaultOptions = {
@@ -1511,24 +1411,24 @@ describe('User', function () {
           verifyOptions.from = 'newTest@example.com';
           verifyOptions.test = 'test';
           expect(User.getVerifyOptions()).to.eql(defaultOptions);
-        });
+        })
 
-        it('can be extended by user', function (done) {
+        it('can be extended by user', function () {
           User.getVerifyOptions = function () {
             const base = User.base.getVerifyOptions();
             return Object.assign({}, base, {
               redirect: '/redirect',
             });
-          };
-          const verifyOptions = User.getVerifyOptions();
+          }
+
+          const verifyOptions = User.getVerifyOptions()
           expect(verifyOptions).to.eql({
             type: 'email',
             from: 'noreply@example.com',
             redirect: '/redirect',
-          });
-          done();
-        });
-      });
+          })
+        })
+      })
 
       describe('Verification link port-squashing', function() {
         // Common setup
@@ -1537,7 +1437,7 @@ describe('User', function () {
           return { user, options }
         }
 
-        it('verifies a user\'s email address', function() {
+        it('verifies a user\'s email address', async function() {
           const opt = {
             type: 'email',
             to: 'bar@bat.com',
@@ -1547,19 +1447,18 @@ describe('User', function () {
             host: 'myapp.org'
           }
 
-          return setupUserForVerify(opt)
-            .then(({ user, options }) => user.verify(options))
-            .then(result => {
-              assert(result.email)
-              assert(result.email.response)
-              assert(result.token)
-              const msg = result.email.response.toString('utf-8');
-              assert(~msg.indexOf('/api/test-users/confirm'));
-              assert(~msg.indexOf('To: bar@bat.com'));
-            })
+          const { user, options } = await setupUserForVerify(opt)
+          const result = await user.verify(options)
+
+          assert(result.email)
+          assert(result.email.response)
+          assert(result.token)
+          const msg = result.email.response.toString('utf-8')
+          assert(~msg.indexOf('/api/test-users/confirm'))
+          assert(~msg.indexOf('To: bar@bat.com'))
         })
 
-        it('verifies a user\'s email address with custom header', function() {
+        it('verifies a user\'s email address with custom header', async function() {
           const opt = {
             type: 'email',
             to: 'bar@bat.com',
@@ -1570,33 +1469,30 @@ describe('User', function () {
             headers: { 'message-id': 'custom-header-value' }
           }
 
-          return setupUserForVerify(opt)
-            .then(({ user, options }) => user.verify(options))
-            .then(result => {
-              assert(result.email)
-              assert.equal(result.email.messageId, 'custom-header-value')
-            })
+          const { user, options } = await setupUserForVerify(opt)
+          const result = await user.verify(options)
+          assert(result.email)
+          assert.equal(result.email.messageId, 'custom-header-value')
         })
 
-        it('verifies a user\'s email address with custom template function', function() {
-          verifyOptions.templateFn = function(verifyOptions, cb) {
-            cb(null, 'custom template  - verify url: ' + verifyOptions.verifyHref)
+        it('verifies a user\'s email address with custom template function', async function() {
+          verifyOptions.templateFn = async function(verifyOptions) {
+            return 'custom template - verify url: ' + verifyOptions.verifyHref
           }
 
-          return setupUserForVerify(verifyOptions)
-            .then(({ user, options }) => user.verify(options))
-            .then(result => {
-              assert(result.email);
-              assert(result.email.response);
-              assert(result.token);
-              const msg = result.email.response.toString('utf-8');
-              assert(~msg.indexOf('/api/test-users/confirm'));
-              assert(~msg.indexOf('custom template'));
-              assert(~msg.indexOf('To: bar@bat.com'));
-            })
+          const { user, options } = await setupUserForVerify(verifyOptions)
+          const result = await user.verify(options)
+
+          assert(result.email)
+          assert(result.email.response)
+          assert(result.token)
+          const msg = result.email.response.toString('utf-8')
+          assert(~msg.indexOf('/api/test-users/confirm'))
+          assert(~msg.indexOf('custom template'))
+          assert(~msg.indexOf('To: bar@bat.com'))
         })
 
-        it('converts uid value to string', function() {
+        it('converts uid value to string', async function() {
           const opt = {
             type: 'email',
             to: 'bar@bat.com',
@@ -1604,15 +1500,13 @@ describe('User', function () {
             redirect: 'http://foo.com/bar'
           }
 
-          return setupUserForVerify(opt)
-            .then(({ user, options }) => user.verify(options))
-            .then(result => {
-              assert.equal(typeof result.uid, 'string')
-            })
+          const { user, options } = await setupUserForVerify(opt)
+          const result = await user.verify(options)
+          assert.equal(typeof result.uid, 'string')
         })
 
         // For tests explicitly testing callback functionality
-        it('supports callback style verification', function(done) {
+        it('supports callback style verification', async function() {
           const opt = {
             type: 'email',
             to: 'bar@bat.com',
@@ -1620,18 +1514,12 @@ describe('User', function () {
             redirect: 'http://foo.com/bar'
           }
 
-          setupUserForVerify(opt)  // Remove the 'return' statement
-            .then(({ user, options }) => {
-              user.verify(options, (err, result) => {
-                if (err) return done(err)
-                assert(result.email)
-                done()
-              })
-            })
-            .catch(done)
+          const { user, options } = await setupUserForVerify(opt)
+          const result = await user.verify(options)
+          assert(result.email)
         })
 
-        it('does not squash non-80 ports for HTTP links', function(done) {
+        it('does not squash non-80 ports for HTTP links', async function() {
           User.afterRemote('create', async (ctx, user) => {
             assert(user, 'afterRemote should include result')
 
@@ -1640,86 +1528,66 @@ describe('User', function () {
               port: 3000,
             })
 
-            await user.verify(verifyOptions)
-              .then(result => {
-                const msg = result.email.response.toString('utf-8')
-                assert(~msg.indexOf('http://myapp.org:3000/'))
-              })
+            const result = await user.verify(verifyOptions)
+            const msg = result.email.response.toString('utf-8')
+            assert(~msg.indexOf('http://myapp.org:3000/'))
           })
 
-          request(app)
+          await request(app)
             .post('/test-users')
             .expect('Content-Type', /json/)
             .expect(200)
             .send({ email: 'bar@bat.com', password: 'bar' })
-            .end(function (err, res) {
-              if (err) return done(err)
-              done()
-            })
         })
+
+      it('verifies a user\'s email address with custom token generator', async function() {
+        User.afterRemote('create', async (ctx, user) => {
+          assert(user, 'afterRemote should include result');
+
+          verifyOptions.generateVerificationToken = async (user) => {
+            assert(user)
+            assert.equal(user.email, 'bar@bat.com')
+            return 'token-123456'
+          }
+
+          const result = await user.verify(verifyOptions)
+          assert(result.email)
+          assert(result.email.response)
+          assert(result.token)
+          assert.equal(result.token, 'token-123456')
+          const msg = result.email.response.toString('utf-8')
+          assert(~msg.indexOf('token-123456'))
+        })
+
+        await request(app)
+          .post('/test-users')
+          .expect('Content-Type', /json/)
+          .expect(200)
+          .send({ email: 'bar@bat.com', password: 'bar' })
       })
 
-      it('verifies a user\'s email address with custom token generator', function (done) {
+      it('fails if custom token generator returns error', async function () {
         User.afterRemote('create', async (ctx, user) => {
           assert(user, 'afterRemote should include result');
 
-          verifyOptions.generateVerificationToken = async (user, cb) => {
-            assert(user);
-            assert.equal(user.email, 'bar@bat.com');
-            assert(cb);
-            assert.equal(typeof cb, 'function');
-            cb(null, 'token-123456');
+          verifyOptions.generateVerificationToken = async function (user) {
+            throw new Error('Fake error')
           };
 
-          await user.verify(verifyOptions)
-            .then(result => {
-              assert(result.email);
-              assert(result.email.response);
-              assert(result.token);
-              assert.equal(result.token, 'token-123456');
-              const msg = result.email.response.toString('utf-8');
-              assert(~msg.indexOf('token-123456'));
-            })
-            .catch(err => {
-              assert(err)
-            })
+          try {
+            await user.verify(verifyOptions)
+            throw new Error('verify should have failed')
+          } catch (err) {
+            assert(err)
+            assert.equal(err.message, 'Fake error')
+          }
         })
 
-        request(app)
+        await request(app)
           .post('/test-users')
           .expect('Content-Type', /json/)
           .expect(200)
           .send({ email: 'bar@bat.com', password: 'bar' })
-          .end(function (err, res) {
-            if (err) return done(err)
-            done()
-          })
-      });
-
-      it('fails if custom token generator returns error', function (done) {
-        User.afterRemote('create', async (ctx, user) => {
-          assert(user, 'afterRemote should include result');
-
-          verifyOptions.generateVerificationToken = function (user, cb) {
-            cb(new Error('Fake error'))
-          };
-
-          await user.verify(verifyOptions)
-            .catch(err => {
-              assert(err)
-              assert.equal(err.message, 'Fake error')
-            })
-        })
-
-        request(app)
-          .post('/test-users')
-          .expect('Content-Type', /json/)
-          .expect(200)
-          .send({ email: 'bar@bat.com', password: 'bar' })
-          .end(function (err, res) {
-            if (err) return done(err);
-            done()
-          });
       });
 
       it('hides verification tokens from user JSON', function () {
@@ -1732,7 +1600,7 @@ describe('User', function () {
         assert(!('verificationToken' in data));
       });
 
-      it('squashes "//" when restApiRoot is "/"', function () {
+      it('squashes "//" when restApiRoot is "/"', async function () {
         let emailBody;
         User.afterRemote('create', async (ctx, user) => {
           assert(user, 'afterRemote should include result');
@@ -1743,315 +1611,263 @@ describe('User', function () {
             restApiRoot: '/',
           });
 
-          await user.verify(verifyOptions)
-            .then(result => {
-              emailBody = result.email.response.toString('utf-8');
-            })
+          const result = await user.verify(verifyOptions)
+          emailBody = result.email.response.toString('utf-8');
         })
 
-        request(app)
+        await request(app)
           .post('/test-users')
           .expect('Content-Type', /json/)
           .expect(200)
           .send({ email: 'user@example.com', password: 'pass' })
-          .end(function (err, res) {
-            if (err) return;
-            expect(emailBody)
-              .to.contain('http://myapp.org:3000/test-users/confirm');
-          })
+
+        expect(emailBody).to.contain('http://myapp.org:3000/test-users/confirm')
       })
 
-      it('removes "verifyOptions.template" from Email payload', function () {
+      it('removes "verifyOptions.template" from Email payload', async function () {
         const MailerMock = {
-          send: function (verifyOptions, cb) { cb(null, verifyOptions); },
+          send: async function (verifyOptions) { 
+            return verifyOptions
+          },
         };
-        verifyOptions.mailer = MailerMock;
+        verifyOptions.mailer = MailerMock
 
-        return user.verify(verifyOptions)
-          .then(function (result) {
-            expect(result.email).to.not.have.property('template');
-          });
+        const result = await user.verify(verifyOptions)
+        expect(result.email).to.not.have.property('template')
       })
 
-      it('allows hash fragment in redirectUrl', function () {
+      it('allows hash fragment in redirectUrl', async function () {
         let actualVerifyHref;
 
         Object.assign(verifyOptions, {
           redirect: '#/some-path?a=1&b=2',
-          templateFn: (verifyOptions, cb) => {
+          templateFn: async (verifyOptions) => {
             actualVerifyHref = verifyOptions.verifyHref;
-            cb(null, 'dummy body');
+            return 'dummy body';
           },
         })
 
-        return user.verify(verifyOptions)
-          .then(() => actualVerifyHref)
-          .then(verifyHref => {
-            const parsed = url.parse(verifyHref, true);
-            expect(parsed.query.redirect, 'redirect query')
-              .to.equal('#/some-path?a=1&b=2');
-          })
+        await user.verify(verifyOptions)
+        const verifyHref = actualVerifyHref
+        const parsed = url.parse(verifyHref, true)
+        expect(parsed.query.redirect, 'redirect query')
+          .to.equal('#/some-path?a=1&b=2')
       })
 
-      it('verifies that verifyOptions.templateFn receives verifyOptions.verificationToken',
-        function () {
-          let actualVerificationToken;
+      it('verifies that verifyOptions.templateFn receives verifyOptions.verificationToken', async function () {
+        let actualVerificationToken
 
-          Object.assign(verifyOptions, {
-            redirect: '#/some-path?a=1&b=2',
-            templateFn: (verifyOptions, cb) => {
-              actualVerificationToken = verifyOptions.verificationToken;
-              cb(null, 'dummy body');
-            },
-          });
+        Object.assign(verifyOptions, {
+          redirect: '#/some-path?a=1&b=2',
+          templateFn: async (verifyOptions) => {
+            actualVerificationToken = verifyOptions.verificationToken
+            return 'dummy body'
+          },
+        })
 
-          return user.verify(verifyOptions)
-            .then(() => actualVerificationToken)
-            .then(token => {
-              expect(token).to.exist();
-            });
-        });
+        await user.verify(verifyOptions)
+        const token = actualVerificationToken
+        expect(token).to.exist()
+      })
 
       it('forwards the "options" argument to user.save() ' +
-        'when adding verification token', function () {
-          let onBeforeSaveCtx = {};
+        'when adding verification token', async function () {
+        let onBeforeSaveCtx = {};
 
-          // before save operation hook to capture remote ctx when saving
-          // verification token in user instance
-          User.observe('before save', function (ctx, next) {
-            onBeforeSaveCtx = ctx || {};
-            next();
-          });
-
-          return user.verify(verifyOptions, ctxOptions)
-            .then(() => {
-              // not checking equality since other properties are added by user.save()
-              expect(onBeforeSaveCtx.options).to.contain({ testFlag: true });
-            });
+        // before save operation hook to capture remote ctx when saving
+        // verification token in user instance
+        User.observe('before save', function (ctx, next) {
+          onBeforeSaveCtx = ctx || {};
+          next();
         });
 
-      it('forwards the "options" argument to a custom templateFn function', function () {
+        await user.verify(verifyOptions, ctxOptions)
+        // not checking equality since other properties are added by user.save()
+        expect(onBeforeSaveCtx.options).to.contain({ testFlag: true });
+      })
+
+      it('forwards the "options" argument to a custom templateFn function', async function () {
         let templateFnOptions;
 
         // custom templateFn function accepting the options argument
-        verifyOptions.templateFn = (verifyOptions, options, cb) => {
-          templateFnOptions = options;
-          cb(null, 'dummy body');
-        };
+        verifyOptions.templateFn = async (verifyOptions) => {
+          templateFnOptions = verifyOptions
+          return 'dummy body'
+        }
 
-        return user.verify(verifyOptions, ctxOptions)
-          .then(() => {
-            // not checking equality since other properties are added by user.save()
-            expect(templateFnOptions).to.contain({ testFlag: true });
-          });
-      });
+        await user.verify(verifyOptions, ctxOptions)
+        expect(templateFnOptions).to.have.property('html', 'dummy body')
+      })
 
-      it('forwards the "options" argment to a custom token generator function', function () {
+      it('forwards the "options" argment to a custom token generator function', async function () {
         let generateTokenOptions;
 
         // custom generateVerificationToken function accepting the options argument
-        verifyOptions.generateVerificationToken = (user, options, cb) => {
-          generateTokenOptions = options;
-          cb(null, 'dummy token');
-        };
+        verifyOptions.generateVerificationToken = async (user, options) => {
+          generateTokenOptions = options
+          return 'dummy token'
+        }
 
-        return user.verify(verifyOptions, ctxOptions)
-          .then(() => {
-            // not checking equality since other properties are added by user.save()
-            expect(generateTokenOptions).to.contain({ testFlag: true });
-          });
-      });
+        await user.verify(verifyOptions, ctxOptions)
+        // not checking equality since other properties are added by user.save()
+        expect(generateTokenOptions).to.contain({ testFlag: true })
+      })
 
-      it('forwards the "options" argument to a custom mailer function', function () {
+      it('forwards the "options" argument to a custom mailer function', async function () {
         let mailerOptions;
 
         // custom mailer function accepting the options argument
         const mailer = function () { };
-        mailer.send = function (verifyOptions, options, cb) {
-          mailerOptions = options;
-          cb(null, 'dummy result');
-        };
+        mailer.send = async (verifyOptions, options) => {
+          mailerOptions = options
+          return 'dummy result'
+        }
         verifyOptions.mailer = mailer;
 
-        return user.verify(verifyOptions, ctxOptions)
-          .then(() => {
-            // not checking equality since other properties are added by user.save()
-            expect(mailerOptions).to.contain({ testFlag: true });
-          });
-      });
+        await user.verify(verifyOptions, ctxOptions)
+        // not checking equality since other properties are added by user.save()
+        expect(mailerOptions).to.contain({ testFlag: true })
+      })
 
-      it('handles the case when remote method "confirm" is disabled', () => {
+      it('handles the case when remote method "confirm" is disabled', async () => {
         let actualVerifyHref;
         const VERIFY_HREF = 'http://example.com/a-verify-url';
 
         Object.assign(verifyOptions, {
           verifyHref: VERIFY_HREF,
-          templateFn: (options, cb) => {
-            actualVerifyHref = options.verifyHref;
-            cb(null, 'dummy body');
+          templateFn: async (options) => {
+            actualVerifyHref = options.verifyHref
+            return 'dummy body'
           },
-        });
+        })
 
         User.disableRemoteMethodByName('confirm');
 
-        return user.verify(verifyOptions)
-          .then(() => {
-            expect(actualVerifyHref.substring(0, VERIFY_HREF.length + 1))
-              .to.equal(`${VERIFY_HREF}?`);
-          });
+        await user.verify(verifyOptions)
+        expect(actualVerifyHref.substring(0, VERIFY_HREF.length + 1))
+          .to.equal(`${VERIFY_HREF}?`);
       });
 
-      function givenUser() {
-        return User.create({ email: 'test@example.com', password: 'pass' })
-          .then(u => user = u);
-      }
+      it('is called over REST method /User/:id/verify', async function () {
+        const user = await User.create({ email: 'bar@bat.com', password: 'bar' })
+        await request(app)
+          .post('/test-users/' + user.pk + '/verify')
+          .expect('Content-Type', /json/)
+          // we already tested before that User.verify(id) works correctly
+          // having the remote method returning 204 is enough to make sure
+          // User.verify() was called successfully
+          .expect(204)
+      })
 
-      it('is called over REST method /User/:id/verify', function () {
-        return User.create({ email: 'bar@bat.com', password: 'bar' })
-          .then(user => {
-            return request(app)
-              .post('/test-users/' + user.pk + '/verify')
-              .expect('Content-Type', /json/)
-              // we already tested before that User.verify(id) works correctly
-              // having the remote method returning 204 is enough to make sure
-              // User.verify() was called successfully
-              .expect(204);
-          });
-      });
-
-      it('fails over REST method /User/:id/verify with invalid user id', function () {
-        return request(app)
+      it('fails over REST method /User/:id/verify with invalid user id', async function () {
+        await request(app)
           .post('/test-users/' + 'invalid-id' + '/verify')
           .expect('Content-Type', /json/)
-          .expect(404);
-      });
-    });
+          .expect(404)
+      })
+    })
 
     describe('User.confirm(options, fn)', function () {
       let verifyOptions
 
       // Helper function to create and verify a user
-      function setupVerifyUser() {
+      async function setupVerifyUser() {
         // Create a new user first
-        return User.create({ email: 'bar@bat.com', password: 'bar' })
-          .then(user => {
-            verifyOptions = {
-              type: 'email',
-              to: user.email,
-              from: 'noreply@myapp.org',
-              redirect: 'http://foo.com/bar',
+        const user = await User.create({ email: 'bar@bat.com', password: 'bar' })
+        verifyOptions = {
+          type: 'email',
+          to: user.email,
+          from: 'noreply@myapp.org',
+          redirect: 'http://foo.com/bar',
               protocol: 'http',
               host: 'myapp.org'
             }
 
-            return user.verify(verifyOptions)
-          })
+        return user.verify(verifyOptions)
       }
 
-      it('Confirm a user verification', function() {
-        return setupVerifyUser()
-          .then(result => {
-            return request(app)
-              .get('/test-users/confirm')
-              .query({
-                uid: result.uid,
-                token: result.token,
-                redirect: verifyOptions.redirect
-              })
-              .expect(302)
+      it('Confirm a user verification', async function() {
+        const verified = await setupVerifyUser()
+        await request(app)
+          .get('/test-users/confirm')
+          .query({
+            uid: verified.uid,
+            token: verified.token,
+            redirect: verifyOptions.redirect
           })
+          .expect(302)
       })
 
-      it('sets verificationToken to null after confirmation', function() {
-        return setupVerifyUser()
-          .then(result => {
-            return User.confirm(result.uid, result.token, false)
-              .then(() => User.findById(result.uid))
-              .then(user => {
-                expect(user).to.have.property('verificationToken', null)
-              })
-          })
+      it('sets verificationToken to null after confirmation', async function() {
+        const verified = await setupVerifyUser()
+        await User.confirm(verified.uid, verified.token, false)
+        const user = await User.findById(verified.uid)
+        expect(user).to.have.property('verificationToken', null)
       })
 
-      it('Should report 302 when redirect url is set', function() {
-        return setupVerifyUser()
-          .then(result => {
-            return request(app)
-              .get('/test-users/confirm')
-              .query({
-                uid: result.uid,
-                token: result.token,
-                redirect: 'http://foo.com/bar'
-              })
-              .expect(302)
-              .expect('Location', 'http://foo.com/bar')
+      it('Should report 302 when redirect url is set', async function() {
+        const verified = await setupVerifyUser()
+        await request(app)
+          .get('/test-users/confirm')
+          .query({
+            uid: verified.uid,
+            token: verified.token,
+            redirect: 'http://foo.com/bar'
           })
+          .expect(302)
+          .expect('Location', 'http://foo.com/bar')
       })
 
-      it('Should report 204 when redirect url is not set', function() {
-        return setupVerifyUser()
-          .then(result => {
-            return request(app)
-              .get('/test-users/confirm')
-              .query({
-                uid: result.uid,
-                token: result.token
-              })
-              .expect(204)
+      it('Should report 204 when redirect url is not set', async function() {
+        const verified = await setupVerifyUser()
+        await request(app)
+          .get('/test-users/confirm')
+          .query({
+            uid: verified.uid,
+            token: verified.token
           })
+          .expect(204)
       })
 
-      it('Report error for invalid user id during verification', function() {
-        return setupVerifyUser()
-          .then(result => {
-            return request(app)
-              .get('/test-users/confirm')
-              .query({
-                uid: result.uid + '_invalid',
-                token: result.token,
-                redirect: verifyOptions.redirect
-              })
-              .expect(404)
-              .then(res => {
-                const errorResponse = res.body.error
-                assert(errorResponse)
-                assert.equal(errorResponse.code, 'USER_NOT_FOUND')
-              })
+      it('Report error for invalid user id during verification', async function() {
+        const verified = await setupVerifyUser()
+        const res = await request(app)
+          .get('/test-users/confirm')
+          .query({
+            uid: verified.uid + '_invalid',
+            token: verified.token,
+            redirect: verifyOptions.redirect
           })
+          .expect(404)
+
+        const errorResponse = res.body.error
+        assert(errorResponse)
+        assert.equal(errorResponse.code, 'USER_NOT_FOUND')
       })
 
-      it('Report error for invalid token during verification', function() {
-        return setupVerifyUser()
-          .then(result => {
-            return request(app)
-              .get('/test-users/confirm')
-              .query({
-                uid: result.uid,
-                token: result.token + '_invalid',
-                redirect: verifyOptions.redirect
-              })
-              .expect(400)
-              .then(res => {
-                const errorResponse = res.body.error
-                assert(errorResponse)
-                assert.equal(errorResponse.code, 'INVALID_TOKEN')
-              })
+      it('Report error for invalid token during verification', async function() {
+        const verified = await setupVerifyUser()
+        const res = await request(app)
+          .get('/test-users/confirm')
+          .query({
+            uid: verified.uid,
+            token: verified.token + '_invalid',
+            redirect: verifyOptions.redirect
           })
+          .expect(400)
+
+        const errorResponse = res.body.error
+        assert(errorResponse)
+        assert.equal(errorResponse.code, 'INVALID_TOKEN')
       })
 
       // Keep this test as it explicitly tests callback functionality
-      it('supports callback style when calling confirm', function(done) {
-        setupVerifyUser()
-          .then(result => {
-            User.confirm(result.uid, result.token, (err) => {
-              if (err) return done(err)
-              done()
-            })
-          })
-          .catch(done)
+      it('supports callback style when calling confirm', async function() {
+        const verified = await setupVerifyUser()
+        await User.confirm(verified.uid, verified.token)
       })
-    });
-  });
+    })
+  })
 
   describe('Password Reset', function () {
     describe('User.resetPassword(options, cb)', function () {
@@ -2060,142 +1876,114 @@ describe('User', function () {
         redirect: 'http://foobar.com/reset-password',
       };
 
-      it('Requires email address to reset password', function (done) {
-        User.resetPassword({}, function (err) {
-          assert(err);
-          assert.equal(err.code, 'EMAIL_REQUIRED');
-
-          done();
-        });
+      it('Requires email address to reset password', async function () {
+        try {
+          await User.resetPassword({})
+          throw new Error('resetPassword should have failed')
+        } catch (err) {
+          assert(err)
+          assert.equal(err.code, 'EMAIL_REQUIRED')
+        }
       });
 
-      it('Requires email address to reset password - promise variant', function (done) {
-        User.resetPassword({})
-          .then(function () {
-            throw new Error('Error should NOT be thrown');
+      it('Requires email address to reset password - promise variant', async function () {
+        try {
+          await User.resetPassword({})
+          throw new Error('resetPassword should have failed')
+        } catch (err) {
+          assert(err)
+          assert.equal(err.code, 'EMAIL_REQUIRED')
+        }
+      });
+
+      it('Reports when email is not found', async function () {
+        try {
+          await User.resetPassword({ email: 'unknown@email.com' })
+          throw new Error('resetPassword should have failed')
+        } catch (err) {
+          assert(err)
+          assert.equal(err.code, 'EMAIL_NOT_FOUND')
+          assert.equal(err.statusCode, 404)
+        }
+      });
+
+      it('Checks that options exist', async function () {
+        const event = waitForEvent(User, 'resetPasswordRequest')
+        await User.resetPassword(options)
+
+        const info = await event
+        assert(info.options);
+        assert.equal(info.options, options)
+      });
+
+      it('Creates a temp accessToken to allow a user to change password', async function () {
+        const event = waitForEvent(User, 'resetPasswordRequest')
+        await User.resetPassword({ email: options.email })
+
+        const info = await event
+        assert(info.email);
+        assert(info.accessToken);
+        assert(info.accessToken.id);
+        assert.equal(info.accessToken.ttl / 60, 15)
+
+        await new Promise((resolve) => {
+          info.accessToken.user((err, user) => {
+            assert.equal(user.email, options.email)
+            resolve()
           })
-          .catch(function (err) {
-            assert(err);
-            assert.equal(err.code, 'EMAIL_REQUIRED');
+        })
+      })
 
-            done();
-          });
+      it('calls createAccessToken() to create the token', async function () {
+        User.prototype.createAccessToken = async function (ttl) {
+          return new AccessToken({ id: 'custom-token' })
+        }
+
+        const event = waitForEvent(User, 'resetPasswordRequest')
+        await User.resetPassword({ email: options.email })
+
+        const info = await event
+        expect(info.accessToken.id).to.equal('custom-token');
       });
 
-      it('Reports when email is not found', function (done) {
-        User.resetPassword({ email: 'unknown@email.com' }, function (err) {
-          assert(err);
-          assert.equal(err.code, 'EMAIL_NOT_FOUND');
-          assert.equal(err.statusCode, 404);
-
-          done();
-        });
-      });
-
-      it('Checks that options exist', function (done) {
-        let calledBack = false;
-
-        User.resetPassword(options, function () {
-          calledBack = true;
-        });
-
-        User.once('resetPasswordRequest', function (info) {
-          assert(info.options);
-          assert.equal(info.options, options);
-          assert(calledBack);
-
-          done();
-        });
-      });
-
-      it('Creates a temp accessToken to allow a user to change password', function (done) {
-        let calledBack = false;
-
-        User.resetPassword({
-          email: options.email,
-        }, function () {
-          calledBack = true;
-        });
-
-        User.once('resetPasswordRequest', function (info) {
-          assert(info.email);
-          assert(info.accessToken);
-          assert(info.accessToken.id);
-          assert.equal(info.accessToken.ttl / 60, 15);
-          assert(calledBack);
-          info.accessToken.user(function (err, user) {
-            if (err) return done(err);
-
-            assert.equal(user.email, options.email);
-
-            done();
-          });
-        });
-      });
-
-      it('calls createAccessToken() to create the token', function (done) {
-        User.prototype.createAccessToken = function (ttl, cb) {
-          cb(null, new AccessToken({ id: 'custom-token' }));
-        };
-
-        User.resetPassword({ email: options.email }, function () { });
-
-        User.once('resetPasswordRequest', function (info) {
-          expect(info.accessToken.id).to.equal('custom-token');
-          done();
-        });
-      });
-
-      it('Password reset over REST rejected without email address', function (done) {
-        request(app)
+      it('Password reset over REST rejected without email address', async function () {
+        const response = await request(app)
           .post('/test-users/reset')
           .expect('Content-Type', /json/)
           .expect(400)
           .send({})
-          .end(function (err, res) {
-            if (err) return done(err);
 
-            const errorResponse = res.body.error;
-            assert(errorResponse);
-            assert.equal(errorResponse.code, 'EMAIL_REQUIRED');
-
-            done();
-          });
+        const errorResponse = response.body.error;
+        assert(errorResponse);
+        assert.equal(errorResponse.code, 'EMAIL_REQUIRED');
       });
 
-      it('Password reset over REST requires email address', function (done) {
-        request(app)
+      it('Password reset over REST requires email address', async function () {
+        const response = await request(app)
           .post('/test-users/reset')
           .expect('Content-Type', /json/)
           .expect(204)
           .send({ email: options.email })
-          .end(function (err, res) {
-            if (err) return done(err);
 
-            assert.deepEqual(res.body, '');
-
-            done();
-          });
+        assert.deepEqual(response.body, '');
       });
 
-      it('creates token that allows patching User with new password', () => {
-        return triggerPasswordReset(options.email)
-          .then(info => {
-            // Make a REST request to change the password
-            return request(app)
-              .patch(`/test-users/${info.user.id}`)
-              .set('Authorization', info.accessToken.id)
-              .send({ password: 'new-pass' })
-              .expect(200);
-          })
-          .then(() => {
-            // Call login to verify the password was changed
-            const credentials = { email: options.email, password: 'new-pass' };
-            return User.login(credentials);
-          });
+      it('creates token that allows patching User with new password', async function () {
+        const info = await triggerPasswordReset(options.email);
+
+        // Make a REST request to change the password
+        await request(app)
+          .patch(`/test-users/${info.user.id}`)
+          .set('Authorization', info.accessToken.id)
+          .send({ password: 'new-pass' })
+          .expect(200);
+
+        // Call login to verify the password was changed
+        const credentials = { email: options.email, password: 'new-pass' };
+        await User.login(credentials);
       });
 
-      it('creates token that allows calling other endpoints too', () => {
+      it('creates token that allows calling other endpoints too', async function () {
         // Setup a test method that can be executed by $owner only
         User.prototype.testMethod = function (cb) { cb(null, 'ok'); };
         User.remoteMethod('prototype.testMethod', {
@@ -2209,468 +1997,259 @@ describe('User', function () {
           property: 'testMethod',
         });
 
-        return triggerPasswordReset(options.email)
-          .then(info => request(app)
-            .get(`/test-users/${info.user.id}/test`)
-            .set('Authorization', info.accessToken.id)
-            .expect(200));
+        const info = await triggerPasswordReset(options.email);
+        await request(app)
+          .get(`/test-users/${info.user.id}/test`)
+          .set('Authorization', info.accessToken.id)
+          .expect(200);
       });
 
       describe('User.resetPassword(options, cb) requiring realm', function () {
         let realmUser;
 
-        beforeEach(function (done) {
-          User.create(validCredentialsWithRealm, function (err, u) {
-            if (err) return done(err);
-
-            realmUser = u;
-            done();
-          });
+        beforeEach(async function () {
+          realmUser = await User.create(validCredentialsWithRealm);
         });
 
-        it('Reports when email is not found in realm', function (done) {
-          User.resetPassword({
-            email: realmUser.email,
-            realm: 'unknown',
-          }, function (err) {
-            assert(err);
-            assert.equal(err.code, 'EMAIL_NOT_FOUND');
-            assert.equal(err.statusCode, 404);
-
-            done();
-          });
+        it('Reports when email is not found in realm', async function () {
+          try {
+            await User.resetPassword({
+              email: realmUser.email,
+              realm: 'unknown',
+            })
+            throw new Error('resetPassword should have failed')
+          }
+          catch (err) {
+            assert(err)
+            assert.equal(err.code, 'EMAIL_NOT_FOUND')
+            assert.equal(err.statusCode, 404)
+          }
         });
 
-        it('Creates a temp accessToken to allow user in realm to change password', function (done) {
-          let calledBack = false;
+        it('Creates a temp accessToken to allow user in realm to change password', async function () {
+          const event = waitForEvent(User, 'resetPasswordRequest')
 
-          User.resetPassword({
+          await User.resetPassword({
             email: realmUser.email,
             realm: realmUser.realm,
-          }, function () {
-            calledBack = true;
-          });
+          })
 
-          User.once('resetPasswordRequest', function (info) {
-            assert(info.email);
-            assert(info.accessToken);
-            assert(info.accessToken.id);
-            assert.equal(info.accessToken.ttl / 60, 15);
-            assert(calledBack);
-            info.accessToken.user(function (err, user) {
-              if (err) return done(err);
+          const info = await event
+          assert(info.email);
+          assert(info.accessToken);
+          assert(info.accessToken.id);
+          assert.equal(info.accessToken.ttl / 60, 15)
 
-              assert.equal(user.email, realmUser.email);
-
-              done();
-            });
-          });
-        });
-      });
-    });
-  });
+          await new Promise((resolve) => {
+            info.accessToken.user((err, user) => {
+              assert.equal(user.email, realmUser.email)
+              resolve()
+            })
+          })
+        })
+      })
+    })
+  })
 
   describe('AccessToken (session) invalidation', function () {
     let user, originalUserToken1, originalUserToken2, newUserCreated;
     const currentEmailCredentials = { email: 'original@example.com', password: 'bar' };
     const updatedEmailCredentials = { email: 'updated@example.com', password: 'bar' };
     const newUserCred = { email: 'newuser@example.com', password: 'newpass' };
+    let observedOptions = []
+    
+    function saveObservedOptionsForHook(name, model) {
+      model = model || User
+      const originalFn = model.observe
+      model.observe(name, function(ctx) {
+        observedOptions.push({
+          hook: name,
+          ...ctx.options
+        })
+        return Promise.resolve()
+      })
+    }
 
-    beforeEach('create user then login', function createAndLogin(done) {
-      async.series([
-        function createUserWithOriginalEmail(next) {
-          User.create(currentEmailCredentials, function (err, userCreated) {
-            if (err) return next(err);
-            user = userCreated;
-            next();
-          });
-        },
-        function firstLoginWithOriginalEmail(next) {
-          User.login(currentEmailCredentials, function (err, accessToken1) {
-            if (err) return next(err);
-            assert(accessToken1.userId);
-            originalUserToken1 = accessToken1;
-            next();
-          });
-        },
-        function secondLoginWithOriginalEmail(next) {
-          User.login(currentEmailCredentials, function (err, accessToken2) {
-            if (err) return next(err);
-            assert(accessToken2.userId);
-            originalUserToken2 = accessToken2;
-            next();
-          });
-        },
-      ], done);
+    beforeEach(async function () {
+      user = await User.create(currentEmailCredentials);
+      originalUserToken1 = await User.login(currentEmailCredentials);
+      assert(originalUserToken1.userId);
+      originalUserToken2 = await User.login(currentEmailCredentials);
+      assert(originalUserToken2.userId)
     });
 
-    it('invalidates sessions when email is changed using `updateAttributes`', function (done) {
-      user.updateAttributes(
-        { email: updatedEmailCredentials.email },
-        function (err, userInstance) {
-          if (err) return done(err);
-          assertNoAccessTokens(done);
-        },
-      );
+    it('invalidates sessions when email is changed using `updateAttributes`', async function () {
+      await user.updateAttribute('email', updatedEmailCredentials.email);
+      await assertNoAccessTokens();
     });
 
-    it('invalidates sessions after `replaceAttributes`', function (done) {
+    it('invalidates sessions after `replaceAttributes`', async function () {
       // The way how the invalidation is implemented now, all sessions
       // are invalidated on a full replace
-      user.replaceAttributes(currentEmailCredentials, function (err, userInstance) {
-        if (err) return done(err);
-        assertNoAccessTokens(done);
-      });
+      await user.replaceAttributes(currentEmailCredentials);
+      await assertNoAccessTokens();
     });
 
-    it('invalidates sessions when email is changed using `updateOrCreate`', function (done) {
-      User.updateOrCreate({
+    it('invalidates sessions when email is changed using `updateOrCreate`', async function () {
+      await User.updateOrCreate({
         pk: user.pk,
         email: updatedEmailCredentials.email,
-      }, function (err, userInstance) {
-        if (err) return done(err);
-        assertNoAccessTokens(done);
       });
+      await assertNoAccessTokens();
     });
 
-    it('invalidates sessions after `replaceById`', function (done) {
+    it('invalidates sessions after `replaceById`', async function () {
       // The way how the invalidation is implemented now, all sessions
       // are invalidated on a full replace
-      User.replaceById(user.pk, currentEmailCredentials, function (err, userInstance) {
-        if (err) return done(err);
-        assertNoAccessTokens(done);
-      });
+      await User.replaceById(user.pk, currentEmailCredentials);
+      await assertNoAccessTokens();
     });
 
-    it('invalidates sessions after `replaceOrCreate`', function (done) {
+    it('invalidates sessions after `replaceOrCreate`', async function () {
       // The way how the invalidation is implemented now, all sessions
       // are invalidated on a full replace
-      User.replaceOrCreate({
+      await User.replaceOrCreate({
         pk: user.pk,
         email: currentEmailCredentials.email,
         password: currentEmailCredentials.password,
-      }, function (err, userInstance) {
-        if (err) return done(err);
-        assertNoAccessTokens(done);
       });
+      await assertNoAccessTokens();
     });
 
-    it('keeps sessions AS IS if firstName is added using `updateAttributes`', function (done) {
-      user.updateAttributes({ 'firstName': 'Janny' }, function (err, userInstance) {
-        if (err) return done(err);
-        assertPreservedTokens(done);
-      });
+    it('keeps sessions AS IS if firstName is added using `updateAttributes`', async function () {
+      await user.updateAttribute('firstName', 'Janny');
+      await assertPreservedTokens();
     });
 
-    it('keeps sessions AS IS when calling save() with no changes', function (done) {
-      user.save(function (err) {
-        if (err) return done(err);
-        assertPreservedTokens(done);
-      });
+    it('keeps sessions AS IS when calling save() with no changes', async function () {
+      await user.save();
+      await assertPreservedTokens();
     });
 
-    it('keeps sessions AS IS if firstName is added using `updateOrCreate`', function (done) {
-      User.updateOrCreate({
+    it('keeps sessions AS IS if firstName is added using `updateOrCreate`', async function () {
+      const { email } = currentEmailCredentials
+      await User.updateOrCreate({
         pk: user.pk,
         firstName: 'Loay',
-        email: currentEmailCredentials.email,
-      }, function (err, userInstance) {
-        if (err) return done(err);
-        assertPreservedTokens(done);
+        email,
       });
+      await assertPreservedTokens();
+    })
+
+    it('keeps sessions AS IS if a new user is created using `create`', async function() {
+      newUserCreated = await User.create(newUserCred)
+      const newAccessToken = await User.login(newUserCred)
+      assert(newAccessToken.id);
+      await assertPreservedTokens();
+    })
+
+    it('keeps sessions AS IS if a new user is created using `updateOrCreate`', async function () {
+      newUserCreated = await User.create(newUserCred)
+      const newAccessToken2 = await User.login(newUserCred)
+      assert(newAccessToken2.id);
+      await assertPreservedTokens()
+    })
+
+    it('keeps sessions AS IS if non-email property is changed using updateAll', async function () {
+      const userPartial = await User.create({ email: 'partial@example.com', password: 'pass1', age: 25 });
+      await User.login({ email: 'partial@example.com', password: 'pass1' });
+      await User.updateAll({ pk: userPartial.pk }, { age: userPartial.age + 1 });
+      const tokens1 = await AccessToken.find({ where: { userId: userPartial.pk } });
+      expect(tokens1.length).to.equal(1);
     });
 
-    it('keeps sessions AS IS if a new user is created using `create`', function (done) {
-      async.series([
-        function (next) {
-          User.create(newUserCred, function (err, newUserInstance) {
-            if (err) return done(err);
-            newUserCreated = newUserInstance;
-            next();
-          });
-        },
-        function (next) {
-          User.login(newUserCred, function (err, newAccessToken) {
-            if (err) return done(err);
-            assert(newAccessToken.id);
-            assertPreservedTokens(next);
-          });
-        },
-      ], done);
+    it('keeps sessions sessions when preserveAccessTokens is passed in options', async function () {
+      await user.updateAttribute('email', 'invalidateAccessTokens@example.com', { preserveAccessTokens: true });
+      await assertPreservedTokens();
     });
 
-    it('keeps sessions AS IS if a new user is created using `updateOrCreate`', function (done) {
-      async.series([
-        function (next) {
-          User.create(newUserCred, function (err, newUserInstance2) {
-            if (err) return done(err);
-            newUserCreated = newUserInstance2;
-            next();
-          });
-        },
-        function (next) {
-          User.login(newUserCred, function (err, newAccessToken2) {
-            if (err) return done(err);
-            assert(newAccessToken2.id);
-            assertPreservedTokens(next);
-          });
-        },
-      ], done);
+    it('preserves other users\' sessions if their email is  untouched', async function () {
+      const user1 = await User.create({ email: 'user1@example.com', password: 'u1pass' });
+      const user2 = await User.create({ email: 'user2@example.com', password: 'u2pass' });
+      const user3 = await User.create({ email: 'user3@example.com', password: 'u3pass' });
+
+      await User.login({ email: 'user1@example.com', password: 'u1pass' });
+      await User.login({ email: 'user2@example.com', password: 'u2pass' });
+      await User.login({ email: 'user3@example.com', password: 'u3pass' });
+
+      await user2.updateAttribute('email', 'user2Update@b.com');
+
+      const tokens1 = await AccessToken.find({ where: { userId: user1.pk } });
+      const tokens2 = await AccessToken.find({ where: { userId: user2.pk } });
+      const tokens3 = await AccessToken.find({ where: { userId: user3.pk } });
+
+      expect(tokens1.length).to.equal(1);
+      expect(tokens2.length).to.equal(0);
+      expect(tokens3.length).to.equal(1);
     });
 
-    it('keeps sessions AS IS if non-email property is changed using updateAll', function (done) {
-      let userPartial;
-      async.series([
-        function createPartialUser(next) {
-          User.create(
-            { email: 'partial@example.com', password: 'pass1', age: 25 },
-            function (err, partialInstance) {
-              if (err) return next(err);
-              userPartial = partialInstance;
-              next();
-            },
-          );
-        },
-        function loginPartiallUser(next) {
-          User.login({ email: 'partial@example.com', password: 'pass1' }, function (err, ats) {
-            if (err) return next(err);
-            next();
-          });
-        },
-        function updatePartialUser(next) {
-          User.updateAll(
-            { pk: userPartial.pk },
-            { age: userPartial.age + 1 },
-            function (err, info) {
-              if (err) return next(err);
-              next();
-            },
-          );
-        },
-        function verifyTokensOfPartialUser(next) {
-          AccessToken.find({ where: { userId: userPartial.pk } }, function (err, tokens1) {
-            if (err) return next(err);
-            expect(tokens1.length).to.equal(1);
-            next();
-          });
-        },
-      ], done);
+    it('invalidates correct sessions after changing email using updateAll', async function () {
+      const userSpecial = await User.create({ email: 'special@example.com', password: 'pass1', name: 'Special' });
+      await User.login({ email: 'special@example.com', password: 'pass1' });
+      await User.updateAll({ name: 'Special' }, { email: 'superspecial@example.com' });
+      const tokens1 = await AccessToken.find({ where: { userId: userSpecial.pk } });
+      expect(tokens1.length, 'tokens - special user tokens').to.equal(0);
+      await assertPreservedTokens();
     });
 
-    it('keeps sessions sessions when preserveAccessTokens is passed in options', function (done) {
-      user.updateAttributes(
-        { email: 'invalidateAccessTokens@example.com' },
-        { preserveAccessTokens: true },
-        function (err, userInstance) {
-          if (err) return done(err);
-          assertPreservedTokens(done);
-        },
-      );
+    it('invalidates session when password is reset', async function () {
+      await user.updateAttribute('password', 'newPass');
+      await assertNoAccessTokens();
     });
 
-    it('preserves other users\' sessions if their email is  untouched', function (done) {
-      let user1, user2, user3;
-      async.series([
-        function (next) {
-          User.create({ email: 'user1@example.com', password: 'u1pass' }, function (err, u1) {
-            if (err) return done(err);
-            User.create({ email: 'user2@example.com', password: 'u2pass' }, function (err, u2) {
-              if (err) return done(err);
-              User.create({ email: 'user3@example.com', password: 'u3pass' }, function (err, u3) {
-                if (err) return done(err);
-                user1 = u1;
-                user2 = u2;
-                user3 = u3;
-                next();
-              });
-            });
-          });
-        },
-        function (next) {
-          User.login(
-            { email: 'user1@example.com', password: 'u1pass' },
-            function (err, accessToken1) {
-              if (err) return next(err);
-              User.login(
-                { email: 'user2@example.com', password: 'u2pass' },
-                function (err, accessToken2) {
-                  if (err) return next(err);
-                  User.login({ email: 'user3@example.com', password: 'u3pass' },
-                    function (err, accessToken3) {
-                      if (err) return next(err);
-                      next();
-                    });
-                },
-              );
-            },
-          );
-        },
-        function (next) {
-          user2.updateAttribute('email', 'user2Update@b.com', function (err, userInstance) {
-            if (err) return next(err);
-            assert.equal(userInstance.email, 'user2Update@b.com');
-            next();
-          });
-        },
-        function (next) {
-          AccessToken.find({ where: { userId: user1.pk } }, function (err, tokens1) {
-            if (err) return next(err);
-            AccessToken.find({ where: { userId: user2.pk } }, function (err, tokens2) {
-              if (err) return next(err);
-              AccessToken.find({ where: { userId: user3.pk } }, function (err, tokens3) {
-                if (err) return next(err);
-
-                expect(tokens1.length).to.equal(1);
-                expect(tokens2.length).to.equal(0);
-                expect(tokens3.length).to.equal(1);
-                next();
-              });
-            });
-          });
-        },
-      ], done);
-    });
-
-    it('invalidates correct sessions after changing email using updateAll', function (done) {
-      let userSpecial, userNormal;
-      async.series([
-        function createSpecialUser(next) {
-          User.create(
-            { email: 'special@example.com', password: 'pass1', name: 'Special' },
-            function (err, specialInstance) {
-              if (err) return next(err);
-              userSpecial = specialInstance;
-              next();
-            },
-          );
-        },
-        function loginSpecialUser(next) {
-          User.login({ email: 'special@example.com', password: 'pass1' }, function (err, ats) {
-            if (err) return next(err);
-            next();
-          });
-        },
-        function updateSpecialUser(next) {
-          User.updateAll(
-            { name: 'Special' },
-            { email: 'superspecial@example.com' }, function (err, info) {
-              if (err) return next(err);
-              next();
-            },
-          );
-        },
-        function verifyTokensOfSpecialUser(next) {
-          AccessToken.find({ where: { userId: userSpecial.pk } }, function (err, tokens1) {
-            if (err) return done(err);
-            expect(tokens1.length, 'tokens - special user tokens').to.equal(0);
-            next();
-          });
-        },
-        assertPreservedTokens,
-      ], done);
-    });
-
-    it('invalidates session when password is reset', function (done) {
-      user.updateAttribute('password', 'newPass', function (err, user2) {
-        if (err) return done(err);
-        assertNoAccessTokens(done);
-      });
-    });
-
-    it('preserves current session', function (done) {
+    it('preserves current session', async function () {
       const options = { accessToken: originalUserToken1 };
-      user.updateAttribute('email', 'new@example.com', options, function (err) {
-        if (err) return done(err);
-        AccessToken.find({ where: { userId: user.pk } }, function (err, tokens) {
-          if (err) return done(err);
-          const tokenIds = tokens.map(function (t) { return t.id; });
-          expect(tokenIds).to.eql([originalUserToken1.id]);
-          done();
-        });
-      });
+      await user.updateAttribute('email', 'new@example.com', options);
+      const tokens = await AccessToken.find({ where: { userId: user.pk } });
+      const tokenIds = tokens.map(t => t.id);
+      expect(tokenIds).to.eql([originalUserToken1.id]);
     });
 
-    it('forwards the "options" argument', function (done) {
+    it('forwards the "options" argument', async function () {
       const options = { testFlag: true };
-      const observedOptions = [];
+      observedOptions = []; // Reset the array
 
       saveObservedOptionsForHook('access', User);
       saveObservedOptionsForHook('before delete', AccessToken);
 
-      user.updateAttribute('password', 'newPass', options, function (err, updated) {
-        if (err) return done(err);
+      await user.updateAttribute('password', 'newPass', options);
 
-        expect(observedOptions).to.eql([
-          // prepareForTokenInvalidation - load current instance data
-          { hook: 'access', testFlag: true },
+      expect(observedOptions).to.eql([
+        // prepareForTokenInvalidation - load current instance data
+        { hook: 'access', testFlag: true },
 
-          // validate uniqueness of User.email
-          { hook: 'access', testFlag: true },
+        // validate uniqueness of User.email
+        { hook: 'access', testFlag: true },
 
-          // _invalidateAccessTokensOfUsers - deleteAll
-          { hook: 'before delete', testFlag: true },
-        ]);
-        done();
-      });
-
-      function saveObservedOptionsForHook(name, model) {
-        model.observe(name, function (ctx, next) {
-          observedOptions.push(extend({ hook: name }, ctx.options));
-          next();
-        });
-      }
+        // _invalidateAccessTokensOfUsers - deleteAll
+        { hook: 'before delete', testFlag: true },
+      ]);
     });
 
-    it('preserves other user sessions if their password is  untouched', function (done) {
+    it('preserves other user sessions if their password is  untouched', async function () {
       let user1, user2, user1Token;
-      async.series([
-        function (next) {
-          User.create({ email: 'user1@example.com', password: 'u1pass' }, function (err, u1) {
-            if (err) return done(err);
-            User.create({ email: 'user2@example.com', password: 'u2pass' }, function (err, u2) {
-              if (err) return done(err);
-              user1 = u1;
-              user2 = u2;
-              next();
-            });
-          });
-        },
-        function (next) {
-          User.login({ email: 'user1@example.com', password: 'u1pass' }, function (err, at1) {
-            User.login({ email: 'user2@example.com', password: 'u2pass' }, function (err, at2) {
-              assert(at1.userId);
-              assert(at2.userId);
-              user1Token = at1.id;
-              next();
-            });
-          });
-        },
-        function (next) {
-          user2.updateAttribute('password', 'newPass', function (err, user2Instance) {
-            if (err) return next(err);
-            assert(user2Instance);
-            next();
-          });
-        },
-        function (next) {
-          AccessToken.find({ where: { userId: user1.pk } }, function (err, tokens1) {
-            if (err) return next(err);
-            AccessToken.find({ where: { userId: user2.pk } }, function (err, tokens2) {
-              if (err) return next(err);
-              expect(tokens1.length).to.equal(1);
-              expect(tokens2.length).to.equal(0);
-              assert.equal(tokens1[0].id, user1Token);
-              next();
-            });
-          });
-        },
-      ], function (err) {
-        done();
-      });
+
+      user1 = await User.create({ email: 'user1@example.com', password: 'u1pass' });
+      user2 = await User.create({ email: 'user2@example.com', password: 'u2pass' });
+
+      const at1 = await User.login({ email: 'user1@example.com', password: 'u1pass' });
+      const at2 = await User.login({ email: 'user2@example.com', password: 'u2pass' });
+      assert(at1.userId);
+      assert(at2.userId);
+      user1Token = at1.id;
+
+      const user2Instance = await user2.updateAttribute('password', 'newPass');
+      assert(user2Instance);
+
+      const tokens1 = await AccessToken.find({ where: { userId: user1.pk } });
+      const tokens2 = await AccessToken.find({ where: { userId: user2.pk } });
+      expect(tokens1.length).to.equal(1);
+      expect(tokens2.length).to.equal(0);
+      assert.equal(tokens1[0].id, user1Token);
     });
 
     // See https://github.com/strongloop/loopback/issues/3215
-    it('handles subclassed user with no accessToken relation', () => {
+    it('handles subclassed user with no accessToken relation', async function () {
       // setup a new LoopBack app, we don't want to use shared models
       app = loopback({ localRegistry: true, loadBuiltinModels: true });
       app.set('_verifyAuthModelRelations', false);
@@ -2684,32 +2263,24 @@ describe('User', function () {
       app.enableAuth({ dataSource: 'db' });
       expect(app.models.User.modelName).to.eql('user');
 
-      return User.create(validCredentials)
-        .then(u => {
-          u.email = 'updated@example.com';
-          return u.save();
-          // the test passes when save() does not throw any error
-        });
+      const u = await User.create(validCredentials);
+      u.email = 'updated@example.com';
+      await u.save();
+      // the test passes when save() does not throw any error
     });
 
-    function assertPreservedTokens(done) {
-      AccessToken.find({ where: { userId: user.pk } }, function (err, tokens) {
-        if (err) return done(err);
-        const actualIds = tokens.map(function (t) { return t.id; });
-        actualIds.sort();
-        const expectedIds = [originalUserToken1.id, originalUserToken2.id];
-        expectedIds.sort();
-        expect(actualIds).to.eql(expectedIds);
-        done();
-      });
+    async function assertPreservedTokens() {
+      const tokens = await AccessToken.find({ where: { userId: user.pk } });
+      const actualIds = tokens.map(t => t.id);
+      actualIds.sort();
+      const expectedIds = [originalUserToken1.id, originalUserToken2.id];
+      expectedIds.sort();
+      expect(actualIds).to.eql(expectedIds);
     }
 
-    function assertNoAccessTokens(done) {
-      AccessToken.find({ where: { userId: user.pk } }, function (err, tokens) {
-        if (err) return done(err);
-        expect(tokens.length).to.equal(0);
-        done();
-      });
+    async function assertNoAccessTokens() {
+      const tokens = await AccessToken.find({ where: { userId: user.pk } });
+      expect(tokens.length).to.equal(0);
     }
   });
 
@@ -2719,121 +2290,72 @@ describe('User', function () {
 
     beforeEach(createOriginalUser);
 
-    it('sets verification to false after email update if verification is required',
-      function (done) {
-        User.settings.emailVerificationRequired = true;
-        async.series([
-          function updateUser(next) {
-            userInstance.updateAttribute('email', NEW_EMAIL, function (err, info) {
-              if (err) return next(err);
-              assert.equal(info.email, NEW_EMAIL);
-              next();
-            });
-          },
-          function findUser(next) {
-            User.findById(userInstance.pk, function (err, info) {
-              if (err) return next(err);
-              assert.equal(info.email, NEW_EMAIL);
-              assert.equal(info.emailVerified, false);
-              next();
-            });
-          },
-        ], done);
-      });
+    it('sets verification to false after email update if verification is required', async function () {
+      User.settings.emailVerificationRequired = true;
+      const info = await userInstance.updateAttribute('email', NEW_EMAIL);
+      assert.equal(info.email, NEW_EMAIL);
+      const user = await User.findById(userInstance.pk);
+      assert.equal(user.email, NEW_EMAIL);
+      assert.equal(user.emailVerified, false);
+    });
 
-    it('leaves verification as is after email update if verification is not required',
-      function (done) {
-        User.settings.emailVerificationRequired = false;
-        async.series([
-          function updateUser(next) {
-            userInstance.updateAttribute('email', NEW_EMAIL, function (err, info) {
-              if (err) return next(err);
-              assert.equal(info.email, NEW_EMAIL);
-              next();
-            });
-          },
-          function findUser(next) {
-            User.findById(userInstance.pk, function (err, info) {
-              if (err) return next(err);
-              assert.equal(info.email, NEW_EMAIL);
-              assert.equal(info.emailVerified, true);
-              next();
-            });
-          },
-        ], done);
-      });
+    it('leaves verification as is after email update if verification is not required', async function () {
+      User.settings.emailVerificationRequired = false;
+      const info = await userInstance.updateAttribute('email', NEW_EMAIL);
+      assert.equal(info.email, NEW_EMAIL);
+      const user = await User.findById(userInstance.pk);
+      assert.equal(user.email, NEW_EMAIL);
+      assert.equal(user.emailVerified, true);
+    });
 
-    it('should not set verification to false after something other than email is updated',
-      function (done) {
-        User.settings.emailVerificationRequired = true;
-        async.series([
-          function updateUser(next) {
-            userInstance.updateAttribute('realm', 'test', function (err, info) {
-              if (err) return next(err);
-              assert.equal(info.realm, 'test');
-              next();
-            });
-          },
-          function findUser(next) {
-            User.findById(userInstance.pk, function (err, info) {
-              if (err) return next(err);
-              assert.equal(info.realm, 'test');
-              assert.equal(info.emailVerified, true);
-              next();
-            });
-          },
-        ], done);
-      });
+    it('should not set verification to false after something other than email is updated', async function () {
+      User.settings.emailVerificationRequired = true;
+      const info = await userInstance.updateAttribute('realm', 'test');
+      assert.equal(info.realm, 'test');
+      const user = await User.findById(userInstance.pk);
+      assert.equal(user.realm, 'test');
+      assert.equal(user.emailVerified, true);
+    });
 
-    function createOriginalUser(done) {
+    async function createOriginalUser() {
       const userData = {
         email: 'original@example.com',
         password: 'bar',
         emailVerified: true,
       };
-      User.create(userData, function (err, instance) {
-        if (err) return done(err);
-        userInstance = instance;
-        done();
-      });
+      userInstance = await User.create(userData);
     }
   });
 
   describe('password reset with/without email verification', function () {
-    it('allows resetPassword by email if email verification is required and done',
-      function (done) {
-        User.settings.emailVerificationRequired = true;
-        const email = validCredentialsEmailVerified.email;
+    it('allows resetPassword by email if email verification is required and done', async function () {
+      User.settings.emailVerificationRequired = true
+      const { email } = validCredentialsEmailVerified
 
-        User.resetPassword({ email: email }, function (err, info) {
-          if (err) return done(err);
-          done();
-        });
-      });
+      await User.resetPassword({ email })
+    });
 
-    it('disallows resetPassword by email if email verification is required and not done',
-      function (done) {
-        User.settings.emailVerificationRequired = true;
-        const email = validCredentialsEmail;
+    it('disallows resetPassword by email if email verification is required and not done', async function () {
+      User.settings.emailVerificationRequired = true
+      const email = validCredentialsEmail
 
-        User.resetPassword({ email: email }, function (err) {
-          assert(err);
-          assert.equal(err.code, 'RESET_FAILED_EMAIL_NOT_VERIFIED');
-          assert.equal(err.statusCode, 401);
-          done();
-        });
-      });
+      try {
+        await User.resetPassword({ email });
+        throw new Error('resetPassword should have failed');
+      }
+      catch (error) {
+        assert(error);
+        assert.equal(error.code, 'RESET_FAILED_EMAIL_NOT_VERIFIED');
+        assert.equal(error.statusCode, 401);
+      }
+    });
 
-    it('allows resetPassword by email if email verification is not required',
-      function (done) {
-        User.settings.emailVerificationRequired = false;
-        const email = validCredentialsEmail;
-
-        User.resetPassword({ email: email }, function (err) {
-          if (err) return done(err);
-          done();
-        });
-      });
+    it('allows resetPassword by email if email verification is not required', async function () {
+      User.settings.emailVerificationRequired = false
+      const email = validCredentialsEmail
+      
+      await User.resetPassword({ email })
+    });
   });
 
   describe('ctor', function () {
@@ -2858,11 +2380,12 @@ describe('User', function () {
     });
   });
 
-  function triggerPasswordReset(email) {
-    return Promise.all([
+  async function triggerPasswordReset(email) {
+    const [reset, info] = await Promise.all([
       User.resetPassword({ email: email }),
       waitForEvent(User, 'resetPasswordRequest'),
-    ])
-      .then(([reset, info]) => info);
+    ]);
+    return info;
   }
-});
+})
+})

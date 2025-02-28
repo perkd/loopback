@@ -622,7 +622,7 @@ module.exports = function(User) {
     assertVerifyOptions(verifyOptions)
 
     // Generate verification token
-    const token = await generateVerificationToken(user, options, verifyOptions.generateVerificationToken)
+    const token = await verifyOptions.generateVerificationToken(user, options)
     
     // Add the token to the user and save
     user.verificationToken = token
@@ -639,86 +639,25 @@ module.exports = function(User) {
     verifyOptions.text = verifyOptions.text.replace(/\{href\}/g, verifyOptions.verifyHref)
 
     // Generate email HTML content
-    const html = await generateEmailTemplate(verifyOptions, options)
-    verifyOptions.html = html
+    const { templateFn } = verifyOptions
+    verifyOptions.html = await templateFn(verifyOptions, options)
 
     // Remove verifyOptions.template to prevent rejection by certain
     // nodemailer transport plugins.
     delete verifyOptions.template
 
     // Send the email
-    const email = await sendVerificationEmail(verifyOptions, options)
-    
+    const { mailer } = verifyOptions
+    const email = await mailer.send(verifyOptions, options)
+
     return {
-      email: email, 
+      email, 
       token: user.verificationToken, 
       uid: user[pkName]
     }
   }
 
-  /**
-   * Helper function to generate verification token
-   */
-  async function generateVerificationToken(user, options, tokenGenerator) {
-    return new Promise((resolve, reject) => {
-      // Call the token generator based on its expected arity
-      if (tokenGenerator.length === 3) {
-        tokenGenerator(user, options, (err, token) => {
-          if (err) return reject(err)
-          resolve(token)
-        })
-      } else {
-        tokenGenerator(user, (err, token) => {
-          if (err) return reject(err)
-          resolve(token)
-        })
-      }
-    })
-  }
-
-  /**
-   * Helper function to generate email template
-   */
-  async function generateEmailTemplate(verifyOptions, options) {
-    return new Promise((resolve, reject) => {
-      const templateFn = verifyOptions.templateFn
-      // Call the template generator based on its expected arity
-      if (templateFn.length === 3) {
-        templateFn(verifyOptions, options, (err, html) => {
-          if (err) return reject(err)
-          resolve(html)
-        })
-      } else {
-        templateFn(verifyOptions, (err, html) => {
-          if (err) return reject(err)
-          resolve(html)
-        })
-      }
-    })
-  }
-
-  /**
-   * Helper function to send verification email
-   */
-  async function sendVerificationEmail(verifyOptions, options) {
-    return new Promise((resolve, reject) => {
-      const Email = verifyOptions.mailer
-      // Call the email sender based on its expected arity
-      if (Email.send.length === 3) {
-        Email.send(verifyOptions, options, (err, email) => {
-          if (err) return reject(err)
-          resolve(email)
-        })
-      } else {
-        Email.send(verifyOptions, (err, email) => {
-          if (err) return reject(err)
-          resolve(email)
-        })
-      }
-    })
-  }
-
-  function createVerificationEmailBody(verifyOptions, options, cb) {
+  async function createVerificationEmailBody(verifyOptions, options) {
     const text = verifyOptions.text || 'Please verify your email by opening this link in a web browser:'
     const verifyHref = verifyOptions.verifyHref || 
       `${verifyOptions.protocol}://${verifyOptions.host}:${verifyOptions.port}${verifyOptions.restApiRoot}/confirm`
@@ -730,8 +669,8 @@ module.exports = function(User) {
         Verify your email
       </a>
     `
-    
-    process.nextTick(() => cb(null, html))
+
+    return html
   }
 
   /**
