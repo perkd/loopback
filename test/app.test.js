@@ -32,7 +32,7 @@ describe('app', function() {
       steps = [];
     });
 
-    it('runs middleware in phases', function(done) {
+    it('runs middleware in phases', async function() {
       const PHASES = [
         'initial', 'session', 'auth', 'parse',
         'routes', 'files', 'final',
@@ -43,135 +43,102 @@ describe('app', function() {
       });
       app.use(namedHandler('main'));
 
-      executeMiddlewareHandlers(app, function(err) {
-        if (err) return done(err);
+      await executeMiddlewareHandlers(app)
+      expect(steps).to.eql([
+        'initial', 'session', 'auth', 'parse',
+        'main', 'routes', 'files', 'final',
+      ])
+    })
 
-        expect(steps).to.eql([
-          'initial', 'session', 'auth', 'parse',
-          'main', 'routes', 'files', 'final',
-        ]);
-
-        done();
-      });
-    });
-
-    it('preserves order of handlers in the same phase', function(done) {
+    it('preserves order of handlers in the same phase', async function() {
       app.middleware('initial', namedHandler('first'));
       app.middleware('initial', namedHandler('second'));
 
-      executeMiddlewareHandlers(app, function(err) {
-        if (err) return done(err);
+      await executeMiddlewareHandlers(app)
+      expect(steps).to.eql(['first', 'second'])
+    })
 
-        expect(steps).to.eql(['first', 'second']);
-
-        done();
-      });
-    });
-
-    it('supports `before:` and `after:` prefixes', function(done) {
+    it('supports `before:` and `after:` prefixes', async function() {
       app.middleware('routes:before', namedHandler('routes:before'));
       app.middleware('routes:after', namedHandler('routes:after'));
       app.use(namedHandler('main'));
 
-      executeMiddlewareHandlers(app, function(err) {
-        if (err) return done(err);
+      await executeMiddlewareHandlers(app)
+      expect(steps).to.eql(['routes:before', 'main', 'routes:after'])
+    })
 
-        expect(steps).to.eql(['routes:before', 'main', 'routes:after']);
-
-        done();
-      });
-    });
-
-    it('allows extra handlers on express stack during app.use', function(done) {
+    it('allows extra handlers on express stack during app.use', async function() {
       function handlerThatAddsHandler(name) {
         app.use(namedHandler('extra-handler'));
         return namedHandler(name);
       }
 
       let myHandler;
-      app.middleware('routes:before',
-        myHandler = handlerThatAddsHandler('my-handler'));
+      app.middleware('routes:before', myHandler = handlerThatAddsHandler('my-handler'))
       const found = app._findLayerByHandler(myHandler);
       expect(found).to.be.an('object');
       expect(myHandler).to.equal(found.handle);
-      expect(found).have.property('phase', 'routes:before');
-      executeMiddlewareHandlers(app, function(err) {
-        if (err) return done(err);
+      expect(found).have.property('phase', 'routes:before')
 
-        expect(steps).to.eql(['my-handler', 'extra-handler']);
+      await executeMiddlewareHandlers(app)
+      expect(steps).to.eql(['my-handler', 'extra-handler'])
+    })
 
-        done();
-      });
-    });
+    it('allows handlers to be wrapped as __NR_handler on express stack', async function() {
+      const myHandler = namedHandler('my-handler');
+      const wrappedHandler = function(req, res, next) {
+        myHandler(req, res, next);
+      }
 
-    it('allows handlers to be wrapped as __NR_handler on express stack',
-      function(done) {
-        const myHandler = namedHandler('my-handler');
+      wrappedHandler['__NR_handler'] = myHandler
+      app.middleware('routes:before', wrappedHandler)
+      const found = app._findLayerByHandler(myHandler)
+      expect(found).to.be.an('object')
+      expect(found).have.property('phase', 'routes:before')
+
+      await executeMiddlewareHandlers(app)
+      expect(steps).to.eql(['my-handler'])
+    })
+
+    it('allows handlers to be wrapped as __appdynamicsProxyInfo__ on express stack', async function() {
+      const myHandler = namedHandler('my-handler');
+      const wrappedHandler = function(req, res, next) {
+        myHandler(req, res, next);
+      }
+
+      wrappedHandler['__appdynamicsProxyInfo__'] = {
+        orig: myHandler,
+      };
+      app.middleware('routes:before', wrappedHandler)
+      const found = app._findLayerByHandler(myHandler)
+      expect(found).to.be.an('object')
+      expect(found).have.property('phase', 'routes:before')
+
+      await executeMiddlewareHandlers(app)
+      expect(steps).to.eql(['my-handler'])
+    })
+
+    it('allows handlers to be wrapped as a property on express stack', async function() {
+      const myHandler = namedHandler('my-handler');
         const wrappedHandler = function(req, res, next) {
           myHandler(req, res, next);
-        };
-        wrappedHandler['__NR_handler'] = myHandler;
-        app.middleware('routes:before', wrappedHandler);
-        const found = app._findLayerByHandler(myHandler);
-        expect(found).to.be.an('object');
-        expect(found).have.property('phase', 'routes:before');
-        executeMiddlewareHandlers(app, function(err) {
-          if (err) return done(err);
+        }
 
-          expect(steps).to.eql(['my-handler']);
+      wrappedHandler['__handler'] = myHandler
+      app.middleware('routes:before', wrappedHandler)
+      const found = app._findLayerByHandler(myHandler)
+      expect(found).to.be.an('object')
+      expect(found).have.property('phase', 'routes:before')
 
-          done();
-        });
-      });
+      await executeMiddlewareHandlers(app)
+      expect(steps).to.eql(['my-handler'])
+    })
 
-    it('allows handlers to be wrapped as __appdynamicsProxyInfo__ on express stack',
-      function(done) {
-        const myHandler = namedHandler('my-handler');
-        const wrappedHandler = function(req, res, next) {
-          myHandler(req, res, next);
-        };
-        wrappedHandler['__appdynamicsProxyInfo__'] = {
-          orig: myHandler,
-        };
-        app.middleware('routes:before', wrappedHandler);
-        const found = app._findLayerByHandler(myHandler);
-        expect(found).to.be.an('object');
-        expect(found).have.property('phase', 'routes:before');
-        executeMiddlewareHandlers(app, function(err) {
-          if (err) return done(err);
-
-          expect(steps).to.eql(['my-handler']);
-
-          done();
-        });
-      });
-
-    it('allows handlers to be wrapped as a property on express stack',
-      function(done) {
-        const myHandler = namedHandler('my-handler');
-        const wrappedHandler = function(req, res, next) {
-          myHandler(req, res, next);
-        };
-        wrappedHandler['__handler'] = myHandler;
-        app.middleware('routes:before', wrappedHandler);
-        const found = app._findLayerByHandler(myHandler);
-        expect(found).to.be.an('object');
-        expect(found).have.property('phase', 'routes:before');
-        executeMiddlewareHandlers(app, function(err) {
-          if (err) return done(err);
-
-          expect(steps).to.eql(['my-handler']);
-
-          done();
-        });
-      });
-
-    it('injects error from previous phases into the router', function(done) {
+    it('injects error from previous phases into the router', async function() {
       const expectedError = new Error('expected error');
 
       app.middleware('initial', function(req, res, next) {
         steps.push('initial');
-
         next(expectedError);
       });
 
@@ -183,32 +150,28 @@ describe('app', function() {
         next();
       });
 
-      executeMiddlewareHandlers(app, function(err) {
-        if (err) return done(err);
+      await executeMiddlewareHandlers(app)
+      expect(steps).to.eql(['initial', 'error'])
+    })
 
-        expect(steps).to.eql(['initial', 'error']);
-
-        done();
-      });
-    });
-
-    it('passes unhandled error to callback', function(done) {
-      const expectedError = new Error('expected error');
+    it('passes unhandled error to callback', async function() {
+      const expectedError = new Error('expected error')
 
       app.middleware('initial', function(req, res, next) {
-        next(expectedError);
-      });
+        next(expectedError)
+      })
 
-      executeMiddlewareHandlers(app, function(err) {
-        expect(err).to.equal(expectedError);
+      try {
+        await executeMiddlewareHandlers(app)
+        throw new Error('expected error, but none occurred')
+      } catch (err) {
+        expect(err).to.equal(expectedError)
+      }
+    })
 
-        done();
-      });
-    });
-
-    it('passes errors to error handlers in the same phase', function(done) {
-      const expectedError = new Error('this should be handled by middleware');
-      let handledError;
+    it('passes errors to error handlers in the same phase', async function() {
+      const expectedError = new Error('this should be handled by middleware')
+      let handledError
 
       app.middleware('initial', function(req, res, next) {
         // continue in the next tick, this verifies that the next
@@ -220,82 +183,55 @@ describe('app', function() {
 
       app.middleware('initial', function(err, req, res, next) {
         handledError = err;
-
         next();
       });
 
-      executeMiddlewareHandlers(app, function(err) {
-        if (err) return done(err);
+      await executeMiddlewareHandlers(app)
+      expect(handledError).to.equal(expectedError)
+    })
 
-        expect(handledError).to.equal(expectedError);
-
-        done();
-      });
-    });
-
-    it('scopes middleware to a string path', function(done) {
+    it('scopes middleware to a string path', async function() {
       app.middleware('initial', '/scope', pathSavingHandler());
 
-      async.eachSeries(
-        ['/', '/scope', '/scope/item', '/other'],
-        function(url, next) { executeMiddlewareHandlers(app, url, next); },
-        function(err) {
-          if (err) return done(err);
+      const urls = ['/', '/scope', '/scope/item', '/other'];
+      for (const url of urls) {
+        await executeMiddlewareHandlers(app, url);
+      }
 
-          expect(steps).to.eql(['/scope', '/scope/item']);
-
-          done();
-        },
-      );
+      expect(steps).to.eql(['/scope', '/scope/item']);
     });
 
-    it('scopes middleware to a regex path', function(done) {
+    it('scopes middleware to a regex path', async function() {
       app.middleware('initial', /^\/(a|b)/, pathSavingHandler());
 
-      async.eachSeries(
-        ['/', '/a', '/b', '/c'],
-        function(url, next) { executeMiddlewareHandlers(app, url, next); },
-        function(err) {
-          if (err) return done(err);
+      const urls = ['/', '/a', '/b', '/c'];
+      for (const url of urls) {
+        await executeMiddlewareHandlers(app, url);
+      }
 
-          expect(steps).to.eql(['/a', '/b']);
-
-          done();
-        },
-      );
+      expect(steps).to.eql(['/a', '/b']);
     });
 
-    it('scopes middleware to a list of scopes', function(done) {
+    it('scopes middleware to a list of scopes', async function() {
       app.middleware('initial', ['/scope', /^\/(a|b)/], pathSavingHandler());
 
-      async.eachSeries(
-        ['/', '/a', '/b', '/c', '/scope', '/other'],
-        function(url, next) { executeMiddlewareHandlers(app, url, next); },
-        function(err) {
-          if (err) return done(err);
+      const urls = ['/', '/a', '/b', '/c', '/scope', '/other'];
+      for (const url of urls) {
+        await executeMiddlewareHandlers(app, url);
+      }
 
-          expect(steps).to.eql(['/a', '/b', '/scope']);
-
-          done();
-        },
-      );
+      expect(steps).to.eql(['/a', '/b', '/scope']);
     });
 
-    it('sets req.url to a sub-path', function(done) {
+    it('sets req.url to a sub-path', async function() {
       app.middleware('initial', ['/scope'], function(req, res, next) {
         steps.push(req.url);
-
         next();
       });
 
-      executeMiddlewareHandlers(app, '/scope/id', function(err) {
-        if (err) return done(err);
-
-        expect(steps).to.eql(['/id']);
-
-        done();
-      });
-    });
+      await executeMiddlewareHandlers(app, '/scope/id')
+      expect(steps).to.eql(['/id'])
+    })
 
     it('exposes express helpers on req and res objects', function(done) {
       let req, res;
@@ -478,7 +414,7 @@ describe('app', function() {
   });
 
   describe.onServer('.middlewareFromConfig', function() {
-    it('provides API for loading middleware from JSON config', function(done) {
+    it('provides API for loading middleware from JSON config', async function() {
       const steps = [];
       const expectedConfig = {key: 'value'};
 
@@ -535,21 +471,17 @@ describe('app', function() {
         params: {x: 2},
       });
 
-      executeMiddlewareHandlers(app, function(err) {
-        if (err) return done(err);
+      await executeMiddlewareHandlers(app);
 
-        expect(steps).to.eql([
-          ['before'],
-          [expectedConfig],
-          ['after', 2],
-          [{x: 1}],
-        ]);
-
-        done();
-      });
+      expect(steps).to.eql([
+        ['before'],
+        [expectedConfig],
+        ['after', 2],
+        [{x: 1}],
+      ]);
     });
 
-    it('scopes middleware from config to a list of scopes', function(done) {
+    it('scopes middleware from config to a list of scopes', async function() {
       const steps = [];
       app.middlewareFromConfig(
         function factory() {
@@ -565,17 +497,12 @@ describe('app', function() {
         },
       );
 
-      async.eachSeries(
-        ['/', '/a', '/b', '/c', '/scope', '/other'],
-        function(url, next) { executeMiddlewareHandlers(app, url, next); },
-        function(err) {
-          if (err) return done(err);
+      const urls = ['/', '/a', '/b', '/c', '/scope', '/other'];
+      for (const url of urls) {
+        await executeMiddlewareHandlers(app, url);
+      }
 
-          expect(steps).to.eql(['/a', '/b', '/scope']);
-
-          done();
-        },
-      );
+      expect(steps).to.eql(['/a', '/b', '/scope']);
     });
   });
 
@@ -1202,29 +1129,46 @@ describe('app', function() {
   });
 });
 
-function executeMiddlewareHandlers(app, urlPath, callback) {
-  let handlerError = undefined;
+function executeMiddlewareHandlers(app, urlPath, done) {
+  // if urlPath is a function or undefined, then it's actually the callback and use default urlPath
+  if (typeof urlPath === 'function' || urlPath === undefined) {
+    done = urlPath
+    urlPath = '/test/url'
+  }
+
+  let handlerError = undefined
+
   const server = http.createServer(function(req, res) {
     app.handle(req, res, function(err) {
       if (err) {
-        handlerError = err;
-        res.statusCode = err.status || err.statusCode || 500;
-        res.end(err.stack || err);
+        handlerError = err
+        res.statusCode = err.status || err.statusCode || 500
+        res.end(err.stack || err)
       } else {
-        res.statusCode = 204;
-        res.end();
+        res.statusCode = 204
+        res.end()
       }
-    });
-  });
+    })
+  })
 
-  if (callback === undefined && typeof urlPath === 'function') {
-    callback = urlPath;
-    urlPath = '/test/url';
+  if (typeof done === 'function') {
+    request(server)
+      .get(urlPath)
+      .end(function(err, res) {
+        server.close()
+        if (handlerError) return done(handlerError)
+        return done(err, res)
+      })
+  } else {
+    return new Promise(function(resolve, reject) {
+      request(server)
+        .get(urlPath)
+        .end(function(err, res) {
+          server.close()
+          if (handlerError) return reject(handlerError)
+          if (err) return reject(err)
+          resolve(res)
+        })
+    })
   }
-
-  request(server)
-    .get(urlPath)
-    .end(function(err) {
-      callback(handlerError || err);
-    });
 }
