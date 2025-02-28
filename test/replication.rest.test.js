@@ -113,8 +113,16 @@ describe('Replication over REST', function() {
       
       it('rejects pull from server', async function() {
         try {
+          // Create context for replication
+          const ctx = {
+            Model: RemoteCar,
+            accessType: 'REPLICATE',
+            modelName: RemoteCar.modelName,
+            method: 'replicate'
+          }
+          
           // Pass -1 as the since parameter to match the original code
-          await RemoteCar.replicate(LocalCar)
+          await RemoteCar.replicate(LocalCar, -1, { ctx })
           throw new Error('should have failed')
         }
         catch (err) {
@@ -124,7 +132,15 @@ describe('Replication over REST', function() {
 
       it('rejects push to the server', async function() {
         try {
-          await LocalCar.replicate(RemoteCar)
+          // Create context for replication
+          const ctx = {
+            Model: LocalCar,
+            accessType: 'REPLICATE',
+            modelName: LocalCar.modelName,
+            method: 'replicate'
+          }
+          
+          await LocalCar.replicate(RemoteCar, undefined, { ctx })
           throw new Error('should have failed')
         }
         catch (err) {
@@ -161,8 +177,20 @@ describe('Replication over REST', function() {
       })
 
       it('allows pull from server', async function() {
-        const result = await RemoteCar.replicate(LocalCar)
-        const { conflicts } = result ?? {}
+        // Create context for replication
+        const ctx = {
+          Model: RemoteCar,
+          accessType: 'REPLICATE',
+          modelName: RemoteCar.modelName,
+          method: 'replicate',
+          remotingContext: {
+            accessType: 'REPLICATE',
+            req: { accessToken: { userId: aliceId } }
+          }
+        }
+        
+        const result = await RemoteCar.replicate(LocalCar, undefined, { ctx })
+        const { conflicts } = result
 
         if (conflicts.length) return conflictError(conflicts)
 
@@ -171,7 +199,19 @@ describe('Replication over REST', function() {
       })
 
       it('rejects push to the server', async function() {
-        const result = await LocalCar.replicate(RemoteCar)
+        // Create context for replication
+        const ctx = {
+          Model: LocalCar,
+          accessType: 'REPLICATE',
+          modelName: LocalCar.modelName,
+          method: 'replicate',
+          remotingContext: {
+            accessType: 'REPLICATE',
+            req: { accessToken: { userId: aliceId } }
+          }
+        }
+        
+        const result = await LocalCar.replicate(RemoteCar, undefined, { ctx })
           .catch(err => {
             expect(err).to.have.property('statusCode', 401)
           })
@@ -181,26 +221,35 @@ describe('Replication over REST', function() {
       it('allows reverse resolve() on the client', async function() {
         setAccessToken(aliceToken)
         
-        // Create a mock conflict directly instead of relying on replication
-        const RemoteConflict = RemoteCar.getChangeModel().Conflict
-        const conflict = new RemoteConflict(
-          'Ford-Mustang', 
-          RemoteCar, 
-          LocalCar, 
-          {
-            _type: 'update',
-            _sourceChange: { modelId: 'Ford-Mustang', rev: 'source-rev' },
-            _targetChange: { modelId: 'Ford-Mustang', rev: 'target-rev' }
-          }
-        )
+        // First ensure we have a conflict to detect
+        await seedConflict()
         
-        // Now swap and resolve
-        await conflict
+        // Create context for replication
+        const ctx = {
+          Model: RemoteCar,
+          accessType: 'REPLICATE',
+          modelName: RemoteCar.modelName,
+          method: 'replicate',
+          remotingContext: {
+            accessType: 'REPLICATE',
+            req: { accessToken: { userId: aliceId } }
+          }
+        }
+        
+        // Replicate to detect the conflict
+        const result = await RemoteCar.replicate(LocalCar, undefined, { ctx })
+        const { conflicts } = result
+        
+        // Verify we have a conflict
+        expect(conflicts, 'conflicts').to.have.length(1)
+        
+        // Swap and resolve using the detected conflict
+        await conflicts[0]
           .swapParties()
           .resolveUsingTarget()
         
         // Verify resolution worked
-        const finalResult = await RemoteCar.replicate(LocalCar)
+        const finalResult = await RemoteCar.replicate(LocalCar, undefined, { ctx })
         expect(finalResult.conflicts).to.have.length(0)
       })
     })
@@ -211,7 +260,19 @@ describe('Replication over REST', function() {
       });
 
       it('allows pull from server', async function() {
-        const result = await RemoteCar.replicate(LocalCar)
+        // Create context for replication
+        const ctx = {
+          Model: RemoteCar,
+          accessType: 'REPLICATE',
+          modelName: RemoteCar.modelName,
+          method: 'replicate',
+          remotingContext: {
+            accessType: 'REPLICATE',
+            req: { accessToken: { userId: peterId } }
+          }
+        }
+        
+        const result = await RemoteCar.replicate(LocalCar, undefined, { ctx })
         const { conflicts } = result
 
         if (conflicts.length) return conflictError(conflicts)
@@ -223,12 +284,24 @@ describe('Replication over REST', function() {
       it('allows push to the server', async function() {
         setAccessToken(aliceToken)
         
+        // Create context for replication
+        const ctx = {
+          Model: LocalCar,
+          accessType: 'REPLICATE',
+          modelName: LocalCar.modelName,
+          method: 'replicate',
+          remotingContext: {
+            accessType: 'REPLICATE',
+            req: { accessToken: { userId: peterId } }
+          }
+        }
+        
         // Step 1: Log initial state
         debug('Initial client cars:', clientCars)
         debug('Initial server cars:', (await ServerCar.find()).map(carToString))
         
         // Step 2: Replicate from local to server
-        const result = await LocalCar.replicate(ServerCar)
+        const result = await LocalCar.replicate(ServerCar, undefined, { ctx })
         debug('Replication result:', result)
         
         // Step 3: Verify replication
@@ -275,17 +348,26 @@ describe('Replication over REST', function() {
       })
 
       it('rejects resolve() on the server', async function() {
-        // simulate replication Server->Client
-        const conflict = new RemoteConflict(conflictedCarId, RemoteCar, LocalCar)
+        // Create context for replication
+        const ctx = {
+          Model: RemoteCar,
+          accessType: 'REPLICATE',
+          modelName: RemoteCar.modelName,
+          method: 'replicate',
+          remotingContext: {
+            accessType: 'REPLICATE',
+            req: { accessToken: { userId: aliceId } }
+          }
+        }
+        
+        const result = await RemoteCar.replicate(LocalCar, undefined, { ctx })
+        const { conflicts } = result
+        expect(conflicts, 'conflicts').to.have.length(1)
         try {
-          await conflict.resolveUsingSource()
+          await conflicts[0].resolveUsingSource()
           throw new Error('resolveUsingSource should have failed')
         }
         catch (err) {
-          // Accept any error as a valid rejection
-          if (err.message === 'resolveUsingSource should have failed') {
-            throw err; // This is our own error - the operation didn't fail as expected
-          }
           expect(err).to.have.property('statusCode', 401)
         }
       })
@@ -314,7 +396,6 @@ describe('Replication over REST', function() {
           if (err.message === 'resolveUsingSource should have failed') {
             throw err; // This is our own error - the operation didn't fail as expected
           }
-          
           expect(err).to.have.property('statusCode', 401)
         }
       })
@@ -328,26 +409,35 @@ describe('Replication over REST', function() {
       it('allows reverse resolve() on the client', async function() {
         setAccessToken(aliceToken)
         
-        // Create a mock conflict directly instead of relying on replication
-        const RemoteConflict = RemoteCar.getChangeModel().Conflict
-        const conflict = new RemoteConflict(
-          'Ford-Mustang', 
-          RemoteCar, 
-          LocalCar, 
-          {
-            _type: 'update',
-            _sourceChange: { modelId: 'Ford-Mustang', rev: 'source-rev' },
-            _targetChange: { modelId: 'Ford-Mustang', rev: 'target-rev' }
-          }
-        )
+        // First ensure we have a conflict to detect
+        await seedConflict()
         
-        // Now swap and resolve
-        await conflict
+        // Create context for replication
+        const ctx = {
+          Model: RemoteCar,
+          accessType: 'REPLICATE',
+          modelName: RemoteCar.modelName,
+          method: 'replicate',
+          remotingContext: {
+            accessType: 'REPLICATE',
+            req: { accessToken: { userId: aliceId } }
+          }
+        }
+        
+        // Replicate to detect the conflict
+        const result = await RemoteCar.replicate(LocalCar, undefined, { ctx })
+        const { conflicts } = result
+        
+        // Verify we have a conflict
+        expect(conflicts, 'conflicts').to.have.length(1)
+        
+        // Swap and resolve using the detected conflict
+        await conflicts[0]
           .swapParties()
           .resolveUsingTarget()
         
         // Verify resolution worked
-        const finalResult = await RemoteCar.replicate(LocalCar)
+        const finalResult = await RemoteCar.replicate(LocalCar, undefined, { ctx })
         expect(finalResult.conflicts).to.have.length(0)
       })
 
@@ -371,29 +461,49 @@ describe('Replication over REST', function() {
       });
 
       it('allows resolve() on the client', async function() {
-        const local = await LocalCar.replicate(RemoteCar)
+        // Create context for replication
+        const ctx = {
+          Model: LocalCar,
+          accessType: 'REPLICATE',
+          modelName: LocalCar.modelName,
+          method: 'replicate',
+          remotingContext: {
+            accessType: 'REPLICATE',
+            req: { accessToken: { userId: peterId } }
+          }
+        }
+        
+        const local = await LocalCar.replicate(RemoteCar, undefined, { ctx })
         const { conflicts } = local
         expect(conflicts, 'conflicts').to.have.length(1)
         await conflicts[0].resolveUsingSource()
 
-        const remote = await LocalCar.replicate(RemoteCar)
+        const remote = await LocalCar.replicate(RemoteCar, undefined, { ctx })
         const { conflicts: remoteConflicts } = remote
         expect(remoteConflicts, 'remoteConflicts').to.have.length(0)
-        //await remoteConflicts[0].resolveUsingSource()
-        //if (remoteConflicts.length) throw conflictError(remoteConflicts)
       })
 
       it('allows resolve() on the server', async function() {
-        const remote = await RemoteCar.replicate(LocalCar)
+        // Create context for replication
+        const ctx = {
+          Model: RemoteCar,
+          accessType: 'REPLICATE',
+          modelName: RemoteCar.modelName,
+          method: 'replicate',
+          remotingContext: {
+            accessType: 'REPLICATE',
+            req: { accessToken: { userId: peterId } }
+          }
+        }
+        
+        const remote = await RemoteCar.replicate(LocalCar, undefined, { ctx })
         const { conflicts } = remote
         expect(conflicts, 'conflicts').to.have.length(1)
         await conflicts[0].resolveUsingSource()
 
-        const local = await RemoteCar.replicate(LocalCar)
+        const local = await RemoteCar.replicate(LocalCar, undefined, { ctx })
         const { conflicts: localConflicts } = local
         expect(localConflicts, 'localConflicts').to.have.length(0)
-        //await localConflicts[0].resolveUsingSource()
-        //if (localConflicts.length) throw conflictError(localConflicts)
       })
     })
   })
@@ -402,7 +512,19 @@ describe('Replication over REST', function() {
     it('pulls only authorized records', async function() {
       setAccessToken(aliceToken)
 
-      const result = await RemoteUser.replicate(LocalUser)
+      // Create context for replication with proper access type
+      const ctx = {
+        Model: RemoteUser,
+        accessType: 'REPLICATE',
+        modelName: RemoteUser.modelName,
+        method: 'replicate',
+        remotingContext: {
+          accessType: 'REPLICATE',
+          req: { accessToken: { userId: aliceId } }
+        }
+      }
+
+      const result = await RemoteUser.replicate(LocalUser, undefined, { ctx })
       const { conflicts } = result
       if (conflicts.length) return conflictError(conflicts)
 
@@ -417,8 +539,21 @@ describe('Replication over REST', function() {
 
       // Simulate a replication attempt with a user who doesn't have write permissions
       setAccessToken(peterToken)
+      
+      // Create context for replication with proper access type
+      const ctx = {
+        Model: LocalUser,
+        accessType: 'REPLICATE',
+        modelName: LocalUser.modelName,
+        method: 'replicate',
+        remotingContext: {
+          accessType: 'REPLICATE',
+          req: { accessToken: { userId: peterId } }
+        }
+      }
+      
       try {
-        await LocalUser.replicate(RemoteUser)
+        await LocalUser.replicate(RemoteUser, undefined, { ctx })
         throw new Error('Replicate should have failed.')
       }
       catch (err) {
@@ -436,7 +571,20 @@ describe('Replication over REST', function() {
 
       // Simulate replication with proper write permissions
       setAccessToken(aliceToken)
-      const result = await LocalUser.replicate(RemoteUser)
+      
+      // Create context for replication with proper access type
+      const ctx = {
+        Model: LocalUser,
+        accessType: 'REPLICATE',
+        modelName: LocalUser.modelName,
+        method: 'replicate',
+        remotingContext: {
+          accessType: 'REPLICATE',
+          req: { accessToken: { userId: aliceId } }
+        }
+      }
+      
+      const result = await LocalUser.replicate(RemoteUser, undefined, { ctx })
       if (result.conflicts && result.conflicts.length) {
         throw conflictError(result.conflicts)
       }
@@ -654,6 +802,10 @@ describe('Replication over REST', function() {
     if (LocalUser.Change) LocalUser.Change.Checkpoint = ClientCheckpoint
     clientApp.model(LocalUser, {dataSource: 'db'})
     
+    // Enable change tracking on LocalUser
+    LocalUser.enableChangeTracking()
+    debug('Enabled change tracking for LocalUser')
+    
     // Setup LocalCar
     LocalCar = clientApp.registry.createModel('LocalCar', CAR_PROPS, CAR_OPTS)
     LocalCar.Change.Checkpoint = ClientCheckpoint
@@ -731,38 +883,71 @@ describe('Replication over REST', function() {
 
   async function seedConflict() {
     try {
-      const conflictId = 'Ford-Mustang'
-      // Save the ID we're using for the conflict
-      conflictedCarId = conflictId
+      debug('Starting seedConflict process')
+      // Hard-coded ID for consistency with original test
+      conflictedCarId = 'Ford-Mustang'
       
-      // First ensure model exists on the server side: clean up and create remote record
-      await ServerCar.destroyById(conflictId) // Clean up any existing record
-      await ServerCar.create({
-        id: conflictId,
-        model: 'Mustang',
-        maker: 'Ford'
-      })
+      // First replicate in both directions to ensure consistency
+      debug('Initial replication to ensure consistency')
       
-      // Ensure the local record exists by upserting
-      await LocalCar.upsert({
-        id: conflictId,
-        model: 'Mustang',
-        maker: 'Ford'
-      })
+      // Create context for local to server replication
+      const localToServerCtx = {
+        Model: LocalCar,
+        accessType: 'REPLICATE',
+        modelName: LocalCar.modelName,
+        method: 'replicate'
+      }
       
-      // Now update both sides to force a conflict
-      // Mimic original behavior by retrieving the instances and calling updateAttributes()
-      const localInstance = await LocalCar.findById(conflictId)
+      const localToServerResult = await LocalCar.replicate(ServerCar, undefined, { ctx: localToServerCtx })
+      if (localToServerResult.conflicts && localToServerResult.conflicts.length) {
+        debug('Unexpected conflicts during initial local->server replication')
+        throw conflictError(localToServerResult.conflicts)
+      }
+      
+      // Create context for server to local replication
+      const serverToLocalCtx = {
+        Model: ServerCar,
+        accessType: 'REPLICATE',
+        modelName: ServerCar.modelName,
+        method: 'replicate'
+      }
+      
+      const serverToLocalResult = await ServerCar.replicate(LocalCar, undefined, { ctx: serverToLocalCtx })
+      if (serverToLocalResult.conflicts && serverToLocalResult.conflicts.length) {
+        debug('Unexpected conflicts during initial server->local replication')
+        throw conflictError(serverToLocalResult.conflicts)
+      }
+      
+      debug('Creating conflicting changes for model ID: %s', conflictedCarId)
+      
+      // Create conflicting changes on both sides
+      const localInstance = await LocalCar.findById(conflictedCarId)
       if (localInstance) {
+        debug('Updating local instance with conflicting change')
         await localInstance.updateAttributes({ model: 'Client Updated Mustang' })
+      } else {
+        debug('Local instance not found, creating it')
+        await LocalCar.create({
+          id: conflictedCarId,
+          model: 'Client Updated Mustang',
+          maker: 'Ford'
+        })
       }
       
-      const serverInstance = await ServerCar.findById(conflictId)
+      const serverInstance = await ServerCar.findById(conflictedCarId)
       if (serverInstance) {
+        debug('Updating server instance with conflicting change')
         await serverInstance.updateAttributes({ model: 'Server Updated Mustang' })
+      } else {
+        debug('Server instance not found, creating it')
+        await ServerCar.create({
+          id: conflictedCarId,
+          model: 'Server Updated Mustang',
+          maker: 'Ford'
+        })
       }
       
-      debug(`Seeded conflict with ID: ${conflictId}`)
+      debug('Successfully created conflict for model ID: %s', conflictedCarId)
     } catch (err) {
       debug('Error in seedConflict:', err)
       throw err
@@ -801,7 +986,18 @@ describe('Replication over REST', function() {
   async function replicateServerToLocal() {
     try {
       debug('Starting replication from server to local')
-      const result = await ServerUser.replicate(LocalUser)
+      
+      // Create context for direct replication
+      const ctx = {
+        Model: ServerUser,
+        accessType: 'REPLICATE',
+        modelName: ServerUser.modelName,
+        method: 'replicate',
+        // This is a direct replication, bypassing REST+AUTH layers
+        // so we don't need to specify a user ID
+      }
+      
+      const result = await ServerUser.replicate(LocalUser, undefined, { ctx })
       debug('Replication result:', result)
       
       if (result.conflicts && result.conflicts.length) {
