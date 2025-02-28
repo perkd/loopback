@@ -79,65 +79,43 @@ describe('loopback.rest', function() {
       })
   });
 
-  it('should report 404 for HEAD /:id not found', function(done) {
+  it('should report 404 for HEAD /:id not found', async function() {
     app.model(MyModel);
     app.use(loopback.rest());
-    request(app).head('/mymodels/1')
+    await request(app).head('/mymodels/1')
       .expect(404)
-      .end(done);
-  });
+  })
 
-  it('should report 200 for GET /:id/exists not found', function(done) {
+  it('should report 200 for GET /:id/exists not found', async function() {
     app.model(MyModel);
     app.use(loopback.rest());
-    request(app).get('/mymodels/1/exists')
-      .expect(200)
-      .end(function(err, res) {
-        if (err) return done(err);
+    const res = await request(app).get('/mymodels/1/exists')
+    expect(res.body).to.eql({exists: false})
+  })
 
-        expect(res.body).to.eql({exists: false});
-
-        done();
-      });
-  });
-
-  it('should report 200 for GET /:id found', function(done) {
+  it('should report 200 for GET /:id found', async function() {
     app.model(MyModel);
     app.use(loopback.rest());
-    MyModel.create({name: 'm1'}, function(err, inst) {
-      request(app).get('/mymodels/' + inst.id)
-        .expect(200)
-        .end(done);
-    });
-  });
+    const inst = await MyModel.create({name: 'm1'})
+    await request(app).get('/mymodels/' + inst.id).expect(200)
+  })
 
-  it('should report 200 for HEAD /:id found', function(done) {
+  it('should report 200 for HEAD /:id found', async function() {
     app.model(MyModel);
     app.use(loopback.rest());
-    MyModel.create({name: 'm2'}, function(err, inst) {
-      request(app).head('/mymodels/' + inst.id)
-        .expect(200)
-        .end(done);
-    });
-  });
+    const inst = await MyModel.create({name: 'm2'})
+    await request(app).head('/mymodels/' + inst.id).expect(200)
+  })
 
-  it('should report 200 for GET /:id/exists found', function(done) {
+  it('should report 200 for GET /:id/exists found', async function() {
     app.model(MyModel);
     app.use(loopback.rest());
-    MyModel.create({name: 'm2'}, function(err, inst) {
-      request(app).get('/mymodels/' + inst.id + '/exists')
-        .expect(200)
-        .end(function(err, res) {
-          if (err) return done(err);
+    const inst = await MyModel.create({name: 'm3'})
+    const res = await request(app).get('/mymodels/' + inst.id + '/exists')
+    expect(res.body).to.eql({exists: true})
+  })
 
-          expect(res.body).to.eql({exists: true});
-
-          done();
-        });
-    });
-  });
-
-  it('should honour `remoting.rest.supportedTypes`', function(done) {
+  it('should honour `remoting.rest.supportedTypes`', async function() {
     const app = loopback({localRegistry: true});
 
     // NOTE it is crucial to set `remoting` before creating any models
@@ -147,13 +125,13 @@ describe('loopback.rest', function() {
     app.model(MyModel);
     app.use(loopback.rest());
 
-    request(app).get('/mymodels')
+   await request(app).get('/mymodels')
       .set('Accept', 'text/html,application/xml;q= 0.9,*/*;q= 0.8')
       .expect('Content-Type', 'application/json; charset=utf-8')
-      .expect(200, done);
-  });
+      .expect(200)
+  })
 
-  it('allows models to provide a custom HTTP path', function(done) {
+  it('allows models to provide a custom HTTP path', async function() {
     const CustomModel = app.registry.createModel('CustomModel',
       {name: String},
       {http: {'path': 'domain1/CustomModelPath'}});
@@ -161,10 +139,10 @@ describe('loopback.rest', function() {
     app.model(CustomModel, {dataSource: 'db'});
     app.use(loopback.rest());
 
-    request(app).get('/domain1/CustomModelPath').expect(200).end(done);
-  });
+    await request(app).get('/domain1/CustomModelPath').expect(200)
+  })
 
-  it('should report 200 for url-encoded HTTP path', function(done) {
+  it('should report 200 for url-encoded HTTP path', async function() {
     const CustomModel = app.registry.createModel('CustomModel',
       {name: String},
       {http: {path: 'domain%20one/CustomModelPath'}});
@@ -172,91 +150,74 @@ describe('loopback.rest', function() {
     app.model(CustomModel, {dataSource: 'db'});
     app.use(loopback.rest());
 
-    request(app).get('/domain%20one/CustomModelPath').expect(200).end(done);
-  });
+    await request(app).get('/domain%20one/CustomModelPath').expect(200)
+  })
 
-  it('includes loopback.token when necessary', function(done) {
+  it('includes loopback.token when necessary', async function() {
     givenUserModelWithAuth();
     app.enableAuth({dataSource: 'db'});
     app.use(loopback.rest());
 
-    givenLoggedInUser(function(err, token) {
-      if (err) return done(err);
-      expect(token).instanceOf(app.models.AccessToken);
-      request(app).get('/users/' + token.userId)
-        .set('Authorization', token.id)
-        .expect(200)
-        .end(done);
-    }, done);
-  });
+    const token = await givenLoggedInUser()
+    expect(token).instanceOf(app.models.AccessToken);
+    await request(app).get('/users/' + token.userId)
+      .set('Authorization', token.id)
+      .expect(200)
+  })
 
-  it('does not include loopback.token when auth not enabled', function(done) {
+  it('does not include loopback.token when auth not enabled', async function() {
     const User = givenUserModelWithAuth();
-    User.getToken = function(req, cb) {
-      cb(null, req.accessToken ? req.accessToken.id : null);
-    };
+    User.getToken = async function(req) {
+      return req.accessToken ? req.accessToken.id : null
+    }
+
     loopback.remoteMethod(User.getToken, {
       accepts: [{type: 'object', http: {source: 'req'}}],
       returns: [{type: 'object', name: 'id'}],
     });
 
     app.use(loopback.rest());
-    givenLoggedInUser(function(err, token) {
-      if (err) return done(err);
+    const token = await givenLoggedInUser()
+    const res = await request(app).get('/users/getToken')
+      .set('Authorization', token.id)
+      .expect(200)
 
-      request(app).get('/users/getToken')
-        .set('Authorization', token.id)
-        .expect(200)
-        .end(function(err, res) {
-          if (err) return done(err);
+    expect(res.body.id).to.equal(null)
+  })
 
-          expect(res.body.id).to.equal(null);
+  it('rebuilds REST endpoints after a model was added', async function() {
+    app.use(loopback.rest())
 
-          done();
-        });
-    }, done);
-  });
+    await request(app).get('/mymodels').expect(404)
+    app.model(MyModel)
+    await request(app).get('/mymodels').expect(200)
+  })
 
-  it('rebuilds REST endpoints after a model was added', () => {
-    app.use(loopback.rest());
+  it('rebuilds REST endpoints after a model was deleted', async function() {
+    app.model(MyModel)
+    app.use(loopback.rest())
 
-    return request(app).get('/mymodels').expect(404).then(() => {
-      app.model(MyModel);
+    await request(app).get('/mymodels').expect(200)
+    app.deleteModelByName('MyModel')
+    await request(app).get('/mymodels').expect(404)
+  })
 
-      return request(app).get('/mymodels').expect(200);
-    });
-  });
+  it('rebuilds REST endpoints after a remoteMethod was added', async function() {
+    app.model(MyModel)
+    app.use(loopback.rest())
 
-  it('rebuilds REST endpoints after a model was deleted', () => {
-    app.model(MyModel);
-    app.use(loopback.rest());
+    await request(app).get('/mymodels/customMethod').expect(404)
+    MyModel.customMethod = async function(req) {
+      return true
+    }
+    MyModel.remoteMethod('customMethod', {
+      http: {verb: 'get'},
+      accepts: [{type: 'object', http: {source: 'req'}}],
+      returns: [{type: 'boolean', name: 'success'}],
+    })
 
-    return request(app).get('/mymodels').expect(200)
-      .then(() => {
-        app.deleteModelByName('MyModel');
-
-        return request(app).get('/mymodels').expect(404);
-      });
-  });
-
-  it('rebuilds REST endpoints after a remoteMethod was added', () => {
-    app.model(MyModel);
-    app.use(loopback.rest());
-
-    return request(app).get('/mymodels/customMethod').expect(404)
-      .then(() => {
-        MyModel.customMethod = function(req, cb) {
-          cb(null, true);
-        };
-        MyModel.remoteMethod('customMethod', {
-          http: {verb: 'get'},
-          accepts: [{type: 'object', http: {source: 'req'}}],
-          returns: [{type: 'boolean', name: 'success'}],
-        });
-
-        return request(app).get('/mymodels/customMethod').expect(200);
-      });
-  });
+    await request(app).get('/mymodels/customMethod').expect(200)
+  })
 
   it('rebuilds REST endpoints after a remoteMethod was disabled', function(done) {
     app.model(MyModel)
@@ -312,15 +273,12 @@ describe('loopback.rest', function() {
     return User;
   }
 
-  function givenLoggedInUser(cb, done) {
+  async function givenLoggedInUser() {
     const credentials = {email: 'user@example.com', password: 'pwd'};
-    const User = app.models.User;
-    User.create(credentials,
-      function(err, user) {
-        if (err) return done(err);
-
-        User.login(credentials, cb);
-      });
+    const { User } = app.models
+    await User.create(credentials)
+    const token = await User.login(credentials)
+    return token
   }
 
   describe('shared methods', function() {
