@@ -11,8 +11,9 @@
 - always fix the simplest and foundational issues first
 - always try to reduce code, more code than necessary leads to more bugs
 - always trace the call chain to find the root cause of issues
+- always do debug runs with logging turned on for relevant modules and do tracing of call chain and inspection of data values
 - never skip tests when you have difficulty in fixing them
-- adding complex code during debugging could lead to more bugs
+- adding complex code during debugging likely lead to more bugs
 - after a few failed attempts to fix, ask yourself: "take a step back, am I missing something simple and obvious??"
 - debug methodically for difficult issues:
    1. create a new debug-journal (journal) to track learnings and fails/success
