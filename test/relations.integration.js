@@ -223,7 +223,7 @@ describe('relations - integration', function() {
       })
 
       it('does not add default properties to request body', async function() {
-        const res = await this.put(this.url)
+        await this.put(this.url)
           .send({active: true})
           .expect(200)
 
@@ -235,17 +235,13 @@ describe('relations - integration', function() {
   })
 
   describe('/stores/:id/widgets/:fk - 200', function() {
-    beforeEach(function(done) {
-      const self = this;
-      this.store.widgets.create({
+    beforeEach(async function() {
+      this.widget = await this.store.widgets.create({
         name: this.widgetName,
-      }, function(err, widget) {
-        self.widget = widget;
-        self.url = '/api/stores/' + self.store.id + '/widgets/' + widget.id;
+      })
+      this.url = '/api/stores/' + this.store.id + '/widgets/' + this.widget.id
+    })
 
-        done();
-      });
-    });
     lt.describe.whenCalledRemotely('GET', '/stores/:id/widgets/:fk', function() {
       it('should succeed with statusCode 200', function() {
         assert.equal(this.res.statusCode, 200);
@@ -257,7 +253,8 @@ describe('relations - integration', function() {
   describe('/stores/:id/widgets/:fk - 404', function() {
     beforeEach(function() {
       this.url = '/api/stores/' + this.store.id + '/widgets/123456';
-    });
+    })
+
     lt.describe.whenCalledRemotely('GET', '/stores/:id/widgets/:fk', function() {
       it('should fail with statusCode 404', function() {
         assert.equal(this.res.statusCode, 404);
@@ -269,7 +266,8 @@ describe('relations - integration', function() {
   describe('/store/:id/widgets/count', function() {
     beforeEach(function() {
       this.url = '/api/stores/' + this.store.id + '/widgets/count';
-    });
+    })
+
     lt.describe.whenCalledRemotely('GET', '/api/stores/:id/widgets/count', function() {
       it('should succeed with statusCode 200', function() {
         assert.equal(this.res.statusCode, 200);
@@ -283,7 +281,8 @@ describe('relations - integration', function() {
   describe('/store/:id/widgets/count - filtered (matches)', function() {
     beforeEach(function() {
       this.url = '/api/stores/' + this.store.id + '/widgets/count?where[name]=foo';
-    });
+    })
+
     lt.describe.whenCalledRemotely('GET', '/api/stores/:id/widgets/count?where[name]=foo', function() {
       it('should succeed with statusCode 200', function() {
         assert.equal(this.res.statusCode, 200);
@@ -297,7 +296,8 @@ describe('relations - integration', function() {
   describe('/store/:id/widgets/count - filtered (no matches)', function() {
     beforeEach(function() {
       this.url = '/api/stores/' + this.store.id + '/widgets/count?where[name]=bar';
-    });
+    })
+
     lt.describe.whenCalledRemotely('GET', '/api/stores/:id/widgets/count?where[name]=bar', function() {
       it('should succeed with statusCode 200', function() {
         assert.equal(this.res.statusCode, 200);
@@ -382,16 +382,12 @@ describe('relations - integration', function() {
     })
 
     describe('PUT /physicians/:id/patients/rel/:fk with data', function() {
-      before(function(done) {
-        const self = this;
-        setup(false).then((root) => {
-          self.url = root.relUrl;
-          self.patient = root.patient;
-          self.physician = root.physician;
-
-          done();
-        }).catch(done);
-      });
+      before(async function() {
+        const root = await setup(false)
+        this.url = root.relUrl
+        this.patient = root.patient
+        this.physician = root.physician
+      })
 
       const NOW = Date.now();
       const data = {date: new Date(NOW)};
@@ -404,41 +400,29 @@ describe('relations - integration', function() {
           assert.equal(new Date(this.res.body.date).getTime(), NOW);
         });
 
-        it('should create a record in appointment', function(done) {
-          const self = this;
-          app.models.appointment.find(function(err, apps) {
-            assert.equal(apps.length, 1);
-            assert.equal(apps[0].patientId, self.patient.id);
-            assert.equal(apps[0].physicianId, self.physician.id);
-            assert.equal(apps[0].date.getTime(), NOW);
+        it('should create a record in appointment', async function() {
+          const apps = await this.app.models.appointment.find()
+          assert.equal(apps.length, 1)
+          assert.equal(apps[0].patientId, this.patient.id)
+          assert.equal(apps[0].physicianId, this.physician.id)
+          assert.equal(apps[0].date.getTime(), NOW)
+        })
 
-            done();
-          });
-        });
-
-        it('should connect physician to patient', function(done) {
-          const self = this;
-          self.physician.patients(function(err, patients) {
-            assert.equal(patients.length, 1);
-            assert.equal(patients[0].id, self.patient.id);
-
-            done();
-          });
-        });
-      });
-    });
+        it('should connect physician to patient', async function() {
+          const patients = await this.physician.patients.find()
+          assert.equal(patients.length, 1)
+          assert.equal(patients[0].id, this.patient.id)
+        })
+      })
+    })
 
     describe('HEAD /physicians/:id/patients/rel/:fk', function() {
-      before(function(done) {
-        const self = this;
-        setup(true).then((root) => {
-          self.url = root.relUrl;
-          self.patient = root.patient;
-          self.physician = root.physician;
-
-          done();
-        }).catch(done);
-      });
+      before(async function() {
+        const root = await setup(true)
+        this.url = root.relUrl
+        this.patient = root.patient
+        this.physician = root.physician
+      })
 
       lt.describe.whenCalledRemotely('HEAD', '/api/physicians/:id/patients/rel/:fk', function() {
         it('should succeed with statusCode 200', function() {
@@ -448,17 +432,13 @@ describe('relations - integration', function() {
     });
 
     describe('HEAD /physicians/:id/patients/rel/:fk that does not exist', function() {
-      before(function(done) {
-        const self = this;
-        setup(true).then((root) => {
-          self.url = '/api/physicians/' + root.physician.id +
-            '/patients/rel/' + '999';
-          self.patient = root.patient;
-          self.physician = root.physician;
-
-          done();
-        }).catch(done);
-      });
+      before(async function() {
+        const root = await setup(true)
+        this.url = '/api/physicians/' + root.physician.id +
+          '/patients/rel/' + '999'
+        this.patient = root.patient
+        this.physician = root.physician
+      })
 
       lt.describe.whenCalledRemotely('HEAD', '/api/physicians/:id/patients/rel/:fk', function() {
         it('should succeed with statusCode 404', function() {
@@ -468,75 +448,51 @@ describe('relations - integration', function() {
     });
 
     describe('DELETE /physicians/:id/patients/rel/:fk', function() {
-      before(function(done) {
-        const self = this;
-        setup(true).then((root) => {
-          self.url = root.relUrl;
-          self.patient = root.patient;
-          self.physician = root.physician;
+      before(async function() {
+        const root = await setup(true)
+        this.url = root.relUrl
+        this.patient = root.patient
+        this.physician = root.physician
+      })
 
-          done();
-        }).catch(done);
-      });
+      it('should create a record in appointment', async function() {
+        const apps = await this.app.models.appointment.find()
+        assert.equal(apps.length, 1)
+        assert.equal(apps[0].patientId, this.patient.id)
+      })
 
-      it('should create a record in appointment', function(done) {
-        const self = this;
-        app.models.appointment.find(function(err, apps) {
-          assert.equal(apps.length, 1);
-          assert.equal(apps[0].patientId, self.patient.id);
-
-          done();
-        });
-      });
-
-      it('should connect physician to patient', function(done) {
-        const self = this;
-        self.physician.patients(function(err, patients) {
-          assert.equal(patients.length, 1);
-          assert.equal(patients[0].id, self.patient.id);
-
-          done();
-        });
-      });
+      it('should connect physician to patient', async function() {
+        const patients = await this.physician.patients.find()
+        assert.equal(patients.length, 1)
+        assert.equal(patients[0].id, this.patient.id)
+      })
 
       lt.describe.whenCalledRemotely('DELETE', '/api/physicians/:id/patients/rel/:fk', function() {
         it('should succeed with statusCode 204', function() {
           assert.equal(this.res.statusCode, 204);
         });
 
-        it('should remove the record in appointment', function(done) {
-          const self = this;
-          app.models.appointment.find(function(err, apps) {
-            assert.equal(apps.length, 0);
+        it('should remove the record in appointment', async function() {
+          const apps = await this.app.models.appointment.find()
+          assert.equal(apps.length, 0)
+        })
 
-            done();
-          });
-        });
-
-        it('should remove the connection between physician and patient', function(done) {
-          const self = this;
+        it('should remove the connection between physician and patient', async function() {
           // Need to refresh the cache
-          self.physician.patients(true, function(err, patients) {
-            assert.equal(patients.length, 0);
-
-            done();
-          });
-        });
-      });
-    });
+          const patients = await this.physician.patients.find(true)
+          assert.equal(patients.length, 0)
+        })
+      })
+    })
 
     describe('GET /physicians/:id/patients/:fk', function() {
-      before(function(done) {
-        const self = this;
-        setup(true).then((root) => {
-          self.url = '/api/physicians/' + root.physician.id +
-            '/patients/' + root.patient.id;
-          self.patient = root.patient;
-          self.physician = root.physician;
-
-          done();
-        }).catch(done);
-      });
+      before(async function() {
+        const root = await setup(true)
+        this.url = '/api/physicians/' + root.physician.id +
+          '/patients/' + root.patient.id
+        this.patient = root.patient
+        this.physician = root.physician
+      })
 
       lt.describe.whenCalledRemotely('GET', '/api/physicians/:id/patients/:fk', function() {
         it('should succeed with statusCode 200', function() {
@@ -547,53 +503,37 @@ describe('relations - integration', function() {
     });
 
     describe('DELETE /physicians/:id/patients/:fk', function() {
-      before(function(done) {
-        const self = this;
-        setup(true).then((root) => {
-          self.url = '/api/physicians/' + root.physician.id +
-            '/patients/' + root.patient.id;
-          self.patient = root.patient;
-          self.physician = root.physician;
-
-          done();
-        }).catch(done);
-      });
+      before(async function() {
+        const root = await setup(true)
+        this.url = '/api/physicians/' + root.physician.id +
+          '/patients/' + root.patient.id
+        this.patient = root.patient
+        this.physician = root.physician
+      })
 
       lt.describe.whenCalledRemotely('DELETE', '/api/physicians/:id/patients/:fk', function() {
         it('should succeed with statusCode 204', function() {
           assert.equal(this.res.statusCode, 204);
         });
 
-        it('should remove the record in appointment', function(done) {
-          const self = this;
-          app.models.appointment.find(function(err, apps) {
-            assert.equal(apps.length, 0);
+        it('should remove the record in appointment', async function() {
+          const apps = await this.app.models.appointment.find()
+          assert.equal(apps.length, 0)
+        })
 
-            done();
-          });
-        });
-
-        it('should remove the connection between physician and patient', function(done) {
-          const self = this;
+        it('should remove the connection between physician and patient', async function() {
           // Need to refresh the cache
-          self.physician.patients(true, function(err, patients) {
-            assert.equal(patients.length, 0);
+          const patients = await this.physician.patients.find(true)
+          assert.equal(patients.length, 0)
+        })
 
-            done();
-          });
-        });
-
-        it('should remove the record in patient', function(done) {
-          const self = this;
-          app.models.patient.find(function(err, patients) {
-            assert.equal(patients.length, 0);
-
-            done();
-          });
-        });
-      });
-    });
-  });
+        it('should remove the record in patient', async function() {
+          const patients = await this.app.models.patient.find()
+          assert.equal(patients.length, 0)
+        })
+      })
+    })
+  })
 
   describe('hasAndBelongsToMany', function() {
     beforeEach(function defineProductAndCategoryModels() {
@@ -617,110 +557,77 @@ describe('relations - integration', function() {
 
     lt.beforeEach.givenModel('category');
 
-    beforeEach(function createProductsInCategory(done) {
-      const test = this;
-      this.category.products.create({
-        name: 'a-product',
-      }, function(err, product) {
-        if (err) return done(err);
+    beforeEach(async function createProductsInCategory() {
+      this.product = await this.category.products.create({ name: 'a-product' })
+    })
 
-        test.product = product;
+    beforeEach(async function createAnotherCategoryAndProduct() {
+      const cat = await app.models.category.create({ name: 'another-category' })
+      await cat.products.create({ name: 'another-product' })
+    })
 
-        done();
-      });
-    });
+    afterEach(async function() {
+      await this.app.models.product.destroyAll()
+    })
 
-    beforeEach(function createAnotherCategoryAndProduct(done) {
-      app.models.category.create({name: 'another-category'},
-        function(err, cat) {
-          if (err) return done(err);
-
-          cat.products.create({name: 'another-product'}, done);
-        });
-    });
-
-    afterEach(function(done) {
-      this.app.models.product.destroyAll(done);
-    });
-
-    it.skip('allows to find related objects via where filter', function(done) {
+    it.skip('allows to find related objects via where filter', async function() {
       // TODO https://github.com/strongloop/loopback-datasource-juggler/issues/94
       const expectedProduct = this.product;
-      this.get('/api/products?filter[where][categoryId]=' + this.category.id)
-        .expect(200, function(err, res) {
-          if (err) return done(err);
+      const res = await this.get('/api/products?filter[where][categoryId]=' + this.category.id)
 
-          expect(res.body).to.eql([
-            {
-              id: expectedProduct.id,
-              name: expectedProduct.name,
-            },
-          ]);
+      expect(res.body).to.eql([
+        {
+          id: expectedProduct.id,
+          name: expectedProduct.name,
+        },
+      ])
+    })
 
-          done();
-        });
-    });
-
-    it('allows to find related object via URL scope', function(done) {
+    it('allows to find related object via URL scope', async function() {
       const expectedProduct = this.product;
-      this.get('/api/categories/' + this.category.id + '/products')
-        .expect(200, function(err, res) {
-          if (err) return done(err);
+      const res = await this.get('/api/categories/' + this.category.id + '/products')
 
-          expect(res.body).to.eql([
-            {
-              id: expectedProduct.id,
-              name: expectedProduct.name,
-            },
-          ]);
+      expect(res.body).to.eql([
+        {
+          id: expectedProduct.id,
+          name: expectedProduct.name,
+        },
+      ])
+    })
 
-          done();
-        });
-    });
-
-    it('includes requested related models in `find`', function(done) {
+    it('includes requested related models in `find`', async function() {
       const expectedProduct = this.product;
       const url = '/api/categories/findOne?filter[where][id]=' +
         this.category.id + '&filter[include]=products';
 
-      this.get(url)
-        .expect(200, function(err, res) {
-          if (err) return done(err);
+      const res = await this.get(url)
 
-          expect(res.body).to.have.property('products');
-          expect(res.body.products).to.eql([
-            {
-              id: expectedProduct.id,
-              name: expectedProduct.name,
-            },
-          ]);
+      expect(res.body).to.have.property('products');
+      expect(res.body.products).to.eql([
+        {
+          id: expectedProduct.id,
+          name: expectedProduct.name,
+        },
+      ])
+    })
 
-          done();
-        });
-    });
-
-    it.skip('includes requested related models in `findById`', function(done) {
+    it.skip('includes requested related models in `findById`', async function() {
       // TODO https://github.com/strongloop/loopback-datasource-juggler/issues/93
       const expectedProduct = this.product;
       // Note: the URL format is not final
       const url = '/api/categories/' + this.category.id + '?include=products';
 
-      this.get(url)
-        .expect(200, function(err, res) {
-          if (err) return done(err);
+      const res = await this.get(url)
 
-          expect(res.body).to.have.property('products');
-          expect(res.body.products).to.eql([
-            {
-              id: expectedProduct.id,
-              name: expectedProduct.name,
-            },
-          ]);
-
-          done();
-        });
-    });
-  });
+      expect(res.body).to.have.property('products');
+      expect(res.body.products).to.eql([
+        {
+          id: expectedProduct.id,
+          name: expectedProduct.name,
+        },
+      ])
+    })
+  })
 
   describe('embedsOne', function() {
     before(function defineGroupAndPosterModels() {
@@ -740,104 +647,64 @@ describe('relations - integration', function() {
       group.embedsOne(poster, {as: 'cover'});
     });
 
-    before(function createImage(done) {
-      const test = this;
-      app.models.group.create({name: 'Group 1'},
-        function(err, group) {
-          if (err) return done(err);
+    before(async function createImage() {
+      this.group = await app.models.group.create({ name: 'Group 1' })
+    })
 
-          test.group = group;
+    after(async function() {
+      await this.app.models.group.destroyAll()
+    })
 
-          done();
-        });
-    });
-
-    after(function(done) {
-      this.app.models.group.destroyAll(done);
-    });
-
-    it('creates an embedded model', function(done) {
+    it('creates an embedded model', async function() {
       const url = '/api/groups/' + this.group.id + '/cover';
-
-      this.post(url)
+      const res = await this.post(url)
         .send({url: 'http://image.url'})
-        .expect(200, function(err, res) {
-          expect(res.body).to.be.eql(
-            {url: 'http://image.url'},
-          );
+        .expect(200)
 
-          done();
-        });
-    });
+      expect(res.body).to.be.eql({url: 'http://image.url'})
+    })
 
-    it('includes the embedded models', function(done) {
+    it('includes the embedded models', async function() {
       const url = '/api/groups/' + this.group.id;
+      const res = await this.get(url)
 
-      this.get(url)
-        .expect(200, function(err, res) {
-          if (err) return done(err);
+      expect(res.body.name).to.be.equal('Group 1');
+      expect(res.body.poster).to.be.eql({url: 'http://image.url'})
+    })
 
-          expect(res.body.name).to.be.equal('Group 1');
-          expect(res.body.poster).to.be.eql(
-            {url: 'http://image.url'},
-          );
-
-          done();
-        });
-    });
-
-    it('returns the embedded model', function(done) {
+    it('returns the embedded model', async function() {
       const url = '/api/groups/' + this.group.id + '/cover';
+      const res = await this.get(url)
 
-      this.get(url)
-        .expect(200, function(err, res) {
-          if (err) return done(err);
+      expect(res.body).to.be.eql({url: 'http://image.url'})
+    })
 
-          expect(res.body).to.be.eql(
-            {url: 'http://image.url'},
-          );
-
-          done();
-        });
-    });
-
-    it('updates an embedded model', function(done) {
+    it('updates an embedded model', async function() {
       const url = '/api/groups/' + this.group.id + '/cover';
-
-      this.put(url)
+      const res = await this.put(url)
         .send({url: 'http://changed.url'})
-        .expect(200, function(err, res) {
-          expect(res.body.url).to.be.equal('http://changed.url');
+        .expect(200)
 
-          done();
-        });
-    });
+      expect(res.body.url).to.be.equal('http://changed.url')
+    })
 
-    it('returns the updated embedded model', function(done) {
+    it('returns the updated embedded model', async function() {
       const url = '/api/groups/' + this.group.id + '/cover';
+      const res = await this.get(url)
 
-      this.get(url)
-        .expect(200, function(err, res) {
-          if (err) return done(err);
+      expect(res.body).to.be.eql({url: 'http://changed.url'})
+    })
 
-          expect(res.body).to.be.eql(
-            {url: 'http://changed.url'},
-          );
-
-          done();
-        });
-    });
-
-    it('deletes an embedded model', function(done) {
+    it('deletes an embedded model', async function() {
       const url = '/api/groups/' + this.group.id + '/cover';
-      this.del(url).expect(204, done);
-    });
+      await this.del(url).expect(204)
+    })
 
-    it('deleted the embedded model', function(done) {
+    it('deleted the embedded model', async function() {
       const url = '/api/groups/' + this.group.id + '/cover';
-      this.get(url).expect(404, done);
-    });
-  });
+      await this.get(url).expect(404)
+    })
+  })
 
   describe('embedsMany', function() {
     before(function defineProductAndCategoryModels() {
@@ -857,177 +724,111 @@ describe('relations - integration', function() {
       todoList.embedsMany(todoItem, {as: 'items'});
     });
 
-    before(function createTodoList(done) {
-      const test = this;
-      app.models.todoList.create({name: 'List A'},
-        function(err, list) {
-          if (err) return done(err);
+    before(async function createTodoList() {
+      this.todoList = await app.models.todoList.create({name: 'List A'})
+      this.todoList.items.build({content: 'Todo 1'})
+      this.todoList.items.build({content: 'Todo 2'})
+      await this.todoList.save()
+    })
 
-          test.todoList = list;
-          list.items.build({content: 'Todo 1'});
-          list.items.build({content: 'Todo 2'});
-          list.save(done);
-        });
-    });
+    after(async function() {
+      await this.app.models.todoList.destroyAll()
+    })
 
-    after(function(done) {
-      this.app.models.todoList.destroyAll(done);
-    });
-
-    it('includes the embedded models', function(done) {
+    it('includes the embedded models', async function() {
       const url = '/api/todo-lists/' + this.todoList.id;
+      const res = await this.get(url).expect(200)
 
-      this.get(url)
-        .expect(200, function(err, res) {
-          if (err) return done(err);
+      expect(res.body.name).to.be.equal('List A')
+      expect(res.body.todoItems).to.be.eql([
+        {content: 'Todo 1', id: 1},
+        {content: 'Todo 2', id: 2},
+      ])
+    })
 
-          expect(res.body.name).to.be.equal('List A');
-          expect(res.body.todoItems).to.be.eql([
-            {content: 'Todo 1', id: 1},
-            {content: 'Todo 2', id: 2},
-          ]);
-
-          done();
-        });
-    });
-
-    it('returns the embedded models', function(done) {
+    it('returns the embedded models', async function() {
       const url = '/api/todo-lists/' + this.todoList.id + '/items';
+      const res = await this.get(url).expect(200)
 
-      this.get(url)
-        .expect(200, function(err, res) {
-          if (err) return done(err);
+      expect(res.body).to.be.eql([
+        {content: 'Todo 1', id: 1},
+        {content: 'Todo 2', id: 2},
+      ])
+    })
 
-          expect(res.body).to.be.eql([
-            {content: 'Todo 1', id: 1},
-            {content: 'Todo 2', id: 2},
-          ]);
-
-          done();
-        });
-    });
-
-    it('filters the embedded models', function(done) {
+    it('filters the embedded models', async function() {
       let url = '/api/todo-lists/' + this.todoList.id + '/items';
       url += '?filter[where][id]=2';
 
-      this.get(url)
-        .expect(200, function(err, res) {
-          if (err) return done(err);
+      const res = await this.get(url).expect(200)
 
-          expect(res.body).to.be.eql([
-            {content: 'Todo 2', id: 2},
-          ]);
+      expect(res.body).to.be.eql([
+        {content: 'Todo 2', id: 2},
+      ])
+    })
 
-          done();
-        });
-    });
-
-    it('creates embedded models', function(done) {
+    it('creates embedded models', async function() {
       const url = '/api/todo-lists/' + this.todoList.id + '/items';
-
       const expected = {content: 'Todo 3', id: 3};
-
-      this.post(url)
+      const res = await this.post(url)
         .send({content: 'Todo 3'})
-        .expect(200, function(err, res) {
-          expect(res.body).to.be.eql(expected);
+        .expect(200)
 
-          done();
-        });
-    });
+      expect(res.body).to.be.eql(expected)
+    })
 
-    it('includes the created embedded model', function(done) {
+    it('includes the created embedded model', async function() {
       const url = '/api/todo-lists/' + this.todoList.id + '/items';
+      const res = await this.get(url).expect(200)
 
-      this.get(url)
-        .expect(200, function(err, res) {
-          if (err) return done(err);
+      expect(res.body).to.be.eql([
+        {content: 'Todo 1', id: 1},
+        {content: 'Todo 2', id: 2},
+        {content: 'Todo 3', id: 3},
+      ])
+    })
 
-          expect(res.body).to.be.eql([
-            {content: 'Todo 1', id: 1},
-            {content: 'Todo 2', id: 2},
-            {content: 'Todo 3', id: 3},
-          ]);
-
-          done();
-        });
-    });
-
-    it('returns an embedded model by (internal) id', function(done) {
+    it('returns an embedded model by (internal) id', async function() {
       const url = '/api/todo-lists/' + this.todoList.id + '/items/3';
+      const res = await this.get(url).expect(200)
 
-      this.get(url)
-        .expect(200, function(err, res) {
-          if (err) return done(err);
+      expect(res.body).to.be.eql({content: 'Todo 3', id: 3})
+    })
 
-          expect(res.body).to.be.eql(
-            {content: 'Todo 3', id: 3},
-          );
-
-          done();
-        });
-    });
-
-    it('removes an embedded model', function(done) {
-      const expectedProduct = this.product;
+    it('removes an embedded model', async function() {
       const url = '/api/todo-lists/' + this.todoList.id + '/items/2';
+      await this.del(url).expect(204)
+    })
 
-      this.del(url)
-        .expect(200, function(err, res) {
-          done();
-        });
-    });
-
-    it('returns the embedded models - verify', function(done) {
+    it('returns the embedded models - verify', async function() {
       const url = '/api/todo-lists/' + this.todoList.id + '/items';
+      const res = await this.get(url).expect(200)
 
-      this.get(url)
-        .expect(200, function(err, res) {
-          if (err) return done(err);
+      expect(res.body).to.be.eql([
+        {content: 'Todo 1', id: 1},
+        {content: 'Todo 3', id: 3},
+      ])
+    })
 
-          expect(res.body).to.be.eql([
-            {content: 'Todo 1', id: 1},
-            {content: 'Todo 3', id: 3},
-          ]);
-
-          done();
-        });
-    });
-
-    it('returns a 404 response when embedded model is not found', function(done) {
+    it('returns a 404 response when embedded model is not found', async function() {
       const url = '/api/todo-lists/' + this.todoList.id + '/items/2'
+      const res = await this.get(url).expect(404)
 
-      this.get(url)
-        .expect(404, function(err, res) {
-          if (err) return done(err);
+      expect(res.body.error.status).to.be.equal(404);
+      expect(res.body.error.message).to.be.equal('Unknown "todoList" id "2".');
+      expect(res.body.error.code).to.be.equal('MODEL_NOT_FOUND');
+    })
 
-          expect(res.body.error.status).to.be.equal(404);
-          expect(res.body.error.message).to.be.equal('Unknown "todoList" id "2".');
-          expect(res.body.error.code).to.be.equal('MODEL_NOT_FOUND');
+    it.skip('checks if an embedded model exists - ok', async function() {
+      const url = '/api/todo-lists/' + this.todoList.id + '/items/3'
+      await this.head(url).expect(200)
+    })
 
-          done();
-        });
-    });
-
-    it.skip('checks if an embedded model exists - ok', function(done) {
-      const url = '/api/todo-lists/' + this.todoList.id + '/items/3';
-
-      this.head(url)
-        .expect(200, function(err, res) {
-          done();
-        });
-    });
-
-    it.skip('checks if an embedded model exists - fail', function(done) {
-      const url = '/api/todo-lists/' + this.todoList.id + '/items/2';
-
-      this.head(url)
-        .expect(404, function(err, res) {
-          done();
-        });
-    });
-  });
+    it.skip('checks if an embedded model exists - fail', async function() {
+      const url = '/api/todo-lists/' + this.todoList.id + '/items/2'
+      await this.head(url).expect(404)
+    })
+  })
 
   describe('referencesMany', function() {
     before(function defineProductAndCategoryModels() {
@@ -1051,330 +852,201 @@ describe('relations - integration', function() {
 
       recipe.referencesMany(ingredient);
       // contrived example for test:
-      recipe.hasOne(photo, {as: 'picture', options: {
-        http: {path: 'image'},
-      }});
-    });
+      recipe.hasOne(photo, {
+        as: 'picture',
+        options: { http: {path: 'image'} }
+      })
+    })
 
-    before(function createRecipe(done) {
-      const test = this;
-      app.models.recipe.create({name: 'Recipe'},
-        function(err, recipe) {
-          if (err) return done(err);
+    before(async function createRecipe() {
+      this.recipe = await app.models.recipe.create({name: 'Recipe'})
+      const ing = await this.recipe.ingredients.create({name: 'Chocolate'})
+      this.ingredient1 = ing.id
+      await this.recipe.picture.create({name: 'Photo 1'})
+    })
 
-          test.recipe = recipe;
-          recipe.ingredients.create({
-            name: 'Chocolate'},
-          function(err, ing) {
-            test.ingredient1 = ing.id;
-            recipe.picture.create({name: 'Photo 1'}, done);
-          });
-        });
-    });
+    before(async function createIngredient() {
+      const ing = await app.models.ingredient.create({name: 'Sugar'})
+      this.ingredient2 = ing.id
+    })
 
-    before(function createIngredient(done) {
-      const test = this;
-      app.models.ingredient.create({name: 'Sugar'}, function(err, ing) {
-        test.ingredient2 = ing.id;
+    after(async function() {
+      await this.app.models.recipe.destroyAll()
+      await this.app.models.ingredient.destroyAll()
+      await this.app.models.photo.destroyAll()
+    })
 
-        done();
-      });
-    });
-
-    after(function(done) {
-      const app = this.app;
-      app.models.recipe.destroyAll(function() {
-        app.models.ingredient.destroyAll(function() {
-          app.models.photo.destroyAll(done);
-        });
-      });
-    });
-
-    it('keeps an array of ids', function(done) {
+    it('keeps an array of ids', async function() {
       const url = '/api/recipes/' + this.recipe.id;
-      const test = this;
+      const res = await this.get(url).expect(200)
 
-      this.get(url)
-        .expect(200, function(err, res) {
-          if (err) return done(err);
+      expect(res.body.ingredientIds).to.eql([this.ingredient1])
+      expect(res.body).to.not.have.property('ingredients')
+    })
 
-          expect(res.body.ingredientIds).to.eql([test.ingredient1]);
-          expect(res.body).to.not.have.property('ingredients');
-
-          done();
-        });
-    });
-
-    it('creates referenced models', function(done) {
+    it('creates referenced models', async function() {
       const url = '/api/recipes/' + this.recipe.id + '/ingredients';
-      const test = this;
+      const res = await this.post(url)
+        .send({ name: 'Butter' })
+        .expect(200)
 
-      this.post(url)
-        .send({name: 'Butter'})
-        .expect(200, function(err, res) {
-          expect(res.body.name).to.be.eql('Butter');
-          test.ingredient3 = res.body.id;
+      expect(res.body.name).to.be.eql('Butter')
+      this.ingredient3 = res.body.id
+    })
 
-          done();
-        });
-    });
-
-    it('has created models', function(done) {
+    it('has created models', async function() {
       const url = '/api/ingredients';
-      const test = this;
+      const res = await this.get(url).expect(200)
 
-      this.get(url)
-        .expect(200, function(err, res) {
-          if (err) return done(err);
+      expect(res.body).to.be.eql([
+        {name: 'Chocolate', id: this.ingredient1},
+        {name: 'Sugar', id: this.ingredient2},
+        {name: 'Butter', id: this.ingredient3},
+      ])
+    })
 
-          expect(res.body).to.be.eql([
-            {name: 'Chocolate', id: test.ingredient1},
-            {name: 'Sugar', id: test.ingredient2},
-            {name: 'Butter', id: test.ingredient3},
-          ]);
-
-          done();
-        });
-    });
-
-    it('returns the referenced models', function(done) {
+    it('returns the referenced models', async function() {
       const url = '/api/recipes/' + this.recipe.id + '/ingredients';
-      const test = this;
+      const res = await this.get(url).expect(200)
 
-      this.get(url)
-        .expect(200, function(err, res) {
-          if (err) return done(err);
+      expect(res.body).to.be.eql([
+        {name: 'Chocolate', id: this.ingredient1},
+        {name: 'Butter', id: this.ingredient3},
+      ])
+    })
 
-          expect(res.body).to.be.eql([
-            {name: 'Chocolate', id: test.ingredient1},
-            {name: 'Butter', id: test.ingredient3},
-          ]);
-
-          done();
-        });
-    });
-
-    it('filters the referenced models', function(done) {
+    it('filters the referenced models', async function() {
       let url = '/api/recipes/' + this.recipe.id + '/ingredients';
       url += '?filter[where][name]=Butter';
-      const test = this;
+      const res = await this.get(url).expect(200)
 
-      this.get(url)
-        .expect(200, function(err, res) {
-          if (err) return done(err);
+      expect(res.body).to.be.eql([
+        {name: 'Butter', id: this.ingredient3},
+      ])
+    })
 
-          expect(res.body).to.be.eql([
-            {name: 'Butter', id: test.ingredient3},
-          ]);
-
-          done();
-        });
-    });
-
-    it('includes the referenced models', function(done) {
+    it('includes the referenced models', async function() {
       let url = '/api/recipes/findOne?filter[where][id]=' + this.recipe.id;
       url += '&filter[include]=ingredients';
-      const test = this;
+      const res = await this.get(url).expect(200)
 
-      this.get(url)
-        .expect(200, function(err, res) {
-          if (err) return done(err);
+      expect(res.body.ingredients).to.be.eql([
+        {name: 'Chocolate', id: this.ingredient1},
+        {name: 'Butter', id: this.ingredient3},
+      ])
 
-          expect(res.body.ingredientIds).to.eql([
-            test.ingredient1, test.ingredient3,
-          ]);
-          expect(res.body.ingredients).to.eql([
-            {name: 'Chocolate', id: test.ingredient1},
-            {name: 'Butter', id: test.ingredient3},
-          ]);
+      expect(res.body.ingredientIds).to.eql([
+        this.ingredient1, this.ingredient3,
+      ])
+    })
 
-          done();
-        });
-    });
-
-    it('returns a referenced model by id', function(done) {
+    it('returns a referenced model by id', async function() {
       let url = '/api/recipes/' + this.recipe.id + '/ingredients/';
       url += this.ingredient3;
-      const test = this;
+      const res = await this.get(url).expect(200)
 
-      this.get(url)
-        .expect(200, function(err, res) {
-          if (err) return done(err);
+      expect(res.body).to.be.eql({name: 'Butter', id: this.ingredient3})
+    })
 
-          expect(res.body).to.be.eql(
-            {name: 'Butter', id: test.ingredient3},
-          );
-
-          done();
-        });
-    });
-
-    it('keeps an array of ids - verify', function(done) {
+    it('keeps an array of ids - verify', async function() {
       const url = '/api/recipes/' + this.recipe.id;
-      const test = this;
+      const res = await this.get(url).expect(200)
+      const expected = [this.ingredient1, this.ingredient3];
 
-      const expected = [test.ingredient1, test.ingredient3];
+      expect(res.body.ingredientIds).to.eql(expected);
+      expect(res.body).to.not.have.property('ingredients');
+    })
 
-      this.get(url)
-        .expect(200, function(err, res) {
-          if (err) return done(err);
-
-          expect(res.body.ingredientIds).to.eql(expected);
-          expect(res.body).to.not.have.property('ingredients');
-
-          done();
-        });
-    });
-
-    it('destroys a referenced model', function(done) {
-      const expectedProduct = this.product;
+    it('destroys a referenced model', async function() {
       let url = '/api/recipes/' + this.recipe.id + '/ingredients/';
       url += this.ingredient3;
 
-      this.del(url)
-        .expect(200, function(err, res) {
-          done();
-        });
-    });
+      await this.del(url).expect(204)
+    })
 
-    it('has destroyed a referenced model', function(done) {
+    it('has destroyed a referenced model', async function() {
       const url = '/api/ingredients';
-      const test = this;
+      const res = await this.get(url).expect(200)
 
-      this.get(url)
-        .expect(200, function(err, res) {
-          if (err) return done(err);
+      expect(res.body).to.be.eql([
+        {name: 'Chocolate', id: this.ingredient1},
+        {name: 'Sugar', id: this.ingredient2},
+      ])
+    })
 
-          expect(res.body).to.be.eql([
-            {name: 'Chocolate', id: test.ingredient1},
-            {name: 'Sugar', id: test.ingredient2},
-          ]);
-
-          done();
-        });
-    });
-
-    it('returns the referenced models without the deleted one', function(done) {
+    it('returns the referenced models without the deleted one', async function() {
       const url = '/api/recipes/' + this.recipe.id + '/ingredients';
-      const test = this;
+      const res = await this.get(url).expect(200)
 
-      this.get(url)
-        .expect(200, function(err, res) {
-          if (err) return done(err);
-
-          expect(res.body).to.be.eql([
-            {name: 'Chocolate', id: test.ingredient1},
-          ]);
-
-          done();
-        });
-    });
+      expect(res.body).to.be.eql([
+        {name: 'Chocolate', id: this.ingredient1},
+      ])
+    })
 
     it('creates/links a reference by id', async function() {
       let url = '/api/recipes/' + this.recipe.id + '/ingredients';
       url += '/rel/' + this.ingredient2;
 
-      const res = await this.put(url)
-        .expect(200)
-
+      const res = await this.put(url).expect(200)
       expect(res.body).to.be.eql({name: 'Sugar', id: this.ingredient2})
     })
 
-    it('returns the referenced models - verify', function(done) {
+    it('returns the referenced models - verify', async function() {
       const url = '/api/recipes/' + this.recipe.id + '/ingredients';
-      const test = this;
+      const res = await this.get(url).expect(200)
 
-      this.get(url)
-        .expect(200, function(err, res) {
-          if (err) return done(err);
+      expect(res.body).to.be.eql([
+        {name: 'Chocolate', id: this.ingredient1},
+        {name: 'Sugar', id: this.ingredient2},
+      ])
+    })
 
-          expect(res.body).to.be.eql([
-            {name: 'Chocolate', id: test.ingredient1},
-            {name: 'Sugar', id: test.ingredient2},
-          ]);
-
-          done();
-        });
-    });
-
-    it('removes/unlinks a reference by id', function(done) {
+    it('removes/unlinks a reference by id', async function() {
       let url = '/api/recipes/' + this.recipe.id + '/ingredients';
       url += '/rel/' + this.ingredient1;
-      const test = this;
+      await this.del(url).expect(204)
+    })
 
-      this.del(url)
-        .expect(200, function(err, res) {
-          done();
-        });
-    });
-
-    it('returns the referenced models without the unlinked one', function(done) {
+    it('returns the referenced models without the unlinked one', async function() {
       const url = '/api/recipes/' + this.recipe.id + '/ingredients';
-      const test = this;
+      const res = await this.get(url).expect(200)
 
-      this.get(url)
-        .expect(200, function(err, res) {
-          if (err) return done(err);
+      expect(res.body).to.be.eql([
+        {name: 'Sugar', id: this.ingredient2},
+      ])
+    })
 
-          expect(res.body).to.be.eql([
-            {name: 'Sugar', id: test.ingredient2},
-          ]);
-
-          done();
-        });
-    });
-
-    it('has not destroyed an unlinked model', function(done) {
+    it('has not destroyed an unlinked model', async function() {
       const url = '/api/ingredients';
-      const test = this;
+      const res = await this.get(url).expect(200)
 
-      this.get(url)
-        .expect(200, function(err, res) {
-          if (err) return done(err);
+      expect(res.body).to.be.eql([
+        {name: 'Chocolate', id: this.ingredient1},
+        {name: 'Sugar', id: this.ingredient2},
+      ])
+    })
 
-          expect(res.body).to.be.eql([
-            {name: 'Chocolate', id: test.ingredient1},
-            {name: 'Sugar', id: test.ingredient2},
-          ]);
-
-          done();
-        });
-    });
-
-    it('uses a custom relation path', function(done) {
+    it('uses a custom relation path', async function() {
       const url = '/api/recipes/' + this.recipe.id + '/image';
+      const res = await this.get(url).expect(200)
 
-      this.get(url)
-        .expect(200, function(err, res) {
-          if (err) return done(err);
+      expect(res.body.name).to.equal('Photo 1')
+    })
 
-          expect(err).to.not.exist();
-          expect(res.body.name).to.equal('Photo 1');
-
-          done();
-        });
-    });
-
-    it.skip('checks if a referenced model exists - ok', function(done) {
+    it.skip('checks if a referenced model exists - ok', async function() {
       let url = '/api/recipes/' + this.recipe.id + '/ingredients/';
       url += this.ingredient1;
 
-      this.head(url)
-        .expect(200, function(err, res) {
-          done();
-        });
-    });
+      await this.head(url).expect(200)
+    })
 
-    it.skip('checks if an referenced model exists - fail', function(done) {
+    it.skip('checks if an referenced model exists - fail', async function() {
       let url = '/api/recipes/' + this.recipe.id + '/ingredients/';
       url += this.ingredient3;
 
-      this.head(url)
-        .expect(404, function(err, res) {
-          done();
-        });
-    });
-  });
+      await this.head(url).expect(404)
+    })
+  })
 
   describe('nested relations', function() {
     let accessOptions;
@@ -1445,8 +1117,7 @@ describe('relations - integration', function() {
       });
 
       Page.afterRemote('prototype.__findById__notes', function(ctx, result, next) {
-        ctx.res.set('x-after', 'after');
-
+        ctx.res.set('x-after', 'after')
         next();
       });
 
@@ -1460,176 +1131,100 @@ describe('relations - integration', function() {
       accessOptions = 'access hook not triggered';
     });
 
-    before(function createBook(done) {
-      const test = this;
-      app.models.Book.create({name: 'Book 1'},
-        function(err, book) {
-          if (err) return done(err);
+    before(async function createBook() {
+      this.book = await app.models.Book.create({name: 'Book 1'})
+      this.page = await this.book.pages.create({name: 'Page 1'})
+      this.note = await this.page.notes.create({text: 'Page Note 1'})
+    })
 
-          test.book = book;
-          book.pages.create({name: 'Page 1'},
-            function(err, page) {
-              if (err) return done(err);
+    before(async function createChapters() {
+      this.chapter = await this.book.chapters.create({name: 'Chapter 1'})
+      this.cnote = await this.chapter.notes.create({text: 'Chapter Note 1'})
+    })
 
-              test.page = page;
-              page.notes.create({text: 'Page Note 1'},
-                function(err, note) {
-                  test.note = note;
+    before(async function createCover() {
+      this.image = await app.models.Image.create({name: 'Cover 1', book: this.book})
+    })
 
-                  done();
-                });
-            });
-        });
-    });
+    it('has regular relationship routes - pages', async function() {
+      const url = '/api/books/' + this.book.id + '/pages'
+      const res = await this.get(url).expect(200)
 
-    before(function createChapters(done) {
-      const test = this;
-      test.book.chapters.create({name: 'Chapter 1'},
-        function(err, chapter) {
-          if (err) return done(err);
+      expect(res.body).to.be.an('array')
+      expect(res.body).to.have.length(1)
+      expect(res.body[0].name).to.equal('Page 1')
+    })
 
-          test.chapter = chapter;
-          chapter.notes.create({text: 'Chapter Note 1'}, function(err, note) {
-            test.cnote = note;
+    it('has regular relationship routes - notes', async function() {
+      const url = '/api/pages/' + this.page.id + '/notes/' + this.note.id
+      const res = await this.get(url).expect(200)
 
-            done();
-          });
-        });
-    });
+      expect(res.headers['x-before']).to.equal('before')
+      expect(res.headers['x-after']).to.equal('after')
+      expect(res.body).to.be.an('object')
+      expect(res.body.text).to.equal('Page Note 1')
+    })
 
-    before(function createCover(done) {
-      const test = this;
-      app.models.Image.create({name: 'Cover 1', book: test.book},
-        function(err, image) {
-          if (err) return done(err);
+    it('has a basic error handler', async function() {
+      const url = '/api/books/unknown/pages/' + this.page.id + '/notes'
+      const res = await this.get(url).expect(404)
 
-          test.image = image;
+      expect(res.body.error).to.be.an('object')
+      const expected = 'could not find a model with id unknown'
+      expect(res.body.error.message).to.equal(expected)
+      expect(res.body.error.code).to.be.equal('MODEL_NOT_FOUND')
+    })
 
-          done();
-        });
-    });
+    it('enables nested relationship routes - belongsTo find', async function() {
+      const url = '/api/images/' + this.image.id + '/book/pages'
+      const res = await this.get(url).expect(200)
 
-    it('has regular relationship routes - pages', function(done) {
-      const test = this;
-      this.get('/api/books/' + test.book.id + '/pages')
-        .expect(200, function(err, res) {
-          if (err) return done(err);
+      expect(res.body).to.be.an('array')
+      expect(res.body).to.have.length(1)
+      expect(res.body[0].name).to.equal('Page 1')
+    })
 
-          expect(res.body).to.be.an('array');
-          expect(res.body).to.have.length(1);
-          expect(res.body[0].name).to.equal('Page 1');
+    it('enables nested relationship routes - belongsTo findById', async function() {
+      const url = '/api/images/' + this.image.id + '/book/pages/' + this.page.id
+      const res = await this.get(url).expect(200)
 
-          done();
-        });
-    });
+      expect(res.body).to.be.an('object')
+      expect(res.body.name).to.equal('Page 1')
+    })
 
-    it('has regular relationship routes - notes', function(done) {
-      const test = this;
-      this.get('/api/pages/' + test.page.id + '/notes/' + test.note.id)
-        .expect(200, function(err, res) {
-          if (err) return done(err);
+    it('enables nested relationship routes - hasMany find', async function() {
+      const url = '/api/books/' + this.book.id + '/pages/' + this.page.id + '/notes'
+      const res = await this.get(url).expect(200)
 
-          expect(res.headers['x-before']).to.equal('before');
-          expect(res.headers['x-after']).to.equal('after');
-          expect(res.body).to.be.an('object');
-          expect(res.body.text).to.equal('Page Note 1');
+      expect(res.body).to.be.an('array')
+      expect(res.body).to.have.length(1)
+      expect(res.body[0].text).to.equal('Page Note 1')
+    })
 
-          done();
-        });
-    });
+    it('enables nested relationship routes - hasMany findById', async function() {
+      const url = '/api/books/' + this.book.id + '/pages/' + this.page.id + '/notes/' + this.note.id
+      const res = await this.get(url).expect(200)
 
-    it('has a basic error handler', function(done) {
-      const test = this;
-      this.get('/api/books/unknown/pages/' + test.page.id + '/notes')
-        .expect(404, function(err, res) {
-          if (err) return done(err);
+      expect(res.headers['x-before']).to.equal('before')
+      expect(res.headers['x-after']).to.equal('after')
+      expect(res.body).to.be.an('object')
+      expect(res.body.text).to.equal('Page Note 1')
+    })
 
-          expect(res.body.error).to.be.an('object');
-          const expected = 'could not find a model with id unknown';
-          expect(res.body.error.message).to.equal(expected);
-          expect(res.body.error.code).to.be.equal('MODEL_NOT_FOUND');
+    it('passes options to nested relationship routes', async function() {
+      const url = '/api/books/' + this.book.id + '/pages/' + this.page.id + '/notes/' + this.note.id
 
-          done();
-        });
-    });
+      await this.get(url).expect(200)
+      expect(accessOptions).to.have.property('accessToken')
+    })
 
-    it('enables nested relationship routes - belongsTo find', function(done) {
-      const test = this;
-      this.get('/api/images/' + test.image.id + '/book/pages')
-        .end(function(err, res) {
-          if (err) return done(err);
+    it('should nest remote hooks of ModelTo - hasMany findById', async function() {
+      const url = '/api/books/' + this.book.id + '/chapters/' + this.chapter.id + '/notes/' + this.cnote.id
+      const res = await this.get(url).expect(200)
 
-          expect(res.body).to.be.an('array');
-          expect(res.body).to.have.length(1);
-          expect(res.body[0].name).to.equal('Page 1');
-
-          done();
-        });
-    });
-
-    it('enables nested relationship routes - belongsTo findById', function(done) {
-      const test = this;
-      this.get('/api/images/' + test.image.id + '/book/pages/' + test.page.id)
-        .expect(200)
-        .end(function(err, res) {
-          if (err) return done(err);
-
-          expect(res.body).to.be.an('object');
-          expect(res.body.name).to.equal('Page 1');
-
-          done();
-        });
-    });
-
-    it('enables nested relationship routes - hasMany find', function(done) {
-      const test = this;
-      this.get('/api/books/' + test.book.id + '/pages/' + test.page.id + '/notes')
-        .expect(200, function(err, res) {
-          if (err) return done(err);
-
-          expect(res.body).to.be.an('array');
-          expect(res.body).to.have.length(1);
-          expect(res.body[0].text).to.equal('Page Note 1');
-
-          done();
-        });
-    });
-
-    it('enables nested relationship routes - hasMany findById', function(done) {
-      const test = this;
-      this.get('/api/books/' + test.book.id + '/pages/' + test.page.id + '/notes/' + test.note.id)
-        .expect(200, function(err, res) {
-          if (err) return done(err);
-
-          expect(res.headers['x-before']).to.equal('before');
-          expect(res.headers['x-after']).to.equal('after');
-          expect(res.body).to.be.an('object');
-          expect(res.body.text).to.equal('Page Note 1');
-
-          done();
-        });
-    });
-
-    it('passes options to nested relationship routes', function() {
-      return this.get(`/api/books/${this.book.id}/pages/${this.page.id}/notes/${this.note.id}`)
-        .expect(200)
-        .then(res => {
-          expect(accessOptions).to.have.property('accessToken');
-        });
-    });
-
-    it('should nest remote hooks of ModelTo - hasMany findById', function(done) {
-      const test = this;
-      this.get('/api/books/' + test.book.id + '/chapters/' + test.chapter.id + '/notes/' + test.cnote.id)
-        .expect(200, function(err, res) {
-          if (err) return done(err);
-
-          expect(res.headers['x-before']).to.be.undefined();
-          expect(res.headers['x-after']).to.be.undefined();
-
-          done();
-        });
-    });
+      expect(res.headers['x-before']).to.be.undefined()
+      expect(res.headers['x-after']).to.be.undefined()
+    })
 
     it('should have proper http.path for remoting', function() {
       [app.models.Book, app.models.Image].forEach(function(Model) {
@@ -1645,73 +1240,47 @@ describe('relations - integration', function() {
       });
     });
 
-    it('should catch error if nested function throws', function(done) {
-      const test = this;
-      this.get('/api/books/' + test.book.id + '/pages/' + this.page.id + '/throws')
-        .end(function(err, res) {
-          if (err) return done(err);
+    it('should catch error if nested function throws', async function() {
+      const url = '/api/books/' + this.book.id + '/pages/' + this.page.id + '/throws'
+      const res = await this.get(url).expect(500)
 
-          expect(res.body).to.be.an('object');
-          expect(res.body.error).to.be.an('object');
-          expect(res.body.error.name).to.equal('Error');
-          expect(res.body.error.statusCode).to.equal(500);
-          expect(res.body.error.message).to.equal('This should not crash the app');
-
-          done();
-        });
-    });
-  });
+      expect(res.body).to.be.an('object')
+      expect(res.body.error).to.be.an('object')
+      expect(res.body.error.name).to.equal('Error')
+      expect(res.body.error.statusCode).to.equal(500)
+      expect(res.body.error.message).to.equal('This should not crash the app')
+    })
+  })
 
   describe('hasOne', function() {
     let cust;
 
-    before(function createCustomer(done) {
-      const test = this;
-      app.models.customer.create({name: 'John'}, function(err, c) {
-        if (err) return done(err);
+    before(async function createCustomer() {
+      cust = await app.models.customer.create({name: 'John'})
+    })
 
-        cust = c;
+    after(async function() {
+      await app.models.customer.destroyAll()
+      await app.models.profile.destroyAll()
+    })
 
-        done();
-      });
-    });
-
-    after(function(done) {
-      const self = this;
-      this.app.models.customer.destroyAll(function(err) {
-        if (err) return done(err);
-
-        self.app.models.profile.destroyAll(done);
-      });
-    });
-
-    it('should create the referenced model', function(done) {
+    it('should create the referenced model', async function() {
       const url = '/api/customers/' + cust.id + '/profile';
-
-      this.post(url)
+      const res = await this.post(url)
         .send({points: 10})
-        .expect(200, function(err, res) {
-          if (err) return done(err);
+        .expect(200)
 
-          expect(res.body.points).to.be.eql(10);
-          expect(res.body.customerId).to.be.eql(cust.id);
+      expect(res.body.points).to.be.eql(10)
+      expect(res.body.customerId).to.be.eql(cust.id)
+    })
 
-          done();
-        });
-    });
-
-    it('should find the referenced model', function(done) {
+    it('should find the referenced model', async function() {
       const url = '/api/customers/' + cust.id + '/profile';
-      this.get(url)
-        .expect(200, function(err, res) {
-          if (err) return done(err);
+      const res = await this.get(url).expect(200)
 
-          expect(res.body.points).to.be.eql(10);
-          expect(res.body.customerId).to.be.eql(cust.id);
-
-          done();
-        });
-    });
+      expect(res.body.points).to.be.eql(10)
+      expect(res.body.customerId).to.be.eql(cust.id)
+    })
 
     it('should not create the referenced model twice', function(done) {
       const url = '/api/customers/' + cust.id + '/profile';
@@ -1722,40 +1291,25 @@ describe('relations - integration', function() {
         });
     });
 
-    it('should update the referenced model', function(done) {
+    it('should update the referenced model', async function() {
       const url = '/api/customers/' + cust.id + '/profile';
-      this.put(url)
+      const res = await this.put(url)
         .send({points: 100})
-        .expect(200, function(err, res) {
-          if (err) return done(err);
+        .expect(200)
 
-          expect(res.body.points).to.be.eql(100);
-          expect(res.body.customerId).to.be.eql(cust.id);
+      expect(res.body.points).to.be.eql(100)
+      expect(res.body.customerId).to.be.eql(cust.id)
+    })
 
-          done();
-        });
-    });
-
-    it('should delete the referenced model', function(done) {
+    it('should delete the referenced model', async function() {
       const url = '/api/customers/' + cust.id + '/profile';
-      this.del(url)
-        .expect(204, function(err, res) {
-          done(err);
-        });
-    });
+      await this.del(url).expect(204)
+    })
 
-    it('should not find the referenced model', function(done) {
+    it('should not find the referenced model', async function() {
       const url = '/api/customers/' + cust.id + '/profile'
-
-      this.get(url)
-        .expect(404, function(err, res) {
-          const expected = 'No "customer" instance(s) found';
-          expect(res.body.error.message).to.be.equal(
-            expected,
-          );
-          expect(res.body.error.code).to.be.equal('MODEL_NOT_FOUND');
-          done(err);
-        });
-    });
-  });
-});
+      const res = await this.get(url).expect(404)
+      expect(res.body.error.code).to.be.equal('MODEL_NOT_FOUND')
+    })
+  })
+})
