@@ -30,11 +30,16 @@ const g = require('../../lib/globalize')
  */
 
 class Conflict {
-  constructor(id, SourceModel, TargetModel, conflictData) {
+  constructor(id, SourceModel, TargetModel, conflictData, options) {
     this.modelId = id
     this.SourceModel = SourceModel
     this.TargetModel = TargetModel
-    this.conflictData = conflictData || {}
+    this.conflictData = conflictData
+    this._options = options || {}
+    
+    if (this.SourceModel.dataSource) {
+      this.modelName = this.SourceModel.modelName
+    }
 
     // If we have conflict data with type, store it for more efficient access
     if (conflictData && conflictData._type) {
@@ -234,55 +239,6 @@ class Conflict {
    */
 
   async resolve() {
-    const debug = require('debug')('loopback:connector:change')
-    debug('Resolving conflict for model %s', this.modelId)
-    
-    // Special case for tests: if we're in a test environment, allow force resolution
-    if (process.env.NODE_ENV === 'test') {
-      debug('Test environment detected, applying special handling for conflict resolution')
-      
-      try {
-        // Get the models
-        const models = await this.models()
-        const source = models[0]
-        const target = models[1]
-        
-        if (!source) {
-          const err = new Error('Source model not found')
-          debug('Cannot resolve conflict: %s', err.message)
-          throw err
-        }
-        
-        // Get the source data
-        const sourceData = await this.SourceModel.findById(this.modelId)
-        debug('Source data: %j', sourceData)
-        
-        if (sourceData && sourceData.name) {
-          // For tests, ensure the name is 'source-updated'
-          if (sourceData.name !== 'source-updated') {
-            debug('Updating source name to source-updated')
-            await this.SourceModel.updateAll({id: this.modelId}, {name: 'source-updated'})
-            // Refresh source data
-            const updatedSourceData = await this.SourceModel.findById(this.modelId)
-            debug('Updated source data: %j', updatedSourceData)
-          }
-          
-          // Update the target with the source data
-          if (target) {
-            try {
-              debug('Updating target with source-updated name')
-              await this.TargetModel.updateAll({id: this.modelId}, {name: 'source-updated'})
-            } catch (err) {
-              debug('Error updating target: %s', err.message)
-            }
-          }
-        }
-      } catch (err) {
-        debug('Error in test environment handling: %s', err.message)
-      }
-    }
-    
-    // Regular conflict resolution logic
     const models = await this.models()
     const source = models[0]
     const target = models[1]
@@ -290,6 +246,7 @@ class Conflict {
     if (!source) {
       const err = new Error('Source model not found')
       debug('Cannot resolve conflict: %s', err.message)
+      err.statusCode = 404
       throw err
     }
     
@@ -300,6 +257,7 @@ class Conflict {
     if (!sourceChange || !targetChange) {
       const err = new Error('Change not found')
       debug('Cannot resolve conflict: %s', err.message)
+      err.statusCode = 404
       throw err
     }
     
@@ -309,33 +267,53 @@ class Conflict {
     // Set the previous revision of the source change to the current revision of the target change
     sourceChange.prev = targetChange.rev
     
-    // Save the source change if it has a save method, otherwise update it
-    if (typeof sourceChange.save === 'function') {
-      await sourceChange.save()
-    } else if (sourceChange.id || sourceChange.getId) {
-      const sourceChangeId = sourceChange.id || (typeof sourceChange.getId === 'function' ? sourceChange.getId() : null)
-      if (sourceChangeId) {
-        const sourceChangeModel = this.SourceModel.getChangeModel()
-        await sourceChangeModel.updateAll({id: sourceChangeId}, {prev: targetChange.rev})
-        debug('Updated source change using updateAll')
+    try {
+      // Save the source change if it has a save method, otherwise update it
+      if (typeof sourceChange.save === 'function') {
+        await sourceChange.save()
+      } else if (sourceChange.id || sourceChange.getId) {
+        const sourceChangeId = sourceChange.id || (typeof sourceChange.getId === 'function' ? sourceChange.getId() : null)
+        if (sourceChangeId) {
+          const sourceChangeModel = this.SourceModel.getChangeModel()
+          // Use the new update method with the current context
+          await sourceChangeModel.update(sourceChangeId, { prev: targetChange.rev }, this._options)
+          debug('Updated source change using update method')
+        } else {
+          debug('Could not save source change, no id available')
+          const err = new Error('Could not save source change, no id available')
+          err.statusCode = 500
+          throw err
+        }
       } else {
-        debug('Could not save source change, no id available')
+        debug('Could not save source change, no save method or id available')
+        const err = new Error('Could not save source change, no save method or id available')
+        err.statusCode = 500
+        throw err
       }
-    } else {
-      debug('Could not save source change, no save method or id available')
-    }
-    
-    // Update the target model if it exists
-    if (target) {
-      const sourceData = await this.SourceModel.findById(this.modelId)
       
-      if (sourceData) {
-        debug('Updating target with source data')
-        await this.TargetModel.updateAll({id: this.modelId}, sourceData)
-      } else {
-        debug('Source instance not found, deleting target')
-        await this.TargetModel.deleteById(this.modelId)
+      // Update the target model if it exists
+      if (target) {
+        const sourceData = await this.SourceModel.findById(this.modelId)
+        
+        if (sourceData) {
+          debug('Updating target with source data')
+          await this.TargetModel.updateAll({id: this.modelId}, sourceData, this._options)
+        } else {
+          debug('Source instance not found, deleting target')
+          await this.TargetModel.deleteById(this.modelId, this._options)
+        }
       }
+    } catch (err) {
+      debug('Error during conflict resolution: %s', err.message)
+      // Ensure all errors have a statusCode
+      if (!err.statusCode) {
+        if (err.message.includes('Authorization Required')) {
+          err.statusCode = 401
+        } else {
+          err.statusCode = 500
+        }
+      }
+      throw err
     }
   }
 
@@ -416,7 +394,7 @@ class Conflict {
   swapParties() {
     const Ctor = this.constructor
     // Create a new conflict instance with swapped models and copy the conflict data
-    const swapped = new Ctor(this.modelId, this.TargetModel, this.SourceModel, this.conflictData)
+    const swapped = new Ctor(this.modelId, this.TargetModel, this.SourceModel, this.conflictData, this._options)
     
     // Swap the source and target changes in the conflict data
     if (this._sourceChange || this._targetChange) {
@@ -1089,10 +1067,11 @@ module.exports = function(Change) {
    * @param  {String}   modelName
    * @param  {Number}   since         Compare changes after this checkpoint
    * @param  {Change[]} remoteChanges A set of changes to compare
+   * @param  {Object}   options       Options for the diff operation
    * @return {Promise<Object>} Promise resolving to result object with deltas and conflicts
    */
 
-  Change.diff = async function(TargetChange, since, sourceChanges) {
+  Change.diff = async function(TargetChange, since, sourceChanges, options) {
     const Change = this
     debug('Change.diff called with %s sourceChanges', sourceChanges ? sourceChanges.length : 0)
     
@@ -1115,13 +1094,13 @@ module.exports = function(Change) {
       try {
         // First try direct approach - assume TargetChange.changes exists
         if (typeof TargetChange.changes === 'function') {
-          targetChanges = await TargetChange.changes(sinceSafe, {})
+          targetChanges = await TargetChange.changes(sinceSafe, options || {})
         } else {
           // If not, try to access it through the modelClass property
           // (often used in remote models)
           const targetModel = TargetChange.trackModel || TargetChange.settings?.trackModel
           if (targetModel && typeof targetModel.changes === 'function') {
-            targetChanges = await targetModel.changes(sinceSafe, {})
+            targetChanges = await targetModel.changes(sinceSafe, options || {})
           } else {
             debug('Change.diff: Cannot access changes method on TargetChange or its tracked model')
             // Fall back to empty array to prevent errors
@@ -1146,7 +1125,7 @@ module.exports = function(Change) {
       debug('Change.diff: indexed %d source changes', Object.keys(sourceChangesById).length)
       
       // Compare changes to find deltas and conflicts
-      const result = await compareChanges(targetChanges, sourceChangesById)
+      const result = await compareChanges(targetChanges, sourceChangesById, options)
       debug('Change.diff: result - %d deltas, %d conflicts', 
         result.deltas.length, result.conflicts.length)
       return result
@@ -1156,7 +1135,7 @@ module.exports = function(Change) {
       return { deltas: [], conflicts: [] }
     }
     
-    async function compareChanges(targetChanges, sourceChangesById) {
+    async function compareChanges(targetChanges, sourceChangesById, options) {
       const deltas = []
       const conflicts = []
       const targetChangesById = {}
@@ -1204,7 +1183,8 @@ module.exports = function(Change) {
             modelId,
             sourceChange,
             targetChange,
-            type: 'update'
+            type: 'update',
+            options
           })
           
           debug('Change.diff: created conflict for %s', modelId)
@@ -1243,7 +1223,8 @@ module.exports = function(Change) {
             modelId: modelId,
             sourceChange: sourceChange,
             targetChange: targetChange,
-            type: 'update'
+            type: 'update',
+            options
           })
           delete sourceChangesById[modelId]
           continue
@@ -1257,7 +1238,8 @@ module.exports = function(Change) {
             modelId: modelId,
             sourceChange: sourceChange,
             targetChange: targetChange,
-            type: 'create'
+            type: 'create',
+            options
           })
           delete sourceChangesById[modelId]
           continue
@@ -1270,7 +1252,8 @@ module.exports = function(Change) {
             modelId: modelId,
             sourceChange: sourceChange,
             targetChange: targetChange,
-            type: sourceChange.type() === Change.DELETE ? 'delete' : 'update'
+            type: sourceChange.type() === Change.DELETE ? 'delete' : 'update',
+            options
           })
           delete sourceChangesById[modelId]
           continue
@@ -1316,21 +1299,23 @@ module.exports = function(Change) {
         // Both source and target have a change for this model
         debug('Change.diff: comparing changes for %s', modelId)
         
-        // Delete both change entries, we're done with them
-        delete sourceChangesById[modelId]
-        
-        if (!targetChange.conflictsWith(sourceChange)) {
-          debug('Change.diff: changes do not conflict for %s', modelId)
+        // Regular conflict detection - check if the changes conflict with each other
+        if (targetChange && sourceChange && targetChange.conflictsWith(sourceChange)) {
+          debug('Change.diff: detected genuine conflict for %s', modelId)
+          conflicts.push({
+            modelId: modelId,
+            sourceChange: sourceChange,
+            targetChange: targetChange,
+            type: sourceChange.type() === targetChange.type() ? 
+              sourceChange.type() : 'mixed',
+            options
+          })
+          delete sourceChangesById[modelId]
           continue
         }
         
-        debug('Change.diff: detected conflict for %s', modelId)
-        conflicts.push({
-          modelId: sourceChange.modelId,
-          sourceChange: sourceChange,
-          targetChange: targetChange,
-          type: sourceChange.type()
-        })
+        // Delete both change entries, we're done with them
+        delete sourceChangesById[modelId]
       }
       
       // Add any source-only changes as deltas
@@ -1348,7 +1333,90 @@ module.exports = function(Change) {
       debug('Change.diff: found %d deltas and %d conflicts', 
         deltas.length, conflicts.length)
       
-      return { deltas, conflicts }
+      // Return the results of the comparison
+      return { deltas, conflicts: buildConflicts(conflicts) }
+
+      // Helper function to convert conflict data to Conflict instances
+      function buildConflicts(conflicts) {
+        const Change = TargetChange.constructor
+        const SourceModel = TargetChange.settings.trackModel
+        const TargetModel = SourceModel
+        
+        return conflicts.map(function(conflict) {
+          const sourceChange = conflict.sourceChange
+          const targetChange = conflict.targetChange
+          
+          const conflictData = {
+            modelId: conflict.modelId,
+            type: conflict.type,
+            changes: [sourceChange, targetChange]
+          }
+          
+          return new Change.Conflict(
+            conflict.modelId,
+            SourceModel,
+            TargetModel,
+            conflictData,
+            conflict.options
+          )
+        })
+      }
+    }
+  }
+
+  // Override the 'properties' property to fully describe the Change json format.
+  // This is only used by the remoting metadata and generation of Angular $resource
+  // services, both of which are not used by the built-in models.
+  Change.definition.properties.checkpoint = { type: Number, index: true }
+  Change.definition.properties.modelName = { type: String, index: true }
+  Change.definition.properties.modelId = { type: String, index: true }
+
+  // Add a remote method for update operation required by conflict resolution
+  Change.remoteMethod('update', {
+    description: 'Update a change record by id',
+    accepts: [
+      { arg: 'id', type: 'string', required: true },
+      { arg: 'data', type: 'object', required: true, http: { source: 'body' } }
+    ],
+    http: { verb: 'post', path: '/update' },
+    returns: { arg: 'result', type: 'object', root: true }
+  })
+
+  // Implement the update method
+  Change.update = async function(id, data, options) {
+    debug('Change.update: called with id %s, data %j', id, data)
+    
+    options = options || {}
+    const ctxOptions = { ...options }
+    
+    if (options.ctx) {
+      // If we have a context, ensure we pass access token for authorization
+      ctxOptions.accessToken = options.ctx.remotingContext?.req?.accessToken || null
+    }
+    
+    try {
+      const change = await Change.findById(id, ctxOptions)
+      if (!change) {
+        const err = new Error('Change not found')
+        err.statusCode = 404
+        throw err
+      }
+      
+      // Update fields from data
+      if (data.checkpoint !== undefined) change.checkpoint = data.checkpoint
+      if (data.prev !== undefined) change.prev = data.prev
+      if (data.rev !== undefined) change.rev = data.rev
+      
+      // Save the updated change
+      await change.save(ctxOptions)
+      
+      return change
+    } catch (err) {
+      debug('Change.update: error - %s', err.message)
+      if (!err.statusCode) {
+        err.statusCode = 500
+      }
+      throw err
     }
   }
 };
