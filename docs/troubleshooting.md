@@ -602,4 +602,158 @@ function setupTestModels() {
 5. **Registry Setup**: Ensure the Scope model can find the ACL model by setting `this.Scope.aclModel = this.ACL`
 6. **Table Creation**: Call `ds.automigrate()` to create the necessary tables
 
-By following these steps, you can ensure that your ACL tests run correctly with models properly attached to the datasource. 
+By following these steps, you can ensure that your ACL tests run correctly with models properly attached to the datasource.
+
+## Replication System Debugging
+
+**Prompt:** "Apply systematic debugging techniques to replication issues"
+
+- Use debug logging at key transition points in the replication process
+- Track context propagation through all replication operations
+- Verify proper handling of change types (create, update, delete)
+- Monitor chunking behavior with large datasets
+
+```javascript
+// Template: Debugging replication flow
+debug('[REPLICATION:START] Beginning replication from %s to %s', sourceModel.modelName, targetModel.modelName)
+debug('[REPLICATION:CHANGES] Found %d source changes since %s', changes.length, checkpoint)
+debug('[REPLICATION:CHUNKS] Processing chunk %d of %d (size: %d)', chunkIndex, totalChunks, chunk.length)
+debug('[REPLICATION:BULK] Applying bulk update with %d items', updates.length)
+debug('[REPLICATION:COMPLETE] Replication finished with %d conflicts', conflicts.length)
+```
+
+### Common Replication Issues
+
+#### 1. Context Propagation Issues
+
+**Symptom**: Permission errors during replication, particularly with instance-level access control.
+
+**Solution**:
+- Ensure replication context is properly propagated:
+```javascript
+const ctx = {
+  accessType: 'REPLICATE',
+  remotingContext: {
+    accessType: 'REPLICATE'
+  },
+  allowSetId: true // For replication operations
+}
+```
+- Use debug statements to track context through operations:
+```javascript
+debug('Operation context: %j', ctx)
+```
+
+#### 2. Chunking Mechanism Failures
+
+**Symptom**: Tests hanging when replicating large datasets, or replication process taking too long/failing.
+
+**Solution**:
+- Verify chunking behavior is correctly implemented:
+```javascript
+// In getSourceChanges
+const chunkSize = options.chunkSize || this.settings.replicationChunkSize || 1000
+const chunks = []
+for (let i = 0; i < changes.length; i += chunkSize) {
+  chunks.push(changes.slice(i, i + chunkSize))
+}
+debug('Split %d changes into %d chunks of size %d', changes.length, chunks.length, chunkSize)
+```
+- Process chunks sequentially:
+```javascript
+// In tryReplicate
+for (const chunk of chunks) {
+  debug('Processing chunk with %d changes', chunk.length)
+  const updates = await this.createSourceUpdates(chunk, conflicts, options)
+  await targetModel.bulkUpdate(updates, options)
+}
+```
+
+#### 3. ID Handling in Replication
+
+**Symptom**: New objects not being created during replication, or IDs not matching between source and target.
+
+**Solution**:
+- Ensure proper ID handling:
+```javascript
+// Special context to allow ID setting during replication
+const ctx = { allowSetId: true, accessType: 'REPLICATE' }
+
+// When creating a new instance during replication
+const inst = await Model.create(data, ctx)
+```
+- Track ID assignment with debug statements:
+```javascript
+debug('Creating new instance with ID: %s', data.id)
+```
+
+#### 4. Change Type Detection
+
+**Symptom**: Delete operations not being replicated, or wrong operations being performed.
+
+**Solution**:
+- Verify change type is correctly determined:
+```javascript
+// Ensure proper type detection
+const type = change.type()
+debug('Processing change with type: %s, modelId: %s', type, change.modelId)
+
+// Handle each type appropriately
+if (type === 'delete') {
+  // Handle deletion
+} else if (type === 'create' || type === 'update') {
+  // Handle creation/update
+}
+```
+
+#### 5. Change Filtering Issues
+
+**Symptom**: Expected changes not being replicated, or too many changes being replicated.
+
+**Solution**:
+- Simplify change filtering to ensure important changes are included:
+```javascript
+// In createChangeFilter
+const filter = {
+  where: {
+    modelId: {
+      inq: modelIds
+    }
+  }
+}
+```
+- Track filtered changes:
+```javascript
+debug('Filtered changes: %d out of %d total', filteredChanges.length, allChanges.length)
+```
+
+#### 6. Race Condition Handling
+
+**Symptom**: Inconsistent replication results, particularly in test environments.
+
+**Solution**:
+- Use specific debug points to track down race conditions:
+```javascript
+debug('[RACE_CHECK] State before operation: %j', currentState)
+await operation()
+debug('[RACE_CHECK] State after operation: %j', newState)
+```
+- Implement controlled race condition tests:
+```javascript
+it('handles race conditions correctly', async function() {
+  // Set up initial state
+  await setupInitialState()
+  
+  // Begin replication but don't await completion
+  const replicationPromise = sourceModel.replicate(targetModel)
+  
+  // Introduce competing change
+  await targetModel.updateById('1', { name: 'race-condition' })
+  
+  // Complete replication
+  const result = await replicationPromise
+  
+  // Verify correct handling
+  expect(result.conflicts.length).to.equal(1)
+})
+``` 
