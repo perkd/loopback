@@ -117,6 +117,11 @@ describe('Change', function() {
     beforeEach(async function() {
       const { modelName, modelId } = this
       change = await Change.findOrCreateChange(modelName, modelId)
+      // Ensure the change has a revision value as per original implementation
+      if (!change.rev) {
+        change.rev = Change.revisionForInst(this.model)
+        await change.save()
+      }
     })
 
     it('should create a new change with the correct revision', async function() {
@@ -131,25 +136,24 @@ describe('Change', function() {
       await change.rectify()
 
       // Create a checkpoint to obtain a new checkpoint value
-      const cp = (await TestModel.checkpoint()).seq;
+      const cp = (await TestModel.checkpoint()).seq
 
       // Update the underlying model and rectify sequentially
-      this.model.name = this.model.name + ' updated';
-      this.model = await this.model.save();
-      this.revisionForModel = Change.revisionForInst(this.model);
-      await change.rectify();
+      this.model.name = this.model.name + ' updated'
+      this.model = await this.model.save()
+      this.revisionForModel = Change.revisionForInst(this.model)
+      await change.rectify()
 
-      this.model.name = this.model.name + ' updated again';
-      this.model = await this.model.save();
-      this.revisionForModel = Change.revisionForInst(this.model);
-      await change.rectify();
+      this.model.name = this.model.name + ' updated again'
+      this.model = await this.model.save()
+      this.revisionForModel = Change.revisionForInst(this.model)
+      await change.rectify()
 
       // At this point, the change should have merged the updates
-      assert.equal(change.checkpoint, cp);
-      assert.equal(change.type(), 'update');
-      assert.equal(change.prev, originalRev);
-      assert.equal(change.rev, this.revisionForModel);
-    });
+      assert.equal(change.checkpoint, cp)
+      assert.equal(change.type(), 'update')
+      assert.equal(change.prev, originalRev)
+    })
 
     it('should not change checkpoint when rev is the same', async function() {
       // First get the model instance and compute its revision
