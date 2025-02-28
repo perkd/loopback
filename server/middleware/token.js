@@ -8,10 +8,9 @@
  */
 
 'use strict';
-const g = require('../../lib/globalize');
-const loopback = require('../../lib/loopback');
-const assert = require('assert');
-const debug = require('debug')('loopback:middleware:token');
+const assert = require('node:assert')
+const g = require('../../lib/globalize')
+const debug = require('debug')('loopback:middleware:token')
 
 /*!
  * Export the middleware.
@@ -125,16 +124,12 @@ function token(options) {
 
     if (req.accessToken !== undefined) {
       if (!enableDoublecheck) {
-        // req.accessToken is defined already (might also be "null" or "false") and enableDoublecheck
-        // has not been set --> skip searching for credentials
-        rewriteUserLiteral(req, currentUserLiteral)
+        return rewriteUserLiteral(req, currentUserLiteral)
           .then(() => next())
           .catch(next)
       }
       if (req.accessToken && req.accessToken.id && !overwriteExistingToken) {
-        // req.accessToken.id is defined, which means that some other middleware has identified a valid user.
-        // when overwriteExistingToken is not set to a truthy value, skip searching for credentials.
-        rewriteUserLiteral(req, currentUserLiteral)
+        return rewriteUserLiteral(req, currentUserLiteral)
           .then(() => next())
           .catch(next)
       }

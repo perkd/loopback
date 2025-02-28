@@ -354,7 +354,10 @@ describe('loopback.token(options)', function() {
 
           next();
         });
-        app.use(loopback.token({model: Token}));
+        app.use(loopback.token({
+          model: Token,
+          enableDoublecheck: true,
+        }));
         app.get('/', function(req, res, next) {
           res.send(req.accessToken);
         });
@@ -647,83 +650,44 @@ describe('app.enableAuth()', function() {
     expect(res.body.error.code).to.eql('AUTHORIZATION_REQUIRED')
   })
 
-  // Create a separate describe to isolate the problematic test
-  describe('context storage', function() {
-    // Skip this test suite for now as it's causing "callback was already called" errors
-    // TODO: Fix the context storage test issues
-    return
+  it('stores token in the context', async function() {
+    // Create a new app instance to avoid interference with other tests
+    const testApp = loopback({localRegistry: true, loadBuiltinModels: true})
+    testApp.dataSource('db', {connector: 'memory'})
     
-    let contextTestApp
-    let contextToken
+    const TestModel = testApp.registry.createModel('ContextTestModel', {base: 'Model'})
     
-    beforeEach(async function() {
-      // Create a completely separate app for this test
-      contextTestApp = loopback({localRegistry: true, loadBuiltinModels: true})
-      contextTestApp.dataSource('db', {connector: 'memory'})
-      
-      // Setup the token model
-      const tokenModel = contextTestApp.registry.getModel('AccessToken')
-      contextTestApp.model(tokenModel, {dataSource: 'db'})
-      
-      // Create a test model
-      const TestModel = contextTestApp.registry.createModel('ContextTestModel', {base: 'Model'})
-      
-      // Make this a regular function, not an async function, and explicitly return the result
-      TestModel.getToken = function(options, cb) {
-        // If called with callback, use it
-        if (typeof cb === 'function') {
-          const ctx = LoopBackContext.getCurrentContext()
-          const token = ctx && ctx.get('accessToken') || null
-          process.nextTick(function() {
-            cb(null, token)
-          })
-          return
-        }
-        
-        // Otherwise synchronously return the token
-        const ctx = LoopBackContext.getCurrentContext()
-        return ctx && ctx.get('accessToken') || null
-      }
-      
-      TestModel.remoteMethod('getToken', {
-        accepts: {arg: 'options', type: 'object', http: 'optionsFromRequest'},
-        returns: {arg: 'token', type: 'object'},
-        http: {verb: 'GET', path: '/token'},
-      })
-      
-      contextTestApp.model(TestModel, {dataSource: null})
-      contextTestApp.enableAuth({dataSource: 'db'})
-      
-      // Create a token
-      contextToken = await tokenModel.create({userId: '456'})
-      
-      // Configure middleware (order is important)
-      contextTestApp.use(contextMiddleware())
-      contextTestApp.use(function(req, res, next) {
-        // Ensure context is created
-        const ctx = LoopBackContext.getCurrentContext()
-        if (ctx) {
-          ctx.set('accessToken', req.accessToken)
-        }
-        next()
-      })
-      contextTestApp.use(loopback.token({model: tokenModel}))
-      contextTestApp.use(loopback.rest())
+    TestModel.getToken = async function() {
+      const ctx = LoopBackContext.getCurrentContext()
+      return ctx && ctx.get('accessToken') || null
+    }
+    
+    TestModel.remoteMethod('getToken', {
+      returns: {arg: 'token', type: 'object'},
+      http: {verb: 'GET', path: '/token'}
     })
     
-    it('stores token in the context', async function() {
-      // Make the request
-      const res = await request(contextTestApp)
-        .get('/ContextTestModels/token?_format=json')
-        .set('authorization', contextToken.id)
-        .expect(200)
-        .expect('Content-Type', /json/)
-      
-      expect(res.body.token).to.be.an('object')
-      expect(res.body.token.id).to.eql(contextToken.id)
-    })
+    testApp.model(TestModel, {dataSource: null})
+    // Configure middleware (order is important)
+    testApp.use(contextMiddleware())
+    testApp.enableAuth({dataSource: 'db'})
+    testApp.use(loopback.rest())
+
+    // Create a token after middleware registration
+    const tokenModel = testApp.registry.getModel('AccessToken')
+    const token = await tokenModel.create({userId: '456'})
+    
+    // Make the request
+    const res = await request(testApp)
+      .get('/ContextTestModels/token?_format=json')
+      .set('authorization', token.id)
+      .expect(200)
+      .expect('Content-Type', /json/)
+    
+    expect(res.body.token).to.be.an('object')
+    expect(res.body.token.id).to.eql(token.id)
   })
-  
+
   // See https://github.com/strongloop/loopback-context/issues/6
   it('checks whether context is active', function(done) {
     app.enableAuth();
