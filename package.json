@@ -1,7 +1,10 @@
 {
   "name": "loopback",
-  "version": "3.34.0",
+  "version": "3.34.1",
   "description": "LoopBack: Open Source Framework for Node.js",
+  "copyright.owner": "IBM Corp.",
+  "license": "MIT",
+  "author": "IBM Corp.",
   "homepage": "http://loopback.io",
   "keywords": [
     "web",
@@ -33,8 +36,10 @@
   },
   "scripts": {
     "lint": "grunt eslint",
-    "coverage": "nyc report --reporter=text-lcov | coveralls",
-    "test": "nyc mocha test/**/*.js --exit --timeout 5000 --color --reporter spec"
+    "coverage": "c8 report",
+    "report-coverage": "c8 report --reporter=lcov && cat ./coverage/lcov.info | coveralls",
+    "test": "c8 mocha test/**/*.js --exit --timeout 5000 --color --reporter spec",
+    "reinstall": "rm -rf node_modules/ && rm yarn.lock && yarn install"
   },
   "dependencies": {
     "bcryptjs": "^3.0.2",
@@ -64,6 +69,7 @@
     "@babel/eslint-parser": "^7.26.8",
     "@stylistic/eslint-plugin-js": "3.1.0",
     "browserify": "^17.0.1",
+    "c8": "^8.0.1",
     "chai": "4.2.0",
     "cookie-parser": "^1.4.7",
     "coveralls": "^3.1.1",
@@ -72,7 +78,7 @@
     "eslint-config-loopback": "^13.1.0",
     "eslint-plugin-jsonc": "^2.19.1",
     "eslint-plugin-mocha": "^10.5.0",
-    "eslint-plugin-n": "^17.15.1",
+    "eslint-plugin-n": "^17.16.2",
     "eslint-plugin-security": "^3.0.1",
     "express-session": "^1.18.1",
     "grunt": "^1.6.1",
@@ -86,7 +92,6 @@
     "loopback-boot": "2.28.0",
     "loopback-context": "3.5.2",
     "mocha": "^11.1.0",
-    "nyc": "^17.1.0",
     "sinon": "^19.0.2",
     "sinon-chai": "3.7.0",
     "strong-error-handler": "4.0.8",
@@ -112,9 +117,6 @@
       "debug": "*,-mocha:*,-eslint:*"
     }
   },
-  "copyright.owner": "IBM Corp.",
-  "license": "MIT",
-  "author": "IBM Corp.",
   "ci": {
     "downstreamIgnoreList": [
       "bluemix-service-broker",
