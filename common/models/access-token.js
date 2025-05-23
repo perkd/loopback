@@ -163,7 +163,7 @@ module.exports = function(AccessToken) {
   AccessToken.resolve = async function(id) {
     try {
       const token = await this.findById(id)
-      if (!token) throw 'invalid'
+      if (!token) return
 
       const isValid = await token.validate()
       if (!isValid) throw 'invalid'
