@@ -14,10 +14,14 @@ const errorHandler = require('strong-error-handler');
 
 boot(app, __dirname);
 
+// Enable authentication before setting up REST middleware
+// This ensures that app.isAuthEnabled is true when REST middleware
+// is initialized, allowing it to automatically include token middleware
+app.enableAuth();
+
 const apiPath = '/api';
-app.use(loopback.token({model: app.models.accessToken}));
+// Note: Token middleware is automatically added by REST middleware when auth is enabled
 app.use(apiPath, loopback.rest());
 
 app.use(loopback.urlNotFound());
 app.use(errorHandler());
-app.enableAuth();
