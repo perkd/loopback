@@ -89,6 +89,7 @@ describe('KeyValueModel', function() {
 
     it('provides "ttl(key)" at "GET /key/ttl"', function(done) {
       request.put('/CacheItems/ttl-key?ttl=2000')
+        .send(AN_OBJECT_VALUE)
         .end(function(err, res) {
           if (err) return done(err);
           request.get('/CacheItems/ttl-key/ttl')
@@ -103,6 +104,7 @@ describe('KeyValueModel', function() {
     it('returns 204 when getting TTL for a key that does not have TTL set',
       function(done) {
         request.put('/CacheItems/ttl-key')
+          .send(AN_OBJECT_VALUE)
           .end(function(err, res) {
             if (err) return done(err);
             request.get('/CacheItems/ttl-key/ttl')

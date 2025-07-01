@@ -189,6 +189,11 @@ _describe.whenCalledRemotely = function(verb, url, data, cb) {
         if (typeof data === 'function')
           payload = data.call(this);
         this.http.send(payload);
+      } else if (this.verb === 'PUT' || this.verb === 'PATCH' ||
+                 (this.verb === 'POST' && this.url && this.url.includes('/replace'))) {
+        // For PUT/PATCH requests and POST requests to replace endpoints,
+        // send an empty object if no data is provided
+        this.http.send({});
       }
       this.req = this.http.req;
       const test = this;

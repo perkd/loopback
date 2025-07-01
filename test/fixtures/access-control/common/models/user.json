@@ -18,6 +18,30 @@
       "permission": "DENY",
       "principalType": "ROLE",
       "principalId": "$everyone"
+    },
+    {
+      "permission": "ALLOW",
+      "principalType": "ROLE",
+      "principalId": "$owner",
+      "property": "findById"
+    },
+    {
+      "permission": "ALLOW",
+      "principalType": "ROLE",
+      "principalId": "$owner",
+      "property": "patchAttributes"
+    },
+    {
+      "permission": "ALLOW",
+      "principalType": "ROLE",
+      "principalId": "$owner",
+      "property": "replaceById"
+    },
+    {
+      "permission": "ALLOW",
+      "principalType": "ROLE",
+      "principalId": "$owner",
+      "property": "deleteById"
     }
   ],
   "replaceOnPUT": false

@@ -1115,7 +1115,7 @@ module.exports = function(User) {
       return
     }
     const data = ctx.data || ctx.instance
-    const isPasswordChange = 'password' in data
+    const isPasswordChange = data && 'password' in data
 
     // This is the option set by `setPassword()` API
     // when calling `this.patchAttritubes()` to change user's password
