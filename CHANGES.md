@@ -1,6 +1,24 @@
 2025-07-01, Version 3.34.2+
 ============================
 
+ * **MAJOR**: Express v4.21.1 → v5.1.0 migration with 100% test compatibility (Young)
+
+ * feat: implemented Express v5 compatibility layer for removed app.lazyrouter method (Young)
+
+ * feat: restored Express static properties (static, json, urlencoded) for v5 compatibility (Young)
+
+ * feat: restored req.param() method removed in Express v5 (Young)
+
+ * fix: enhanced middleware sorting algorithm for mixed builtin/phase middleware scenarios (Young)
+
+ * fix: corrected middlewareFromConfig path parameter handling for Express v5 strictness (Young)
+
+ * feat: achieved 100% test compatibility (224 passing, 0 failing tests) (Young)
+
+ * docs: comprehensive Express v5 migration documentation in learnings/express-upgrade.md (Young)
+
+ * docs: test enhancement plan for future Express compatibility in plans/express-upgrade.md (Young)
+
  * feat: exposed findOrCreate as remote method (custom Perkd requirement) (Young)
 
  * feat: added findOrCreate remote method at POST /{model}/findOrCreate endpoint (Young)

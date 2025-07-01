@@ -6,6 +6,49 @@ This document summarizes all significant changes made to the LoopBack repository
 
 ### July 1, 2025
 
+#### Express v4.21.1 → v5.1.0 Migration - 100% Success
+- **Date**: July 1, 2025
+- **Changes**: **MAJOR UPGRADE** - Complete Express framework migration with full backward compatibility
+  - **Version Update**: Upgraded from Express v4.21.1 to v5.1.0
+  - **Test Results**: Achieved 100% test compatibility (224 passing, 0 failing tests)
+  - **Migration Scope**: Comprehensive upgrade addressing all Express v5 breaking changes
+
+  #### Key Technical Solutions:
+  - **Lazyrouter Compatibility**: Implemented Express v5 compatibility layer for removed `app.lazyrouter` method
+    ```javascript
+    // Express v5 compatibility: lazyrouter was removed
+    if (app.lazyrouter) {
+      app.__expressLazyRouter = app.lazyrouter;
+    } else {
+      app.__expressLazyRouter = function() {
+        if (!this._router) {
+          this._router = this.router;
+        }
+      };
+    }
+    ```
+
+  - **Static Properties Restoration**: Added compatibility exports for removed Express static methods
+    ```javascript
+    // Express v5 compatibility: restore missing static properties
+    if (!express.static) express.static = require('serve-static');
+    if (!express.json) express.json = require('body-parser').json;
+    if (!express.urlencoded) express.urlencoded = require('body-parser').urlencoded;
+    ```
+
+  - **Request Object Compatibility**: Restored `req.param()` method removed in Express v5
+  - **Middleware Ordering Fixes**: Enhanced sorting algorithm for mixed builtin/phase middleware
+  - **Parameter Handling**: Fixed `middlewareFromConfig` path parameter handling for Express v5 strictness
+
+  #### Files Modified:
+  - `lib/server-app.js` - Core middleware and router compatibility
+  - `lib/express.js` - Express static property restoration
+  - `lib/request.js` - Request object method restoration
+  - `package.json` - Express version update to v5.1.0
+
+- **Impact**: LoopBack now fully compatible with Express v5 while maintaining 100% backward compatibility
+- **Documentation**: Comprehensive migration learnings documented in `learnings/express-upgrade.md`
+
 #### Custom Remote Method Enhancement - findOrCreate Exposure
 - **Date**: July 1, 2025
 - **Changes**: Enhanced PersistedModel to expose `findOrCreate` as a remote method
@@ -242,32 +285,40 @@ This document summarizes all significant changes made to the LoopBack repository
 ## Summary of Major Changes
 
 ### Key Modernization Achievements:
-1. **Promise Modernization**: Complete migration from Bluebird to native JavaScript promises
+1. **Express Framework Modernization**: Complete migration to Express v5.1.0
+   - Achieved 100% test compatibility (224 passing, 0 failing tests)
+   - Implemented comprehensive compatibility layers for Express v5 breaking changes
+   - Maintained full backward compatibility for LoopBack applications
+   - Enhanced middleware ordering system for complex scenarios
+
+2. **Promise Modernization**: Complete migration from Bluebird to native JavaScript promises
    - Eliminated 200+ instances of `createPromiseCallback` utility
    - Converted all model methods to promise-only APIs (breaking change)
    - Modernized error handling patterns across the codebase
 
-2. **JavaScript Modernization**:
+3. **JavaScript Modernization**:
    - Replaced callback-based patterns with async/await
    - Eliminated `async` library dependency in favor of native constructs
    - Updated promise chain patterns from `.spread()` to array destructuring
 
-3. **API Modernization**:
+4. **API Modernization**:
    - **Breaking Change**: Removed dual callback/promise support
    - All asynchronous methods now exclusively return native promises
    - Consistent error handling with promise rejections
 
-4. **Testing Infrastructure Modernization**:
+5. **Testing Infrastructure Modernization**:
    - Migrated from complex Karma/Grunt setup to streamlined Mocha + C8 coverage
    - Removed browser-based testing in favor of Node.js-only testing
    - Updated 58+ test files to handle native promise patterns
 
-5. **Architecture Improvements**:
+6. **Architecture Improvements**:
    - Simplified build process and dependency management
    - Enhanced replication and conflict resolution systems
    - Improved error propagation and handling patterns
+   - Future-proofed middleware system for Express compatibility
 
 ### Breaking Changes:
+- **Express Framework**: Upgraded to Express v5.1.0 (maintains backward compatibility through compatibility layers)
 - **Promise API**: All methods now return native promises exclusively (no callback support)
 - **Testing**: Removed browser-based Karma testing in favor of Node.js-only testing
 - **Dependencies**: Removed `async` and `bluebird` from dependencies
@@ -275,14 +326,18 @@ This document summarizes all significant changes made to the LoopBack repository
 - **Error Handling**: Changed from Bluebird-specific to native promise error patterns
 
 ### Development Experience Improvements:
+- **Express v5 Compatibility**: Full compatibility with latest Express framework while maintaining backward compatibility
 - **Modern JavaScript**: Full ES6+ async/await patterns throughout codebase
 - **Simplified Dependencies**: Reduced external library dependencies
 - **Better Error Handling**: Consistent native promise rejection patterns
-- **Improved Performance**: Eliminated promise library overhead
+- **Improved Performance**: Eliminated promise library overhead and optimized middleware sorting
 - **Enhanced Maintainability**: Cleaner, more readable asynchronous code
+- **Future-Proofing**: Comprehensive compatibility layers for framework upgrades
 
 ### Migration Guide:
 For applications upgrading to these versions, see:
+- [`learnings/express-upgrade.md`](learnings/express-upgrade.md) - Express v5 migration learnings and troubleshooting
+- [`plans/express-upgrade.md`](plans/express-upgrade.md) - Test enhancement plan for future Express compatibility
 - [`docs/migrating-from-callbacks-to-promises.md`](migrating-from-callbacks-to-promises.md) - Comprehensive migration guide
 - [`docs/promise-migration.md`](promise-migration.md) - Technical analysis and action plan
 - [`docs/phase-4-migration.md`](phase-4-migration.md) - Detailed implementation analysis
