@@ -346,15 +346,15 @@ __metadata:
   languageName: node
   linkType: hard
 
-"@stylistic/eslint-plugin-js@npm:3.1.0":
-  version: 3.1.0
-  resolution: "@stylistic/eslint-plugin-js@npm:3.1.0"
+"@stylistic/eslint-plugin-js@npm:^4.4.1":
+  version: 4.4.1
+  resolution: "@stylistic/eslint-plugin-js@npm:4.4.1"
   dependencies:
     eslint-visitor-keys: "npm:^4.2.0"
     espree: "npm:^10.3.0"
   peerDependencies:
-    eslint: ">=8.40.0"
-  checksum: 10c0/9842e943e17f37f5e163f1994466346bd9302bb95a754764cf5255b102b099c6eabf8c44c257a94fa9cb5df68c766d36ec4a0b0b27e404ce223fef995441da71
+    eslint: ">=9.0.0"
+  checksum: 10c0/e6fbbf0695aa6b49b26407c84e70c3ebae1a8d0430abc57a2c5da5b79acbd550190e14ce5f77e2b5f6a919b00fb74fc8964f492f530e2981399a016eca893193
   languageName: node
   linkType: hard
 
@@ -2303,7 +2303,7 @@ __metadata:
   languageName: node
   linkType: hard
 
-"ejs@npm:^3.1.10, ejs@npm:^3.1.3, ejs@npm:^3.1.9":
+"ejs@npm:^3.1.10, ejs@npm:^3.1.3":
   version: 3.1.10
   resolution: "ejs@npm:3.1.10"
   dependencies:
@@ -2984,7 +2984,7 @@ __metadata:
   languageName: node
   linkType: hard
 
-"express@npm:4.21.2, express@npm:4.x":
+"express@npm:4.x":
   version: 4.21.2
   resolution: "express@npm:4.21.2"
   dependencies:
@@ -3023,7 +3023,7 @@ __metadata:
   languageName: node
   linkType: hard
 
-"express@npm:^5.1.0":
+"express@npm:5.1.0, express@npm:^5.1.0":
   version: 5.1.0
   resolution: "express@npm:5.1.0"
   dependencies:
@@ -3896,6 +3896,24 @@ __metadata:
   languageName: node
   linkType: hard
 
+"handlebars@npm:^4.7.8":
+  version: 4.7.8
+  resolution: "handlebars@npm:4.7.8"
+  dependencies:
+    minimist: "npm:^1.2.5"
+    neo-async: "npm:^2.6.2"
+    source-map: "npm:^0.6.1"
+    uglify-js: "npm:^3.1.4"
+    wordwrap: "npm:^1.0.0"
+  dependenciesMeta:
+    uglify-js:
+      optional: true
+  bin:
+    handlebars: bin/handlebars
+  checksum: 10c0/7aff423ea38a14bb379316f3857fe0df3c5d66119270944247f155ba1f08e07a92b340c58edaa00cfe985c21508870ee5183e0634dcb53dd405f35c93ef7f10d
+  languageName: node
+  linkType: hard
+
 "har-schema@npm:^2.0.0":
   version: 2.0.0
   resolution: "har-schema@npm:2.0.0"
@@ -4118,7 +4136,7 @@ __metadata:
   languageName: node
   linkType: hard
 
-"http-status@npm:^1.1.2, http-status@npm:^1.6.2":
+"http-status@npm:^1.1.2, http-status@npm:^1.8.1":
   version: 1.8.1
   resolution: "http-status@npm:1.8.1"
   checksum: 10c0/6e4d66e87e50dbffd9023648cbb9869cc894efba0b919aa358753f5ae4249473c21e3cf122578ba0196727f34d77700f3c5eedc46388f63f5045e64921a86cef
@@ -4870,12 +4888,21 @@ __metadata:
   languageName: node
   linkType: hard
 
-"js2xmlparser@npm:^4.0.0, js2xmlparser@npm:^4.0.2":
+"js2xmlparser@npm:^4.0.0":
   version: 4.0.2
   resolution: "js2xmlparser@npm:4.0.2"
   dependencies:
     xmlcreate: "npm:^2.0.4"
   checksum: 10c0/b00de9351649d67d225e21734a08f456a4ecb3c29cafcd3bbecb36a8ab61ec841fad7f425bed50e21936fe387f472e49cfe75ce71d0beaacb0475b077c88ed39
+  languageName: node
+  linkType: hard
+
+"js2xmlparser@npm:^5.0.0":
+  version: 5.0.0
+  resolution: "js2xmlparser@npm:5.0.0"
+  dependencies:
+    xmlcreate: "npm:^2.0.4"
+  checksum: 10c0/9fe62331f260ef532a40567f14b75ca6758ea5fb15aeff267d9c5beef7b778ec6a9851097d13714e57807de41576217f6221a15357473d4c2792f9b35aaffedb
   languageName: node
   linkType: hard
 
@@ -5250,7 +5277,7 @@ __metadata:
   resolution: "loopback@workspace:."
   dependencies:
     "@babel/eslint-parser": "npm:^7.27.5"
-    "@stylistic/eslint-plugin-js": "npm:3.1.0"
+    "@stylistic/eslint-plugin-js": "npm:^4.4.1"
     bcryptjs: "npm:^3.0.2"
     body-parser: "npm:^2.2.0"
     browserify: "npm:^17.0.1"
@@ -5269,7 +5296,7 @@ __metadata:
     eslint-plugin-mocha: "npm:^11.1.0"
     eslint-plugin-n: "npm:^17.20.0"
     eslint-plugin-security: "npm:^3.0.1"
-    express: "npm:4.21.2"
+    express: "npm:5.1.0"
     express-session: "npm:^1.18.1"
     grunt: "npm:^1.6.1"
     grunt-browserify: "npm:^6.0.0"
@@ -5295,8 +5322,8 @@ __metadata:
     sinon: "npm:^21.0.0"
     sinon-chai: "npm:3.7.0"
     stable: "npm:^0.1.8"
-    strong-error-handler: "npm:4.0.8"
-    strong-globalize: "npm:6.0.5"
+    strong-error-handler: "npm:^5.0.20"
+    strong-globalize: "npm:^6.0.6"
     strong-remoting: "github:perkd/strong-remoting#semver:^3.20.2"
     strong-task-emitter: "npm:^0.0.8"
     supertest: "npm:^7.1.1"
@@ -5909,6 +5936,13 @@ __metadata:
   version: 1.0.0
   resolution: "negotiator@npm:1.0.0"
   checksum: 10c0/4c559dd52669ea48e1914f9d634227c561221dd54734070791f999c52ed0ff36e437b2e07d5c1f6e32909fc625fe46491c16e4a8f0572567d4dd15c3a4fda04b
+  languageName: node
+  linkType: hard
+
+"neo-async@npm:^2.6.2":
+  version: 2.6.2
+  resolution: "neo-async@npm:2.6.2"
+  checksum: 10c0/c2f5a604a54a8ec5438a342e1f356dff4bc33ccccdb6dc668d94fe8e5eccfc9d2c2eea6064b0967a767ba63b33763f51ccf2cd2441b461a7322656c1f06b3f5d
   languageName: node
   linkType: hard
 
@@ -7483,6 +7517,13 @@ __metadata:
   languageName: node
   linkType: hard
 
+"source-map@npm:^0.6.1":
+  version: 0.6.1
+  resolution: "source-map@npm:0.6.1"
+  checksum: 10c0/ab55398007c5e5532957cb0beee2368529618ac0ab372d789806f5718123cc4367d57de3904b4e6a4170eb5a0b0f41373066d02ca0735a0c4d75c7d328d3e011
+  languageName: node
+  linkType: hard
+
 "source-map@npm:~0.5.3":
   version: 0.5.7
   resolution: "source-map@npm:0.5.7"
@@ -7786,38 +7827,22 @@ __metadata:
   languageName: node
   linkType: hard
 
-"strong-error-handler@npm:4.0.8":
-  version: 4.0.8
-  resolution: "strong-error-handler@npm:4.0.8"
+"strong-error-handler@npm:^5.0.20":
+  version: 5.0.20
+  resolution: "strong-error-handler@npm:5.0.20"
   dependencies:
     accepts: "npm:^1.3.8"
-    debug: "npm:^4.3.4"
-    ejs: "npm:^3.1.9"
+    debug: "npm:^4.4.1"
     fast-safe-stringify: "npm:^2.1.1"
-    http-status: "npm:^1.6.2"
-    js2xmlparser: "npm:^4.0.2"
-    strong-globalize: "npm:^6.0.5"
-  checksum: 10c0/4e2a9dab142476045eb2a92bf60eb19a3af47f6caca4eb7af8d5f3483705bcbedae1abdde99639b6524ba7018a93a98975aa2c017ac8d2882ec2286590468f62
+    handlebars: "npm:^4.7.8"
+    http-status: "npm:^1.8.1"
+    js2xmlparser: "npm:^5.0.0"
+    strong-globalize: "npm:^6.0.6"
+  checksum: 10c0/cc293a1fdaa35e9dc05ea4fe7d0e3125f1139915b1ed36b4163428e83e0202271a7e5377ab27f4a1d45fac9657419b621d67b2746c28902cf893d8744a8df947
   languageName: node
   linkType: hard
 
-"strong-globalize@npm:6.0.5":
-  version: 6.0.5
-  resolution: "strong-globalize@npm:6.0.5"
-  dependencies:
-    accept-language: "npm:^3.0.18"
-    debug: "npm:^4.2.0"
-    globalize: "npm:^1.6.0"
-    lodash: "npm:^4.17.20"
-    md5: "npm:^2.3.0"
-    mkdirp: "npm:^1.0.4"
-    os-locale: "npm:^5.0.0"
-    yamljs: "npm:^0.3.0"
-  checksum: 10c0/76abd9624086d416f9b449338636023daac14cee119608072b8bbfb0ee55e3686d88aa5cc2581e28bb7dcd6c14671d760fd7626ca2f88039bef029fd4f2b93c8
-  languageName: node
-  linkType: hard
-
-"strong-globalize@npm:6.0.6, strong-globalize@npm:^6.0.1, strong-globalize@npm:^6.0.5, strong-globalize@npm:^6.0.6":
+"strong-globalize@npm:6.0.6, strong-globalize@npm:^6.0.1, strong-globalize@npm:^6.0.6":
   version: 6.0.6
   resolution: "strong-globalize@npm:6.0.6"
   dependencies:
@@ -8339,7 +8364,7 @@ __metadata:
   languageName: node
   linkType: hard
 
-"uglify-js@npm:^3.16.1":
+"uglify-js@npm:^3.1.4, uglify-js@npm:^3.16.1":
   version: 3.19.3
   resolution: "uglify-js@npm:3.19.3"
   bin:
@@ -8748,6 +8773,13 @@ __metadata:
   version: 1.2.5
   resolution: "word-wrap@npm:1.2.5"
   checksum: 10c0/e0e4a1ca27599c92a6ca4c32260e8a92e8a44f4ef6ef93f803f8ed823f486e0889fc0b93be4db59c8d51b3064951d25e43d434e95dc8c960cc3a63d65d00ba20
+  languageName: node
+  linkType: hard
+
+"wordwrap@npm:^1.0.0":
+  version: 1.0.0
+  resolution: "wordwrap@npm:1.0.0"
+  checksum: 10c0/7ed2e44f3c33c5c3e3771134d2b0aee4314c9e49c749e37f464bf69f2bcdf0cbf9419ca638098e2717cff4875c47f56a007532f6111c3319f557a2ca91278e92
   languageName: node
   linkType: hard
 
