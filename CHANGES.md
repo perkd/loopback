@@ -1,3 +1,107 @@
+2025-05-21, Version 3.34.1+
+============================
+
+ * feat: major dependency updates across the project (Young)
+
+ * feat: updated body-parser from ^1.20.3 to ^2.2.0 (Young)
+
+ * feat: updated express to 4.21.2 (pinned version) (Young)
+
+ * feat: updated nodemailer from ^6.10.0 to ^6.10.1 (Young)
+
+ * feat: updated strong-remoting from ^3.20.1 to ^3.20.2 (Young)
+
+ * chore: updated development dependencies to latest versions (Young)
+
+ * chore: updated Yarn package manager from 4.7.0 to 4.9.1 (Young)
+
+
+2025-03-05, Version 3.34.1
+===========================
+
+ * feat: replaced NYC with C8 for code coverage (Young)
+
+ * feat: added .c8rc.json configuration with 80% coverage thresholds (Young)
+
+ * feat: updated test script to use c8 mocha instead of nyc mocha (Young)
+
+ * feat: added report-coverage script for CI integration (Young)
+
+ * feat: added reinstall script for clean dependency installation (Young)
+
+ * chore: reorganized package.json structure with license and author info (Young)
+
+ * chore: updated eslint-plugin-n from ^17.15.1 to ^17.16.2 (Young)
+
+ * chore: updated Yarn package manager from 4.6.0 to 4.7.0 (Young)
+
+
+2025-03-01, Version 3.34.0
+===========================
+
+ * BREAKING CHANGE: removed async library from main dependencies (Young)
+
+ * BREAKING CHANGE: removed browser-based Karma testing framework (Young)
+
+ * BREAKING CHANGE: eliminated dual callback/promise support in core models (Young)
+
+ * feat: replaced complex Grunt-based testing with direct Mocha execution (Young)
+
+ * feat: modernized REST middleware - replaced async.eachSeries() with native async/await (Young)
+
+ * feat: converted Role model to promise-only API (Young)
+
+ * feat: modernized User model methods (verify, resetPassword, confirm, changePassword) (Young)
+
+ * feat: modernized ACL model methods (checkPermission, checkAccessForContext, resolvePrincipal) (Young)
+
+ * feat: enhanced Persisted model replication functionality with promise-based error handling (Young)
+
+ * feat: improved conflict resolution and bulk update operations (Young)
+
+ * chore: removed all Karma-related packages and dependencies (Young)
+
+ * chore: removed grunt-karma from Grunt tasks (Young)
+
+ * chore: updated test script from nyc grunt mocha-and-karma to direct mocha execution (Young)
+
+
+2025-02-21, Version 3.33.0+
+============================
+
+ * feat: updated Application model methods to promise-based patterns (Young)
+
+ * feat: converted checkAccess() and getApp() to promise-only (Young)
+
+
+2025-02-19, Version 3.33.0
+===========================
+
+ * BREAKING CHANGE: complete removal of Bluebird promise library (Young)
+
+ * BREAKING CHANGE: eliminated 200+ instances of createPromiseCallback utility (Young)
+
+ * BREAKING CHANGE: converted all model methods to promise-only APIs (Young)
+
+ * feat: replaced Bluebird Promise.pending() with native constructor in lib/utils.js (Young)
+
+ * feat: updated 58 test files to handle native promise rejection patterns (Young)
+
+ * feat: modernized promise chain patterns from .spread() to array destructuring (Young)
+
+ * feat: replaced callback-based patterns with async/await throughout codebase (Young)
+
+ * feat: improved error handling with consistent native promise rejection patterns (Young)
+
+ * chore: uninstalled Bluebird package and removed from 12 files (Young)
+
+ * chore: updated test helpers for native promise compatibility (Young)
+
+ * perf: eliminated external promise library overhead (Young)
+
+ * perf: reduced package footprint by removing Bluebird dependency (Young)
+
+
 2020-11-25, Version 3.28.0
 ==========================
 
