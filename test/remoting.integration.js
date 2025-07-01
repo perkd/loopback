@@ -233,6 +233,7 @@ describe('With model.settings.replaceOnPUT false', function() {
       const methods = getFormattedMethodsExcludingRelations(storeClass.methods);
 
       const expectedMethods = [
+        'findOrCreate(filter:object,data:object):storeWithReplaceOnPUTfalse POST /stores-updating/findOrCreate', // NOTE: Custom Perkd requirement
         'create(data:object:storeWithReplaceOnPUTfalse):storeWithReplaceOnPUTfalse POST /stores-updating',
         'patchOrCreate(data:object:storeWithReplaceOnPUTfalse):storeWithReplaceOnPUTfalse PUT /stores-updating',
         'patchOrCreate(data:object:storeWithReplaceOnPUTfalse):storeWithReplaceOnPUTfalse PATCH /stores-updating',

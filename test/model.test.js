@@ -748,6 +748,7 @@ describe.onServer('Remote Methods', function() {
         // this test was seeing this method (with all aliases) as public
         // 'destroyAll', 'deleteAll', 'remove',
         'create',
+        'findOrCreate', // NOTE: Custom Perkd requirement - deliberately exposed
         'upsert', 'updateOrCreate', 'patchOrCreate',
         'upsertWithWhere', 'patchOrCreateWithWhere',
         'exists',
