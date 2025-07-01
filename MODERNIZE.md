@@ -4,6 +4,19 @@ This document summarizes all significant changes made to the LoopBack repository
 
 ## 2025
 
+### July 1, 2025
+
+#### Custom Remote Method Enhancement - findOrCreate Exposure
+- **Date**: July 1, 2025
+- **Changes**: Enhanced PersistedModel to expose `findOrCreate` as a remote method
+  - **Custom Requirement**: Added `findOrCreate` remote method exposure in `lib/persisted-model.js`
+  - **API Enhancement**: Exposed `findOrCreate` at `POST /{model}/findOrCreate` endpoint
+  - **Method Signature**: `findOrCreate(filter:object, data:object)` returning `{data: Model, created: boolean}`
+  - **Test Updates**: Updated test expectations in `test/model.test.js` and `test/remoting.integration.js`
+  - **Documentation**: Added clear comments indicating this is a Perkd custom requirement
+- **Impact**: Provides REST API access to the `findOrCreate` functionality, differing from standard LoopBack behavior
+- **Note**: This is a **custom Perkd enhancement** not present in the original LoopBack specification
+
 ### May 21, 2025
 
 #### Dependency Updates and Package Manager Upgrade

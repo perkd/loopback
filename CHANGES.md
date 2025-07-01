@@ -1,3 +1,15 @@
+2025-07-01, Version 3.34.2+
+============================
+
+ * feat: exposed findOrCreate as remote method (custom Perkd requirement) (Young)
+
+ * feat: added findOrCreate remote method at POST /{model}/findOrCreate endpoint (Young)
+
+ * test: updated test expectations to accommodate custom findOrCreate exposure (Young)
+
+ * docs: documented custom findOrCreate enhancement in code comments (Young)
+
+
 2025-05-21, Version 3.34.1+
 ============================
 
