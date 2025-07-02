@@ -504,6 +504,32 @@ describe('app', function() {
 
       expect(steps).to.eql(['/a', '/b', '/scope']);
     });
+
+    it('handles wildcard patterns in paths for Express v5 compatibility', async function() {
+      const steps = [];
+      app.middlewareFromConfig(
+        function factory() {
+          return function(req, res, next) {
+            steps.push(req.originalUrl);
+            next();
+          };
+        },
+        {
+          phase: 'initial',
+          paths: ['/api/_m-*', '/api/Orders'],
+        },
+      );
+
+      const urls = ['/', '/api/_m-test', '/api/_m-something', '/api/Orders', '/api/other'];
+      for (const url of urls) {
+        await executeMiddlewareHandlers(app, url);
+      }
+
+      expect(steps).to.include('/api/_m-test');
+      expect(steps).to.include('/api/_m-something');
+      expect(steps).to.include('/api/Orders');
+      expect(steps).to.not.include('/api/other');
+    });
   });
 
   describe.onServer('.defineMiddlewarePhases(nameOrArray)', function() {
