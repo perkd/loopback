@@ -1,6 +1,6 @@
 {
   "name": "loopback",
-  "version": "3.34.2",
+  "version": "3.34.3",
   "description": "LoopBack: Open Source Framework for Node.js",
   "copyright.owner": "IBM Corp.",
   "license": "MIT",
@@ -39,6 +39,10 @@
     "coverage": "c8 report",
     "report-coverage": "c8 report --reporter=lcov && cat ./coverage/lcov.info | coveralls",
     "test": "c8 mocha test/**/*.js --exit --timeout 5000 --color --reporter spec",
+    "test:compatibility": "mocha test/express-compatibility.test.js --timeout 15000 --color --reporter spec",
+    "test:performance": "mocha test/middleware-performance.test.js --timeout 15000 --color --reporter spec",
+    "test:concurrency": "mocha test/middleware-concurrency.test.js --timeout 20000 --color --reporter spec",
+    "test:middleware": "npm run test:compatibility && npm run test:performance && npm run test:concurrency",
     "reinstall": "rm -rf node_modules/ && rm yarn.lock && yarn install"
   },
   "dependencies": {
@@ -74,7 +78,7 @@
     "cookie-parser": "^1.4.7",
     "coveralls": "^3.1.1",
     "dirty-chai": "^2.0.1",
-    "eslint": "^9.30.0",
+    "eslint": "^9.30.1",
     "eslint-config-loopback": "^13.1.0",
     "eslint-plugin-jsonc": "^2.20.1",
     "eslint-plugin-mocha": "^11.1.0",
