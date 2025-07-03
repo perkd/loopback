@@ -530,6 +530,31 @@ describe('app', function() {
       expect(steps).to.include('/api/Orders');
       expect(steps).to.not.include('/api/other');
     });
+
+    it('handles special regex characters in paths for Express v5 compatibility', async function() {
+      const steps = [];
+      app.middlewareFromConfig(
+        function factory() {
+          return function(req, res, next) {
+            steps.push(req.originalUrl);
+            next();
+          };
+        },
+        {
+          phase: 'initial',
+          paths: ['/api/special$!^(test)', '/api/normal'],
+        },
+      );
+
+      const urls = ['/', '/api/special$!^(test)', '/api/normal', '/api/other'];
+      for (const url of urls) {
+        await executeMiddlewareHandlers(app, url);
+      }
+
+      expect(steps).to.include('/api/special$!^(test)');
+      expect(steps).to.include('/api/normal');
+      expect(steps).to.not.include('/api/other');
+    });
   });
 
   describe.onServer('.defineMiddlewarePhases(nameOrArray)', function() {
