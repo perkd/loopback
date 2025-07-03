@@ -1,6 +1,6 @@
 {
   "name": "loopback",
-  "version": "3.34.3",
+  "version": "3.34.4",
   "description": "LoopBack: Open Source Framework for Node.js",
   "copyright.owner": "IBM Corp.",
   "license": "MIT",
@@ -56,7 +56,7 @@
     "inflection": "2.0.1",
     "isemail": "^3.2.0",
     "loopback-connector-remote": "^3.4.1",
-    "loopback-datasource-juggler": "github:perkd/loopback-datasource-juggler#semver:^5.2.0",
+    "loopback-datasource-juggler": "github:perkd/loopback-datasource-juggler#semver:^5.2.1",
     "loopback-filters": "^1.1.1",
     "loopback-phase": "3.4.0",
     "nodemailer": "^7.0.4",
@@ -70,7 +70,7 @@
     "underscore.string": "^3.3.6"
   },
   "devDependencies": {
-    "@babel/eslint-parser": "^7.27.5",
+    "@babel/eslint-parser": "^7.28.0",
     "@stylistic/eslint-plugin-js": "^4.4.1",
     "browserify": "^17.0.1",
     "c8": "^10.1.3",
