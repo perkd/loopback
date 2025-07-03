@@ -10,7 +10,7 @@
 'use strict';
 const crypto = require('node:crypto')
 const assert = require('node:assert')
-const CJSON = {stringify: require('canonical-json')}
+const CJSON = {stringify: require('fast-json-stable-stringify')}
 const debug = require('debug')('loopback:change')
 const loopback = require('../../lib/loopback')
 const { PersistedModel } = loopback
