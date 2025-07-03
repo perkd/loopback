@@ -1,5 +1,7 @@
-2025-07-02, Version 3.34.3
+2025-07-03, Version 3.34.3
 ============================
+
+ * **MAJOR**: Express v5 special character pattern compatibility fix - resolves "Unexpected ! at 1, expected END" and similar path-to-regexp boot errors (Young)
 
  * **MAJOR**: Express v5 wildcard pattern compatibility fix - resolves "Missing parameter name at 9" boot errors (Young)
 
