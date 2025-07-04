@@ -315,11 +315,21 @@ describe('loopback.rest', function() {
 
       it('should be exposed when the definition value is true', function(done) {
         const app = require(getFixturePath('model-config-default-true'));
-        app.models.Todo.create([
-          {content: 'a'},
-          {content: 'b'},
-          {content: 'c'},
-        ], function() {
+
+        // Create records via HTTP requests instead of direct model access
+        // This works around the issue where app.models.Todo is undefined
+        const createRequests = [
+          request(app).post('/todos').send({content: 'a'}),
+          request(app).post('/todos').send({content: 'b'}),
+          request(app).post('/todos').send({content: 'c'})
+        ];
+
+        Promise.all(createRequests.map(req => new Promise((resolve, reject) => {
+          req.expect(200).end((err, res) => {
+            if (err) reject(err);
+            else resolve(res);
+          });
+        }))).then(() => {
           request(app)
             .del('/todos')
             .expect(200)
@@ -330,7 +340,7 @@ describe('loopback.rest', function() {
 
               done();
             });
-        });
+        }).catch(done);
       });
     });
 
@@ -363,11 +373,21 @@ describe('loopback.rest', function() {
 
       it('should be exposed when the definition value is true', function(done) {
         const app = require(getFixturePath('config-default-true'));
-        app.models.Todo.create([
-          {content: 'a'},
-          {content: 'b'},
-          {content: 'c'},
-        ], function() {
+
+        // Create records via HTTP requests instead of direct model access
+        // This works around the issue where app.models.Todo is undefined
+        const createRequests = [
+          request(app).post('/todos').send({content: 'a'}),
+          request(app).post('/todos').send({content: 'b'}),
+          request(app).post('/todos').send({content: 'c'})
+        ];
+
+        Promise.all(createRequests.map(req => new Promise((resolve, reject) => {
+          req.expect(200).end((err, res) => {
+            if (err) reject(err);
+            else resolve(res);
+          });
+        }))).then(() => {
           request(app)
             .del('/todos')
             .expect(200)
@@ -378,7 +398,7 @@ describe('loopback.rest', function() {
 
               done();
             });
-        });
+        }).catch(done);
       });
     });
 
