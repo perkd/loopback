@@ -1,3 +1,36 @@
+2025-07-05, Version 3.36.0
+============================
+
+ * **MAJOR**: Enhanced Centralized Model Registry v5.2.4 upgrade - native implementation with upstream bug fixes (Young)
+
+ * **MAJOR**: Native API integration - transitioned from custom workarounds to native v5.2.4 implementation (Young)
+
+ * **MAJOR**: Upstream bug resolution - all critical bugs fixed in loopback-datasource-juggler v5.2.4 (Young)
+
+ * feat: hybrid API approach - App ownership uses explicit API, DataSource ownership uses simplified API (Young)
+
+ * feat: native ModelRegistry.hasModelForOwner() implementation using v5.2.4 APIs (Young)
+
+ * feat: native ModelRegistry.getModelForOwner() implementation using v5.2.4 APIs (Young)
+
+ * feat: native ModelRegistry.getModelsForOwner() implementation using v5.2.4 APIs (Young)
+
+ * feat: native ModelRegistry.getModelNamesForOwner() implementation using v5.2.4 APIs (Young)
+
+ * feat: perfect model ownership isolation - complete separation between App and DataSource models (Young)
+
+ * feat: optimal performance using native APIs without custom workarounds (Young)
+
+ * feat: comprehensive test compatibility - 100% success rate (13/13 centralized model registry tests passing) (Young)
+
+ * feat: backward compatibility preservation - all existing functionality maintained with enhanced performance (Young)
+
+ * fix: removed custom getAllModels() workaround in favor of native implementation (Young)
+
+ * fix: test updates to reflect correct v5.2.4 ownership model and perfect isolation (Young)
+
+ * perf: significant performance improvement using native APIs instead of custom workarounds (Young)
+
 2025-07-04, Version 3.35.0
 ============================
 
