@@ -4,7 +4,6 @@ const loopback = require('../');
 const expect = require('./helpers/expect');
 const debug = require('debug')('test');
 const debugTest = require('debug')('test:replication');
-const extend = require('util')._extend;
 
 describe('Replication over REST', function() {
 
@@ -1026,7 +1025,7 @@ describe('Replication over REST', function() {
   }
 
   function createRemoteModelOpts(modelOpts) {
-    return extend({}, modelOpts, {
+    return Object.assign({}, modelOpts, {
       // Disable change tracking, server will call rectify/rectifyAll
       // after each change, because it's tracking the changes too.
       trackChanges: false,

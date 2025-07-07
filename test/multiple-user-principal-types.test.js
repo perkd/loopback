@@ -7,7 +7,6 @@
 const expect = require('./helpers/expect');
 const loopback = require('../');
 const ctx = require('../lib/access-context');
-const extend = require('util')._extend;
 const AccessContext = ctx.AccessContext;
 const Principal = ctx.Principal;
 const waitForEvent = require('./helpers/wait-for-event');
@@ -579,7 +578,7 @@ describe('Multiple users with custom principalType', function() {
             },
           },
         };
-        options = extend(baseOptions, options);
+        options = Object.assign(baseOptions, options);
         const Model = app.registry.createModel(
           name,
           {content: String, senderType: String},

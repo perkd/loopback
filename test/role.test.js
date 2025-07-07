@@ -7,7 +7,6 @@
 const assert = require('node:assert');
 const sinon = require('sinon');
 const loopback = require('../index');
-const extend = require('util')._extend;
 const expect = require('./helpers/expect');
 
 describe('role model', function() {
@@ -567,7 +566,7 @@ describe('role model', function() {
           },
         },
       };
-      options = extend(baseOptions, options);
+      options = Object.assign(baseOptions, options);
       const Model = app.registry.createModel(
         name,
         {content: String},

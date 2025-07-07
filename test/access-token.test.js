@@ -8,7 +8,6 @@ const assert = require('node:assert');
 const request = require('supertest');
 const session = require('express-session');
 const cookieParser = require('cookie-parser');
-const extend = require('util')._extend;
 const LoopBackContext = require('loopback-context');
 const contextMiddleware = require('loopback-context').perRequest;
 const expect = require('./helpers/expect');
@@ -572,7 +571,7 @@ describe('AccessToken', function() {
     })
 
     function mockRequest(opts) {
-      return extend(
+      return Object.assign(
         {
           method: 'GET',
           url: '/a-test-path',
@@ -723,7 +722,7 @@ function createTestAppAndRequest(testToken, settings) {
 function createTestApp(testToken, settings = {}) {
   const appSettings = settings.app || {}
   const modelSettings = settings.model || {}
-  const tokenSettings = extend({
+  const tokenSettings = Object.assign({
     model: Token,
     currentUserLiteral: 'me',
   }, settings.token);
