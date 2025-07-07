@@ -5070,9 +5070,9 @@ __metadata:
   languageName: node
   linkType: hard
 
-"loopback-datasource-juggler@github:perkd/loopback-datasource-juggler#semver:^5.2.4":
-  version: 5.2.4
-  resolution: "loopback-datasource-juggler@https://github.com/perkd/loopback-datasource-juggler.git#commit=1f849de1a9f7c0e64d14db851f3d4e22744bc0d7"
+"loopback-datasource-juggler@github:perkd/loopback-datasource-juggler#semver:^5.2.5":
+  version: 5.2.5
+  resolution: "loopback-datasource-juggler@https://github.com/perkd/loopback-datasource-juggler.git#commit=829d9e61e92b8132b63a4a343a7c9119b0cd3277"
   dependencies:
     async: "npm:^3.2.6"
     change-case: "npm:5.4.4"
@@ -5087,7 +5087,7 @@ __metadata:
     qs: "npm:^6.14.0"
     strong-globalize: "npm:^6.0.6"
     uuid: "npm:^11.1.0"
-  checksum: 10c0/797beb23282cfefa41842b4cf72fd095b1db2f2cc9fe08b8a8bebaaaee0876cb076aad511f660bf70b939bdc29a8a90a497ade0a92b53aa2ff49c9e1732001a3
+  checksum: 10c0/6718164b8e4f1566abf8934565bd0b64132505c390cb9c4d1bf783d9d39902a51dea3aa9aaf9419b82382d0c7f4b7075d1bfd46e2fa008ee94a5cc72d6fc8133
   languageName: node
   linkType: hard
 
@@ -5178,11 +5178,11 @@ __metadata:
     loopback-boot: "npm:^3.3.1"
     loopback-connector-remote: "npm:^3.4.1"
     loopback-context: "npm:3.5.2"
-    loopback-datasource-juggler: "github:perkd/loopback-datasource-juggler#semver:^5.2.4"
+    loopback-datasource-juggler: "github:perkd/loopback-datasource-juggler#semver:^5.2.5"
     loopback-filters: "npm:^1.1.1"
     loopback-phase: "npm:3.4.0"
     mocha: "npm:^11.7.1"
-    nodemailer: "npm:^7.0.4"
+    nodemailer: "npm:^7.0.5"
     nodemailer-direct-transport: "npm:^3.3.2"
     nodemailer-stub-transport: "npm:^1.1.0"
     serve-favicon: "npm:^2.5.1"
@@ -5864,10 +5864,10 @@ __metadata:
   languageName: node
   linkType: hard
 
-"nodemailer@npm:^7.0.4":
-  version: 7.0.4
-  resolution: "nodemailer@npm:7.0.4"
-  checksum: 10c0/ea6e1ed581f9f5519017430105eb37077e8a028805c6227166aefcaa1fd035063fd4dec84f535408b52bdf7a952e79ade66f14d1cf2fbf98790050d8161934d6
+"nodemailer@npm:^7.0.5":
+  version: 7.0.5
+  resolution: "nodemailer@npm:7.0.5"
+  checksum: 10c0/8fcd417a5dc6cdde4193c3f27c8ae07f6998527578c1e70adfa5f2f00121471fcaa14abbf26b2a8c513ac8505c956f437aa2c2a693606eb0e8c68bc712698fa7
   languageName: node
   linkType: hard
 
