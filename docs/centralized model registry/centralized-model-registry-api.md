@@ -194,7 +194,7 @@ modelNames.forEach(name => {
 
 ---
 
-### hasModelForOwner(modelName, owner)
+### hasModelForOwner(owner, modelName)
 
 **✅ IMPLEMENTED** - Checks if a specific model exists and belongs to the specified owner with automatic owner type detection.
 
@@ -546,17 +546,17 @@ DataSource.prototype.define = function(className, properties, settings) {
 // All methods validate parameters
 ModelRegistry.getModelsForOwner(null, 'dataSource'); // Returns []
 ModelRegistry.getModelsForOwner(dataSource, 'invalid'); // Returns []
-ModelRegistry.hasModelForOwner('', dataSource, 'dataSource'); // Returns false
+ModelRegistry.hasModelForOwner(dataSource, '', 'dataSource'); // Returns false
 ```
 
 #### Missing Models
 
 ```javascript
 // Methods handle missing models gracefully
-const model = ModelRegistry.getModelForOwner('NonExistent', dataSource, 'dataSource');
+const model = ModelRegistry.getModelForOwner(dataSource, 'NonExistent', 'dataSource');
 console.log(model); // undefined (not an error)
 
-const hasModel = ModelRegistry.hasModelForOwner('NonExistent', dataSource, 'dataSource');
+const hasModel = ModelRegistry.hasModelForOwner(dataSource, 'NonExistent', 'dataSource');
 console.log(hasModel); // false (not an error)
 ```
 
