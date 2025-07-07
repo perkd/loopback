@@ -6,6 +6,66 @@ This document summarizes all significant changes made to the LoopBack repository
 
 ### July 7, 2025
 
+#### Node.js util._extend() Deprecation Fix - DEP0060 Resolution
+- **Date**: July 7, 2025
+- **Changes**: **DEPRECATION FIX** - Complete elimination of deprecated `util._extend()` usage throughout LoopBack codebase
+  - **Deprecation Status**: Resolved DEP0060 deprecation warnings from Node.js
+  - **Modernization**: Replaced all `util._extend()` calls with ES6 `Object.assign()`
+  - **Files Modified**: `lib/configure-shared-methods.js`, `lib/model.js`, `lib/registry.js`, `lib/loopback.js`, `lib/server-app.js`, `lib/application.js`, and 4 test files
+  - **Compatibility**: No breaking changes - identical behavior with modern API
+
+  #### Technical Implementation:
+
+  - **configure-shared-methods.js**:
+    ```javascript
+    // Before (deprecated)
+    const util = require('util');
+    const extend = require('util')._extend;
+    util._extend(settings, remotingConfig.sharedMethods);
+
+    // After (modern)
+    Object.assign(settings, remotingConfig.sharedMethods);
+    ```
+
+  - **model.js** (7 usages replaced):
+    ```javascript
+    // Before (deprecated)
+    const extend = require('util')._extend;
+    options = extend({}, options);
+
+    // After (modern)
+    options = Object.assign({}, options);
+    ```
+
+  - **registry.js** (2 usages replaced):
+    ```javascript
+    // Before (deprecated)
+    const options = extend({}, config.options);
+
+    // After (modern)
+    const options = Object.assign({}, config.options);
+    ```
+
+  - **Additional lib files** (3 more files):
+    ```javascript
+    // loopback.js, server-app.js, application.js
+    // Before: const merge = require('util')._extend;
+    // After: Object.assign(app, proto);
+    ```
+
+  - **Test files** (4 files updated):
+    ```javascript
+    // test/role.test.js, test/replication.rest.test.js,
+    // test/multiple-user-principal-types.test.js, test/access-token.test.js
+    // All extend() calls replaced with Object.assign()
+    ```
+
+  #### Benefits:
+  - **Eliminated DEP0060 warnings** from LoopBack core codebase
+  - **Future-proofed** against potential Node.js removal of util._extend
+  - **Performance improvement** - Object.assign is generally faster
+  - **Modern JavaScript compliance** - uses ES6 standard instead of Node.js internal
+
 #### Centralized Model Registry v5.2.4 - Critical API Fixes & Performance Enhancements
 - **Date**: July 7, 2025
 - **Changes**: **CRITICAL FIXES** - Comprehensive resolution of API parameter order discrepancies and performance test enhancements

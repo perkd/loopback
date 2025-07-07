@@ -1,5 +1,7 @@
-2025-07-07, Version 3.36.1
+2025-07-07, Version 3.35.2
 ============================
+
+ * **DEPRECATION FIX**: Eliminated util._extend() usage - resolved DEP0060 deprecation warnings throughout LoopBack codebase (Young)
 
  * **CRITICAL**: Centralized Model Registry API parameter order fixes - resolved all parameter order discrepancies (Young)
 
@@ -27,7 +29,33 @@
 
  * docs: updated MODERNIZE.md with comprehensive API fix documentation and migration guidance (Young)
 
-2025-07-05, Version 3.36.0
+ * fix: replaced util._extend() with Object.assign() in lib/configure-shared-methods.js (Young)
+
+ * fix: replaced 7 instances of util._extend() with Object.assign() in lib/model.js (Young)
+
+ * fix: replaced 2 instances of util._extend() with Object.assign() in lib/registry.js (Young)
+
+ * modernize: eliminated all DEP0060 deprecation warnings from LoopBack core codebase (Young)
+
+ * modernize: future-proofed codebase against potential Node.js removal of util._extend (Young)
+
+ * fix: replaced util._extend() with Object.assign() in lib/loopback.js (Young)
+
+ * fix: replaced util._extend() with Object.assign() in lib/server-app.js (Young)
+
+ * fix: replaced util._extend() with Object.assign() in lib/application.js (Young)
+
+ * fix: replaced util._extend() with Object.assign() in test/role.test.js (Young)
+
+ * fix: replaced util._extend() with Object.assign() in test/replication.rest.test.js (Young)
+
+ * fix: replaced util._extend() with Object.assign() in test/multiple-user-principal-types.test.js (Young)
+
+ * fix: replaced util._extend() with Object.assign() in test/access-token.test.js (Young)
+
+ * test: verified complete elimination of DEP0060 deprecation warnings from LoopBack codebase (Young)
+
+2025-07-05, Version 3.35.1
 ============================
 
  * **MAJOR**: Enhanced Centralized Model Registry v5.2.3 upgrade - native implementation with upstream bug fixes (Young)
