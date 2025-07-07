@@ -5072,7 +5072,7 @@ __metadata:
 
 "loopback-datasource-juggler@github:perkd/loopback-datasource-juggler#semver:^5.2.4":
   version: 5.2.4
-  resolution: "loopback-datasource-juggler@https://github.com/perkd/loopback-datasource-juggler.git#commit=625b83e11bb42b001862e97d1176c28a0515445e"
+  resolution: "loopback-datasource-juggler@https://github.com/perkd/loopback-datasource-juggler.git#commit=1f849de1a9f7c0e64d14db851f3d4e22744bc0d7"
   dependencies:
     async: "npm:^3.2.6"
     change-case: "npm:5.4.4"
@@ -5087,7 +5087,7 @@ __metadata:
     qs: "npm:^6.14.0"
     strong-globalize: "npm:^6.0.6"
     uuid: "npm:^11.1.0"
-  checksum: 10c0/3e6dad61f58c6a3d498f1ef95651b17930c80358e99344878565c551f6f827c23465be7ef2d8c3a21b0b28538db1f1126b6571b018f468a455d84591ef4c2860
+  checksum: 10c0/797beb23282cfefa41842b4cf72fd095b1db2f2cc9fe08b8a8bebaaaee0876cb076aad511f660bf70b939bdc29a8a90a497ade0a92b53aa2ff49c9e1732001a3
   languageName: node
   linkType: hard
 
