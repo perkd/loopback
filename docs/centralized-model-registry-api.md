@@ -323,15 +323,15 @@ const globalUser = ModelRegistry.findModelByName('User'); // Less predictable
 
 **Signature:**
 ```javascript
-new ModelRegistryProxy(owner) → Proxy
+new ModelRegistryProxy(owner, ownerType) → Proxy
 ```
 
 **Parameters:**
 - `owner` (Object, required): The owner instance (DataSource or App)
-- **Note**: Owner type is automatically detected (simplified API)
+- `ownerType` (String, required): The type of owner ('dataSource' or 'app')
 
 **Returns:**
-- Proxy object that behaves like a regular JavaScript object with O(1) performance
+- Proxy object that behaves like a regular JavaScript object with enhanced performance
 
 **Examples:**
 ```javascript
@@ -341,30 +341,37 @@ const dataSource = new DataSource('memory');
 const User = dataSource.define('User', { name: 'string' });
 
 // Create proxy manually (usually done automatically by DataSource)
-const proxy = new ModelRegistryProxy(dataSource);
+const proxy = new ModelRegistryProxy(dataSource, 'dataSource');
 
-// Access models through proxy with O(1) performance
+// Access models through proxy with enhanced performance
 console.log(proxy.User === User); // true
 console.log(Object.keys(proxy)); // ['User']
 
-// Perfect isolation between DataSources
+// Effective isolation between DataSources
 const dataSource2 = new DataSource('memory');
-const proxy2 = new ModelRegistryProxy(dataSource2);
+const proxy2 = new ModelRegistryProxy(dataSource2, 'dataSource');
 
 console.log(Object.keys(proxy2)); // [] (isolated from dataSource)
 ```
 
 **✅ Error Handling (Robust):**
 ```javascript
-// Invalid owner (graceful handling)
+// Invalid owner (throws error)
 try {
-  new ModelRegistryProxy(null);
+  new ModelRegistryProxy(null, 'dataSource');
 } catch (error) {
   console.log(error.message); // "ModelRegistryProxy requires an owner object"
 }
 
-// Automatic owner type detection (no more ownerType parameter needed)
-const proxy = new ModelRegistryProxy(dataSource); // Auto-detects DataSource
+// Invalid owner type (throws error)
+try {
+  new ModelRegistryProxy(dataSource, 'invalid');
+} catch (error) {
+  console.log(error.message); // "ModelRegistryProxy requires ownerType to be "dataSource" or "app""
+}
+
+// Correct usage
+const proxy = new ModelRegistryProxy(dataSource, 'dataSource');
 ```
 
 ### ✅ Supported Operations (100% Compatible)
@@ -560,7 +567,13 @@ console.log(hasModel); // false (not an error)
 try {
   new ModelRegistryProxy(null, 'dataSource');
 } catch (error) {
-  // Error thrown immediately
+  console.log(error.message); // "ModelRegistryProxy requires an owner object"
+}
+
+try {
+  new ModelRegistryProxy(dataSource, 'invalid');
+} catch (error) {
+  console.log(error.message); // "ModelRegistryProxy requires ownerType to be "dataSource" or "app""
 }
 ```
 

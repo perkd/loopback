@@ -424,6 +424,13 @@ The ModelRegistryProxy uses JavaScript's Proxy API to intercept all property acc
 ```javascript
 class ModelRegistryProxy {
   constructor(owner, ownerType) {
+    if (!owner) {
+      throw new Error('ModelRegistryProxy requires an owner object');
+    }
+    if (!ownerType || (ownerType !== 'dataSource' && ownerType !== 'app')) {
+      throw new Error('ModelRegistryProxy requires ownerType to be "dataSource" or "app"');
+    }
+
     return new Proxy(this, {
       get(target, prop) {
         // Handle special properties (length, toString, etc.)
@@ -431,19 +438,19 @@ class ModelRegistryProxy {
         // Handle Object methods (keys, values, entries)
         // Default: return model by name
       },
-      
+
       set(target, prop, value) {
         // Register model with ownership relationship
       },
-      
+
       has(target, prop) {
         // Check if model exists for this owner
       },
-      
+
       ownKeys(target) {
         // Return model names for enumeration
       },
-      
+
       getOwnPropertyDescriptor(target, prop) {
         // Provide property descriptors for models
       }
@@ -478,7 +485,7 @@ Object.defineProperty(DataSource.prototype, 'models', {
 ### Package Requirements
 
 - **loopback-datasource-juggler**: Version 5.2.4 or higher
-- **Node.js**: Version 14.x or higher
+- **Node.js**: Version 20.x or higher (as per package.json engines)
 - **Existing LoopBack applications**: Full backward compatibility
 
 ### Integration Steps
@@ -543,13 +550,13 @@ console.log(ModelRegistry.findModelByName('User')); // Same storage
 **Owner-Aware Model Queries:**
 ```javascript
 // Get all models for a specific DataSource
-const dsModels = ModelRegistry.getModelsForOwner(dataSource);
+const dsModels = ModelRegistry.getModelsForOwner(dataSource, 'dataSource');
 
 // Check model ownership
-const belongsToDS = ModelRegistry.hasModelForOwner(dataSource, 'User');
+const belongsToDS = ModelRegistry.hasModelForOwner('User', dataSource, 'dataSource');
 
 // Get model with ownership validation
-const UserModel = ModelRegistry.getModelForOwner(dataSource, 'User');
+const UserModel = ModelRegistry.getModelForOwner('User', dataSource, 'dataSource');
 ```
 
 **Multi-DataSource Scenarios:**
@@ -647,11 +654,9 @@ new ModelRegistryProxy(owner, ownerType)
 
 **Parameters:**
 - `owner` (Object): The owner instance (DataSource or App)
-- `ownerType` (String): Either 'dataSource' or 'app' (required)
+- `ownerType` (String): Either 'dataSource' or 'app'
 
 **Returns:** Proxy object that behaves like a regular object
-
-**Note:** Both parameters are required. The constructor validates that `ownerType` is either 'dataSource' or 'app'.
 
 #### Supported Operations
 
@@ -948,7 +953,7 @@ function findUserModel(dataSources) {
 // Use owner-aware queries
 function findUserModel(dataSources) {
   for (const ds of dataSources) {
-    const model = ModelRegistry.getModelForOwner(ds, 'User');
+    const model = ModelRegistry.getModelForOwner('User', ds, 'dataSource');
     if (model) return model;
   }
 }
