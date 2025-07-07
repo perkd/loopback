@@ -122,8 +122,8 @@ describe('Centralized Model Registry Integration', function() {
       // Create DataSource-owned models using dataSource.define() (not app.model())
       const User = dataSource.define('User', { name: 'string' });
 
-      const hasUser = ModelRegistry.hasModelForOwner('User', dataSource, 'dataSource');
-      const hasProduct = ModelRegistry.hasModelForOwner('Product', dataSource, 'dataSource');
+      const hasUser = ModelRegistry.hasModelForOwner(dataSource, 'User', 'dataSource');
+      const hasProduct = ModelRegistry.hasModelForOwner(dataSource, 'Product', 'dataSource');
 
       expect(hasUser).to.be.true;
       expect(hasProduct).to.be.false;
@@ -133,8 +133,8 @@ describe('Centralized Model Registry Integration', function() {
       // Create DataSource-owned models using dataSource.define() (not app.model())
       const User = dataSource.define('User', { name: 'string' });
 
-      const foundUser = ModelRegistry.getModelForOwner('User', dataSource, 'dataSource');
-      const foundProduct = ModelRegistry.getModelForOwner('Product', dataSource, 'dataSource');
+      const foundUser = ModelRegistry.getModelForOwner(dataSource, 'User', 'dataSource');
+      const foundProduct = ModelRegistry.getModelForOwner(dataSource, 'Product', 'dataSource');
 
       expect(foundUser).to.equal(User);
       expect(foundProduct).to.be.undefined;
@@ -151,6 +151,32 @@ describe('Centralized Model Registry Integration', function() {
       const modelNames = appModels.map(m => m.modelName);
 
       expect(modelNames).to.include.members(['User', 'Product']);
+    });
+
+    it('should verify API parameter order consistency', function() {
+      // Create DataSource-owned model
+      const User = dataSource.define('User', { name: 'string' });
+
+      // Test simplified API (owner, modelName)
+      const foundUser1 = ModelRegistry.getModelForOwner(dataSource, 'User');
+      const hasUser1 = ModelRegistry.hasModelForOwner(dataSource, 'User');
+
+      expect(foundUser1).to.equal(User);
+      expect(hasUser1).to.be.true;
+
+      // Test explicit API (owner, modelName, ownerType)
+      const foundUser2 = ModelRegistry.getModelForOwner(dataSource, 'User', 'dataSource');
+      const hasUser2 = ModelRegistry.hasModelForOwner(dataSource, 'User', 'dataSource');
+
+      expect(foundUser2).to.equal(User);
+      expect(hasUser2).to.be.true;
+
+      // Test non-existent model
+      const foundProduct = ModelRegistry.getModelForOwner(dataSource, 'Product');
+      const hasProduct = ModelRegistry.hasModelForOwner(dataSource, 'Product');
+
+      expect(foundProduct).to.be.undefined;
+      expect(hasProduct).to.be.false;
     });
   });
 
