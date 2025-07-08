@@ -1,4 +1,4 @@
-# Centralized Model Registry API Reference (v5.2.4)
+# Centralized Model Registry API Reference (v5.2.6)
 
 > **✅ STATUS: IMPLEMENTED AND FUNCTIONAL**
 > **📊 Test Coverage: 32/32 centralized registry tests passing (100%)**

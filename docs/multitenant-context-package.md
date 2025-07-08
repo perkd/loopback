@@ -161,12 +161,52 @@ When context is accessed outside of proper AsyncLocalStorage boundaries, the lib
 - **Zero Overhead**: No performance impact when used within proper context boundaries
 - **Test Performance**: < 1ms overhead per context operation (0.032ms average in benchmarks)
 
+## Import Patterns & Method Access
+
+This library provides both **static methods** (class-level) and **instance methods**. Understanding how to access each type is crucial for correct usage.
+
+### Import Options
+
+```typescript
+// Option 1: Named import (recommended)
+import { Context } from '@perkd/multitenant-context';
+import { TENANT, USER } from '@perkd/multitenant-context/types';
+
+// Option 2: Default import
+import Context from '@perkd/multitenant-context';
+import { TENANT, USER } from '@perkd/multitenant-context/types';
+```
+
+### Method Access Patterns
+
+```typescript
+// For STATIC methods (NEW in v0.7.2), access via constructor:
+const ContextClass = Context.constructor;
+
+// Static methods - ideal for testing and background jobs
+await ContextClass.withTenant('tenant-code', async () => {
+  console.log('Current tenant:', Context.tenant);
+});
+
+const testContext = ContextClass.createTestContext({ [TENANT]: 'test' });
+const currentTenant = ContextClass.getCurrentTenant();
+const validation = ContextClass.validateContext();
+
+// For INSTANCE methods, use Context directly:
+await Context.runInContext({ [TENANT]: 'tenant-code' }, async () => {
+  console.log('Current tenant:', Context.tenant);
+});
+
+const context = Context.createContext({ [TENANT]: 'tenant-code' });
+const currentContext = Context.getCurrentContext();
+```
+
 ## Basic Usage
 
 ```typescript
 import { Context, TENANT, USER } from '@perkd/multitenant-context';
 
-// Run code within a specific tenant context
+// Method 1: Using instance method (traditional approach)
 await Context.runInContext({
   [TENANT]: 'my-tenant',
   [USER]: { id: 'user-123', username: 'john.doe' }
@@ -175,8 +215,19 @@ await Context.runInContext({
   console.log(Context.tenant); // 'my-tenant'
 
   await someAsyncOperation();
-  
+
   // Context is still preserved here
+  console.log(Context.tenant); // 'my-tenant'
+});
+
+// Method 2: Using static method (NEW in v0.7.2 - ideal for testing)
+const ContextClass = Context.constructor;
+await ContextClass.withTenant('my-tenant', async () => {
+  // Set additional context if needed
+  Context.user = { id: 'user-123', username: 'john.doe' };
+
+  console.log(Context.tenant); // 'my-tenant'
+  await someAsyncOperation();
   console.log(Context.tenant); // 'my-tenant'
 });
 ```
@@ -193,15 +244,24 @@ import assert from 'node:assert';
 import Context from '@perkd/multitenant-context';
 import { TENANT, USER } from '@perkd/multitenant-context/types';
 
-// Create test contexts with reliable propagation
+// Create test contexts with reliable propagation (instance method)
 const testContext = Context.createContext({
   [TENANT]: 'test-tenant',
   [USER]: { id: 'test-user', username: 'testuser' },
   customData: { testFlag: true }
 });
 
-// Run tests with specific tenant context
+// Method 1: Run tests with specific tenant context (instance method)
 await Context.runInContext({ [TENANT]: 'test-tenant' }, async () => {
+  // All operations here run with 'test-tenant' context
+  const result = await yourBusinessLogic();
+  assert.strictEqual(Context.tenant, 'test-tenant');
+  return result;
+});
+
+// Method 2: Using static withTenant method (NEW in v0.7.2)
+const ContextClass = Context.constructor;
+await ContextClass.withTenant('test-tenant', async () => {
   // All operations here run with 'test-tenant' context
   const result = await yourBusinessLogic();
   assert.strictEqual(Context.tenant, 'test-tenant');
@@ -209,19 +269,68 @@ await Context.runInContext({ [TENANT]: 'test-tenant' }, async () => {
 });
 ```
 
+### Static vs Instance Methods - Important Usage Guide
+
+**⚠️ IMPORTANT**: Static methods require accessing the constructor, not the Context instance directly.
+
+```typescript
+import { Context } from '@perkd/multitenant-context';
+// OR: import Context from '@perkd/multitenant-context';
+
+// Access static methods via constructor
+const ContextClass = Context.constructor;
+
+// ✅ CORRECT: Static method usage
+await ContextClass.withTenant('tenant-code', async () => {
+  console.log('Current tenant:', Context.tenant);
+});
+
+const testContext = ContextClass.createTestContext({
+  [TENANT]: 'test-tenant',
+  customData: { test: true }
+});
+
+const currentTenant = ContextClass.getCurrentTenant();
+const validation = ContextClass.validateContext();
+
+// ✅ CORRECT: Instance method usage (direct on Context)
+await Context.runInContext({ [TENANT]: 'tenant-code' }, async () => {
+  console.log('Current tenant:', Context.tenant);
+});
+
+const context = Context.createContext({ [TENANT]: 'tenant-code' });
+const currentContext = Context.getCurrentContext();
+
+// ❌ WRONG: This will be undefined
+// Context.withTenant('tenant', fn) // undefined!
+// Context.createTestContext(values) // undefined!
+```
+
 ### Context Validation and Debugging
 
 ```typescript
-// Get current context and validate
+// Get current context and validate (instance method)
 const currentContext = Context.getCurrentContext();
 if (currentContext) {
   console.log('Current tenant:', currentContext[TENANT]);
   console.log('Context properties:', Object.keys(currentContext));
 }
 
-// Get current tenant reliably
+// Get current tenant reliably (instance property)
 const currentTenant = Context.tenant;
 // Returns tenant string or 'trap' if no context
+
+// NEW: Enhanced validation using static methods
+const ContextClass = Context.constructor;
+
+// Get tenant reliably with static method
+const tenantFromStatic = ContextClass.getCurrentTenant();
+console.log('Current tenant (static):', tenantFromStatic);
+
+// Validate context state with detailed information
+const validation = ContextClass.validateContext();
+console.log('Context validation:', validation);
+// Returns: { valid: boolean, tenant: string, contextSize: number, ... }
 ```
 
 ### Testing Concurrent Context Isolation
@@ -531,11 +640,22 @@ The main class providing context management functionality.
 
 #### Static Methods
 
+**⚠️ Access via**: `const ContextClass = Context.constructor;` then use `ContextClass.methodName()`
+
 - `withContext(context, fn)`: Legacy compatibility method for running a function within a given context.
 - `withTenant(tenant, fn)`: **NEW** - Run a function with a specific tenant context (ideal for testing).
 - `createTestContext(values)`: **NEW** - Create a context optimized for testing environments.
 - `getCurrentTenant()`: **NEW** - Get the current tenant reliably (returns actual tenant or 'trap').
 - `validateContext()`: **NEW** - Validate and inspect the current context state with detailed information.
+
+**Example Usage:**
+```typescript
+const ContextClass = Context.constructor;
+await ContextClass.withTenant('tenant-code', () => { /* your code */ });
+const testContext = ContextClass.createTestContext({ [TENANT]: 'test' });
+const tenant = ContextClass.getCurrentTenant();
+const validation = ContextClass.validateContext();
+```
 
 #### Instance Methods & Properties
 
@@ -581,6 +701,25 @@ The library exports several type definitions for robust development:
 - `JwtPayload`: Type for JWT payload.
 
 ## Troubleshooting
+
+### Static Method "Not Available" Error
+
+**Problem**: `Context.withTenant is not a function` or similar errors with static methods.
+
+**Solution**: Static methods must be accessed via the constructor:
+
+```typescript
+// ❌ WRONG - This will be undefined
+Context.withTenant('tenant', fn)
+Context.createTestContext(values)
+Context.validateContext()
+
+// ✅ CORRECT - Access via constructor
+const ContextClass = Context.constructor;
+ContextClass.withTenant('tenant', fn)
+ContextClass.createTestContext(values)
+ContextClass.validateContext()
+```
 
 ### Context Loss in Async Operations
 
@@ -754,10 +893,23 @@ import assert from 'node:assert';
 import Context from '@perkd/multitenant-context';
 import { TENANT, USER } from '@perkd/multitenant-context/types';
 
+// Get access to static methods
+const ContextClass = Context.constructor;
+
 describe('Business Logic Tests', () => {
-  test('should process tenant data correctly', async () => {
-    // Run with specific tenant context
+  test('should process tenant data correctly (using instance method)', async () => {
+    // Method 1: Using instance method runInContext
     const result = await Context.runInContext({ [TENANT]: 'test-tenant' }, async () => {
+      const data = await fetchTenantData();
+      return processTenantData(data);
+    });
+
+    assert.strictEqual(result.tenantId, 'test-tenant');
+  });
+
+  test('should process tenant data correctly (using static method)', async () => {
+    // Method 2: Using static method withTenant (NEW in v0.7.2)
+    const result = await ContextClass.withTenant('test-tenant', async () => {
       const data = await fetchTenantData();
       return processTenantData(data);
     });
@@ -777,8 +929,8 @@ describe('Business Logic Tests', () => {
   });
 
   test('should handle complex context data', async () => {
-    // Create rich test context
-    const testContext = Context.createContext({
+    // Create rich test context using static method
+    const testContext = ContextClass.createTestContext({
       [TENANT]: 'complex-tenant',
       [USER]: { id: 'user-123', role: 'admin' },
       customData: { feature: 'enabled', version: '2.0' }
@@ -788,6 +940,17 @@ describe('Business Logic Tests', () => {
       assert.strictEqual(Context.tenant, 'complex-tenant');
       assert.strictEqual(Context.user?.id, 'user-123');
       assert.ok(testContext.customData);
+    });
+  });
+
+  test('should validate context state', async () => {
+    // Test context validation using static method
+    await ContextClass.withTenant('validation-tenant', async () => {
+      const validation = ContextClass.validateContext();
+
+      assert.strictEqual(validation.valid, true);
+      assert.strictEqual(validation.tenant, 'validation-tenant');
+      assert.ok(validation.contextSize > 0);
     });
   });
 });
@@ -847,12 +1010,12 @@ describe('Performance Tests', () => {
 
 ### Testing Utilities
 
-| Method | Purpose | Example |
-|--------|---------|---------|
-| `Context.withTenant(tenant, fn)` | **Static** - Run function with specific tenant | `await Context.withTenant('test', () => logic())` |
-| `Context.createTestContext(values)` | **Static** - Create test-optimized context | `Context.createTestContext({ [TENANT]: 'test' })` |
-| `Context.validateContext()` | **Static** - Inspect current context state | `const { valid, tenant } = Context.validateContext()` |
-| `Context.getCurrentTenant()` | **Static** - Get tenant reliably | `const tenant = Context.getCurrentTenant()` |
+| Method | Purpose | Correct Usage Example |
+|--------|---------|----------------------|
+| `ContextClass.withTenant(tenant, fn)` | **Static** - Run function with specific tenant | `const ContextClass = Context.constructor;`<br>`await ContextClass.withTenant('test', () => logic())` |
+| `ContextClass.createTestContext(values)` | **Static** - Create test-optimized context | `const ContextClass = Context.constructor;`<br>`ContextClass.createTestContext({ [TENANT]: 'test' })` |
+| `ContextClass.validateContext()` | **Static** - Inspect current context state | `const ContextClass = Context.constructor;`<br>`const { valid, tenant } = ContextClass.validateContext()` |
+| `ContextClass.getCurrentTenant()` | **Static** - Get tenant reliably | `const ContextClass = Context.constructor;`<br>`const tenant = ContextClass.getCurrentTenant()` |
 | `Context.runInContext(context, fn)` | **Instance** - Run function with specific context | `await Context.runInContext({ [TENANT]: 'test' }, () => logic())` |
 | `Context.createContext(values)` | **Instance** - Create context with values | `Context.createContext({ [TENANT]: 'test' })` |
 | `Context.getCurrentContext()` | **Instance** - Get current context object | `const context = Context.getCurrentContext()` |
