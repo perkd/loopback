@@ -14,7 +14,7 @@ const helpers = {
 };
 module.exports = helpers;
 
-const assert = require('assert');
+const assert = require('node:assert');
 const request = require('supertest');
 const chai = require('chai');
 const expect = chai.expect;

@@ -9,7 +9,7 @@ const lt = require('./helpers/loopback-testing-helper');
 const path = require('path');
 const SIMPLE_APP = path.join(__dirname, 'fixtures', 'simple-integration-app');
 const app = require(path.join(SIMPLE_APP, 'server/server.js'));
-const assert = require('assert');
+const assert = require('node:assert');
 const expect = require('./helpers/expect');
 
 describe('remoting - integration', function() {

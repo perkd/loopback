@@ -8,7 +8,7 @@ const path = require('path');
 const loopback = require('../..');
 const models = require('../fixtures/e2e/server/models');
 let TestModel = models.TestModel;
-const assert = require('assert');
+const assert = require('node:assert');
 
 let LocalTestModel = TestModel.extend('LocalTestModel');
 let RemoteTestModel = TestModel.extend('RemoteTestModel');

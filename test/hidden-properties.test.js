@@ -4,7 +4,7 @@
 // License text available at https://opensource.org/licenses/MIT
 
 'use strict';
-const assert = require('assert');
+const assert = require('node:assert');
 const loopback = require('../');
 const request = require('supertest');
 

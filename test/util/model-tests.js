@@ -4,7 +4,7 @@
 // License text available at https://opensource.org/licenses/MIT
 
 'use strict';
-const assert = require('assert');
+const assert = require('node:assert');
 const describe = require('./describe');
 const loopback = require('../../');
 const PersistedModel = loopback.PersistedModel;

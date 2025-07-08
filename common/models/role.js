@@ -6,7 +6,7 @@
 'use strict';
 const loopback = require('../../lib/loopback');
 const debug = require('debug')('loopback:security:role');
-const assert = require('assert');
+const assert = require('node:assert');
 const async = require('async');
 const utils = require('../../lib/utils');
 const ctx = require('../../lib/access-context');

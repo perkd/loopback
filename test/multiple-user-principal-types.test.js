@@ -4,13 +4,13 @@
 // License text available at https://opensource.org/licenses/MIT
 
 'use strict';
+const supertest = require('supertest');
 const expect = require('./helpers/expect');
 const loopback = require('../');
 const ctx = require('../lib/access-context');
 const AccessContext = ctx.AccessContext;
 const Principal = ctx.Principal;
 const waitForEvent = require('./helpers/wait-for-event');
-const supertest = require('supertest');
 const loggers = require('./helpers/error-loggers');
 const logServerErrorsOtherThan = loggers.logServerErrorsOtherThan;
 

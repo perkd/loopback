@@ -5,7 +5,7 @@
 
 'use strict';
 const loopback = require(('../'));
-const assert = require('assert');
+const assert = require('node:assert');
 const Application = loopback.Application;
 
 describe('Application', function() {

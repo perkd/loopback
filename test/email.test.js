@@ -6,7 +6,7 @@
 'use strict';
 const loopback = require('../');
 let MyEmail;
-const assert = require('assert');
+const assert = require('node:assert');
 const MailConnector = require('../lib/connectors/mail');
 
 describe('Email connector', function() {
