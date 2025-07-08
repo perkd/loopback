@@ -589,9 +589,9 @@ __metadata:
   linkType: hard
 
 "agent-base@npm:^7.1.0, agent-base@npm:^7.1.2":
-  version: 7.1.3
-  resolution: "agent-base@npm:7.1.3"
-  checksum: 10c0/6192b580c5b1d8fb399b9c62bf8343d76654c2dd62afcb9a52b2cf44a8b6ace1e3b704d3fe3547d91555c857d3df02603341ff2cb961b9cfe2b12f9f3c38ee11
+  version: 7.1.4
+  resolution: "agent-base@npm:7.1.4"
+  checksum: 10c0/c2c9ab7599692d594b6a161559ada307b7a624fa4c7b03e3afdb5a5e31cd0e53269115b620fcab024c5ac6a6f37fa5eb2e004f076ad30f5f7e6b8b671f7b35fe
   languageName: node
   linkType: hard
 
@@ -5070,9 +5070,9 @@ __metadata:
   languageName: node
   linkType: hard
 
-"loopback-datasource-juggler@github:perkd/loopback-datasource-juggler#semver:^5.2.5":
-  version: 5.2.5
-  resolution: "loopback-datasource-juggler@https://github.com/perkd/loopback-datasource-juggler.git#commit=829d9e61e92b8132b63a4a343a7c9119b0cd3277"
+"loopback-datasource-juggler@github:perkd/loopback-datasource-juggler#semver:^5.2.7":
+  version: 5.2.7
+  resolution: "loopback-datasource-juggler@https://github.com/perkd/loopback-datasource-juggler.git#commit=bbe8a71cd6bf7cb7f5f754c1b6041ca123a65cb8"
   dependencies:
     async: "npm:^3.2.6"
     change-case: "npm:5.4.4"
@@ -5087,7 +5087,7 @@ __metadata:
     qs: "npm:^6.14.0"
     strong-globalize: "npm:^6.0.6"
     uuid: "npm:^11.1.0"
-  checksum: 10c0/6718164b8e4f1566abf8934565bd0b64132505c390cb9c4d1bf783d9d39902a51dea3aa9aaf9419b82382d0c7f4b7075d1bfd46e2fa008ee94a5cc72d6fc8133
+  checksum: 10c0/612bb161c3d3d1404aa17cb94d906d42a0360b0314de7e4a8912bee0331306db253701c377ffd017caa599dc6101ee33cfc30f1947ced955c927d6889cb65c3c
   languageName: node
   linkType: hard
 
@@ -5178,7 +5178,7 @@ __metadata:
     loopback-boot: "npm:^3.3.1"
     loopback-connector-remote: "npm:^3.4.1"
     loopback-context: "npm:3.5.2"
-    loopback-datasource-juggler: "github:perkd/loopback-datasource-juggler#semver:^5.2.5"
+    loopback-datasource-juggler: "github:perkd/loopback-datasource-juggler#semver:^5.2.7"
     loopback-filters: "npm:^1.1.1"
     loopback-phase: "npm:3.4.0"
     mocha: "npm:^11.7.1"
@@ -5193,7 +5193,7 @@ __metadata:
     strong-globalize: "npm:^6.0.6"
     strong-remoting: "github:perkd/strong-remoting#semver:^3.20.3"
     strong-task-emitter: "npm:^0.0.8"
-    supertest: "npm:^7.1.1"
+    supertest: "npm:^7.1.3"
     uid2: "npm:1.0.0"
     underscore.string: "npm:^3.3.6"
     which: "npm:^5.0.0"
@@ -7737,9 +7737,9 @@ __metadata:
   languageName: node
   linkType: hard
 
-"superagent@npm:^10.2.1":
-  version: 10.2.1
-  resolution: "superagent@npm:10.2.1"
+"superagent@npm:^10.2.2":
+  version: 10.2.2
+  resolution: "superagent@npm:10.2.2"
   dependencies:
     component-emitter: "npm:^1.3.0"
     cookiejar: "npm:^2.1.4"
@@ -7750,17 +7750,17 @@ __metadata:
     methods: "npm:^1.1.2"
     mime: "npm:2.6.0"
     qs: "npm:^6.11.0"
-  checksum: 10c0/526e3716f765873fc2f98a00fe0c8cbfe57976c501a30486307eefe54a6a5e379a0adf2ca8b29d40bc33a34d6baf7814972b0398b6002445ca3b4af07487f090
+  checksum: 10c0/7a5203616a421591d20eeefc1ae39b68270d4ed05eb920f53cc5ee4682370e5190d01bde933158dbe0e217d889b145239f2115b8b14dcc1744f26486a0bf3699
   languageName: node
   linkType: hard
 
-"supertest@npm:^7.1.1":
-  version: 7.1.1
-  resolution: "supertest@npm:7.1.1"
+"supertest@npm:^7.1.3":
+  version: 7.1.3
+  resolution: "supertest@npm:7.1.3"
   dependencies:
     methods: "npm:^1.1.2"
-    superagent: "npm:^10.2.1"
-  checksum: 10c0/d5ca56e5a78b145bcfb44c0d9518bdcfce4657b62d0b4c37561c772a8a21b91a6a7c63832e73764484dfc32e4183e6e42028595d539028c05458e8d9867baf75
+    superagent: "npm:^10.2.2"
+  checksum: 10c0/3ca9ea4bf360ea79ecdd059fdb3bffcf7e10145b959913491a0fe36f17b54d09e22103e5d10dfc462bdb1f84de8794cf26b7eaf3d39de8326a8aad1c05fe9aaa
   languageName: node
   linkType: hard
 
