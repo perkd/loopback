@@ -583,7 +583,7 @@ describe('security ACLs', function() {
     ])
   });
 
-  it.skip('should handle property wildcards with specific access types', async function() {
+  it('should handle property wildcards with specific access types', async function() {
     const { ACL } = this
     
     await ACL.create({

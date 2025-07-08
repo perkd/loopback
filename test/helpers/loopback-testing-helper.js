@@ -35,6 +35,7 @@ _beforeEach.withApp = function(app) {
     this.put = _request.put;
     this.del = _request.del;
     this.patch = _request.patch;
+    this.head = _request.head;
 
     if (app.booting) {
       return app.once('booted', done);

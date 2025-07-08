@@ -819,12 +819,12 @@ describe('relations - integration', function() {
       expect(res.body.error.code).to.be.equal('MODEL_NOT_FOUND');
     })
 
-    it.skip('checks if an embedded model exists - ok', async function() {
+    it('checks if an embedded model exists - ok', async function() {
       const url = '/api/todo-lists/' + this.todoList.id + '/items/3'
       await this.head(url).expect(200)
     })
 
-    it.skip('checks if an embedded model exists - fail', async function() {
+    it('checks if an embedded model exists - fail', async function() {
       const url = '/api/todo-lists/' + this.todoList.id + '/items/2'
       await this.head(url).expect(404)
     })
@@ -1040,7 +1040,7 @@ describe('relations - integration', function() {
       await this.head(url).expect(200)
     })
 
-    it.skip('checks if an referenced model exists - fail', async function() {
+    it('checks if an referenced model exists - fail', async function() {
       let url = '/api/recipes/' + this.recipe.id + '/ingredients/';
       url += this.ingredient3;
 
