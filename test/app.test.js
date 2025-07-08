@@ -555,6 +555,45 @@ describe('app', function() {
       expect(steps).to.include('/api/normal');
       expect(steps).to.not.include('/api/other');
     });
+
+    it('handles special regex characters in direct middleware method for Express v5 compatibility', async function() {
+      const steps = [];
+
+      // Test the direct middleware method with paths containing special characters
+      app.middleware('initial', ['/api/special$!^(test)', '/api/normal'], function(req, res, next) {
+        steps.push(req.originalUrl);
+        next();
+      });
+
+      const urls = ['/', '/api/special$!^(test)', '/api/normal', '/api/other'];
+      for (const url of urls) {
+        await executeMiddlewareHandlers(app, url);
+      }
+
+      expect(steps).to.include('/api/special$!^(test)');
+      expect(steps).to.include('/api/normal');
+      expect(steps).to.not.include('/api/other');
+    });
+
+    it('handles exclamation mark in paths that caused the original error', async function() {
+      const steps = [];
+
+      // Test the specific pattern that was causing the "Unexpected ! at 10" error
+      // This simulates the pattern that loopback-component-explorer might use
+      // Using a more realistic path that contains special characters
+      app.middleware('initial', '/explorer$!^(test)', function(req, res, next) {
+        steps.push(req.originalUrl);
+        next();
+      });
+
+      const urls = ['/', '/explorer$!^(test)', '/api/other'];
+      for (const url of urls) {
+        await executeMiddlewareHandlers(app, url);
+      }
+
+      expect(steps).to.include('/explorer$!^(test)');
+      expect(steps).to.not.include('/api/other');
+    });
   });
 
   describe.onServer('.defineMiddlewarePhases(nameOrArray)', function() {
