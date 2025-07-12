@@ -484,6 +484,100 @@ describe('AccessToken', function() {
     expect(typeof Token.resolve).to.eql('function');
   });
 
+  describe('.resolve()', function() {
+
+    it('resolves valid existing token', async function() {
+      const token = await Token.resolve(this.token.id);
+      expect(token).to.be.an('object');
+      expect(token.id).to.equal(this.token.id);
+      expect(token.userId).to.equal(this.token.userId);
+    });
+
+    it('returns undefined when token does not exist', async function() {
+      const nonExistentId = 'non-existent-token-id-12345';
+      const token = await Token.resolve(nonExistentId);
+      expect(token).to.be.undefined;
+    });
+
+    it('throws error when token exists but is invalid (expired)', async function() {
+      // Create an expired token
+      const expiredToken = await Token.create({
+        userId: '123',
+        ttl: 1, // 1 second TTL
+      });
+
+      // Wait for token to expire
+      await new Promise(resolve => setTimeout(resolve, 1100));
+
+      try {
+        await Token.resolve(expiredToken.id);
+        throw new Error('Expected resolve to throw an error for expired token');
+      } catch (error) {
+        expect(error.message).to.match(/Invalid Access Token/);
+        expect(error.status).to.equal(401);
+        expect(error.statusCode).to.equal(401);
+        expect(error.code).to.equal('INVALID_TOKEN');
+      }
+    });
+
+    it('throws error when token exists but validation fails', async function() {
+      // Create a token with invalid TTL by bypassing validation
+      const invalidToken = new Token({
+        id: 'invalid-token-id',
+        userId: '123',
+        ttl: 0, // Invalid TTL (should not be 0)
+        created: new Date()
+      });
+      await invalidToken.save({validate: false}); // Skip validation during save
+
+      try {
+        await Token.resolve(invalidToken.id);
+        throw new Error('Expected resolve to throw an error for invalid token');
+      } catch (error) {
+        // The validation error should be propagated as-is, not converted to "Invalid Access Token"
+        expect(error.message).to.match(/token\.ttl must be not be 0/);
+      }
+    });
+
+    it('propagates database errors without masking them', async function() {
+      // Mock findById to throw a database error
+      const originalFindById = Token.findById;
+      const dbError = new Error('Database connection failed');
+      dbError.code = 'DB_CONNECTION_ERROR';
+
+      Token.findById = async function() {
+        throw dbError;
+      };
+
+      try {
+        await Token.resolve('any-id');
+        throw new Error('Expected resolve to propagate database error');
+      } catch (error) {
+        expect(error.message).to.equal('Database connection failed');
+        expect(error.code).to.equal('DB_CONNECTION_ERROR');
+        expect(error.code).to.not.equal('INVALID_TOKEN');
+      } finally {
+        // Restore original method
+        Token.findById = originalFindById;
+      }
+    });
+
+    it('handles null token ID gracefully', async function() {
+      const token = await Token.resolve(null);
+      expect(token).to.be.undefined;
+    });
+
+    it('handles undefined token ID gracefully', async function() {
+      const token = await Token.resolve(undefined);
+      expect(token).to.be.undefined;
+    });
+
+    it('handles empty string token ID gracefully', async function() {
+      const token = await Token.resolve('');
+      expect(token).to.be.undefined;
+    });
+  });
+
   it('generates id automatically', function() {
     assert(this.token.id);
     assert.equal(this.token.id.length, 64);
