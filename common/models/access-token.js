@@ -161,19 +161,33 @@ module.exports = function(AccessToken) {
    * @return {Object} Resolved access token object
    */
   AccessToken.resolve = async function(id) {
+    // Handle invalid IDs early to avoid database errors
+    if (!id || id === '') {
+      return undefined
+    }
+
     try {
       const token = await this.findById(id)
-      if (!token) throw 'invalid'
+      if (!token) {
+        return undefined // Return undefined when token doesn't exist, don't throw error
+      }
 
       const isValid = await token.validate()
-      if (!isValid) throw 'invalid'
+      if (!isValid) {
+        const error = new Error(g.f('Invalid Access Token'))
+        error.status = error.statusCode = 401
+        error.code = 'INVALID_TOKEN'
+        throw error
+      }
       return token
     }
     catch (e) {
-      const error = new Error(g.f('Invalid Access Token'))
-      error.status = error.statusCode = 401
-      error.code = 'INVALID_TOKEN'
-      throw error
+      // If it's already an invalid token error, rethrow it
+      if (e.code === 'INVALID_TOKEN') {
+        throw e
+      }
+      // For other errors (like database errors), rethrow them as-is
+      throw e
     }
   }
 
