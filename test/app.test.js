@@ -546,12 +546,13 @@ describe('app', function() {
         },
       );
 
-      const urls = ['/', '/api/special$!^(test)', '/api/normal', '/api/other'];
+      const specialUrl = encodeURI('/api/special$!^(test)');
+      const urls = ['/', specialUrl, '/api/normal', '/api/other'];
       for (const url of urls) {
         await executeMiddlewareHandlers(app, url);
       }
 
-      expect(steps).to.include('/api/special$!^(test)');
+      expect(steps).to.include(specialUrl);
       expect(steps).to.include('/api/normal');
       expect(steps).to.not.include('/api/other');
     });
@@ -565,12 +566,13 @@ describe('app', function() {
         next();
       });
 
-      const urls = ['/', '/api/special$!^(test)', '/api/normal', '/api/other'];
+      const specialUrl = encodeURI('/api/special$!^(test)');
+      const urls = ['/', specialUrl, '/api/normal', '/api/other'];
       for (const url of urls) {
         await executeMiddlewareHandlers(app, url);
       }
 
-      expect(steps).to.include('/api/special$!^(test)');
+      expect(steps).to.include(specialUrl);
       expect(steps).to.include('/api/normal');
       expect(steps).to.not.include('/api/other');
     });
@@ -586,12 +588,13 @@ describe('app', function() {
         next();
       });
 
-      const urls = ['/', '/explorer$!^(test)', '/api/other'];
+      const specialUrl = encodeURI('/explorer$!^(test)');
+      const urls = ['/', specialUrl, '/api/other'];
       for (const url of urls) {
         await executeMiddlewareHandlers(app, url);
       }
 
-      expect(steps).to.include('/explorer$!^(test)');
+      expect(steps).to.include(specialUrl);
       expect(steps).to.not.include('/api/other');
     });
   });
