@@ -1,6 +1,6 @@
 {
   "name": "loopback",
-  "version": "3.35.6",
+  "version": "3.36.0",
   "description": "LoopBack: Open Source Framework for Node.js",
   "copyright.owner": "IBM Corp.",
   "license": "MIT",
@@ -43,10 +43,10 @@
     "test:performance": "mocha test/middleware-performance.test.js --timeout 15000 --color --reporter spec",
     "test:concurrency": "mocha test/middleware-concurrency.test.js --timeout 20000 --color --reporter spec",
     "test:middleware": "npm run test:compatibility && npm run test:performance && npm run test:concurrency",
-    "update": "ncu -u -x inflection -x is-docker -x chai -x sinon-chai",
+    "update": "ncu -u -x inflection -x is-docker -x chai -x sinon-chai -x dirty-chai",
     "reinstall": "rm -rf node_modules/ && rm yarn.lock && yarn install"
   },
- "repository": {
+  "repository": {
     "type": "git",
     "url": "https://github.com/strongloop/loopback"
   },
@@ -81,8 +81,8 @@
     "fast-json-stable-stringify": "^2.1.0",
     "inflection": "2.0.1",
     "isemail": "^3.2.0",
-    "loopback-connector-remote": "^3.4.1",
-    "loopback-datasource-juggler": "github:perkd/loopback-datasource-juggler#semver:^5.2.9",
+    "loopback-connector-remote": "github:perkd/loopback-connector-remote#semver:^3.5.0",
+    "loopback-datasource-juggler": "github:perkd/loopback-datasource-juggler#semver:^5.2.11",
     "loopback-filters": "^1.1.1",
     "loopback-phase": "3.4.0",
     "nodemailer": "^8.0.7",
@@ -91,7 +91,7 @@
     "serve-favicon": "^2.5.1",
     "stable": "^0.1.8",
     "strong-globalize": "^6.0.6",
-    "strong-remoting": "github:perkd/strong-remoting#semver:^3.20.3",
+    "strong-remoting": "github:perkd/strong-remoting#semver:^3.21.0",
     "uid2": "1.0.0",
     "underscore.string": "^3.3.6"
   },
