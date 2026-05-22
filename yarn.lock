@@ -2221,12 +2221,12 @@ __metadata:
   linkType: hard
 
 "enhanced-resolve@npm:^5.17.1":
-  version: 5.21.5
-  resolution: "enhanced-resolve@npm:5.21.5"
+  version: 5.22.0
+  resolution: "enhanced-resolve@npm:5.22.0"
   dependencies:
     graceful-fs: "npm:^4.2.4"
     tapable: "npm:^2.3.3"
-  checksum: 10c0/77cde90acb5c9a729595645fbe5188da1f8225c0096e3c08f1163291cb1a408942fb48c1adee22f5cd9310e874a511ab19adfe3ce09cf3f9e9cc9d6ed6fe48c0
+  checksum: 10c0/01d3d7a7628c87f617df7d9a0a34b0f543a2268ac0755a73237d68c3627eb0612f28899343d20b7781a05ebd276069919441e1562cf99171bfcc85924f3d830a
   languageName: node
   linkType: hard
 
@@ -4957,9 +4957,9 @@ __metadata:
   languageName: node
   linkType: hard
 
-"loopback-datasource-juggler@github:perkd/loopback-datasource-juggler#semver:^5.2.11":
-  version: 5.2.11
-  resolution: "loopback-datasource-juggler@https://github.com/perkd/loopback-datasource-juggler.git#commit=f05945b9420dd6951ca148cc03172756fc7060c8"
+"loopback-datasource-juggler@github:perkd/loopback-datasource-juggler#semver:^5.2.11, loopback-datasource-juggler@github:perkd/loopback-datasource-juggler#semver:^5.2.12":
+  version: 5.2.12
+  resolution: "loopback-datasource-juggler@https://github.com/perkd/loopback-datasource-juggler.git#commit=41aef2a1c7c300fbe226e9799d76987b5f481d87"
   dependencies:
     async: "npm:^3.2.6"
     change-case: "npm:5.4.4"
@@ -4974,7 +4974,7 @@ __metadata:
     qs: "npm:^6.15.2"
     strong-globalize: "npm:^6.0.6"
     uuid: "npm:^11.1.0"
-  checksum: 10c0/73d938b38f93d8ef38d4156382a336a3418d7b96b5762819842f701985443f5695579c56a112ef5ec2204538f9e48ebf7f93389f30d808681007747111782a8f
+  checksum: 10c0/c80ba12dbf0f8ae59176ed5de52b94b058a0701d19f3582ec58e63ff2989ac8c79b6bf72a3b8c8aa8c5e11bd24bf28b8f4445222070f64f03113524f94b3cf53
   languageName: node
   linkType: hard
 
@@ -5044,10 +5044,10 @@ __metadata:
     loopback-boot: "npm:^3.3.1"
     loopback-connector-remote: "github:perkd/loopback-connector-remote#semver:^3.5.0"
     loopback-context: "npm:3.5.2"
-    loopback-datasource-juggler: "github:perkd/loopback-datasource-juggler#semver:^5.2.11"
+    loopback-datasource-juggler: "github:perkd/loopback-datasource-juggler#semver:^5.2.12"
     loopback-filters: "npm:^1.1.1"
     loopback-phase: "npm:3.4.0"
-    mocha: "npm:^11.7.5"
+    mocha: "npm:^11.7.6"
     nodemailer: "npm:^8.0.7"
     nodemailer-direct-transport: "npm:^3.3.2"
     nodemailer-stub-transport: "npm:^1.1.0"
@@ -5384,9 +5384,9 @@ __metadata:
   languageName: node
   linkType: hard
 
-"mocha@npm:^11.7.5":
-  version: 11.7.5
-  resolution: "mocha@npm:11.7.5"
+"mocha@npm:^11.7.6":
+  version: 11.7.6
+  resolution: "mocha@npm:11.7.6"
   dependencies:
     browser-stdout: "npm:^1.3.1"
     chokidar: "npm:^4.0.1"
@@ -5412,7 +5412,7 @@ __metadata:
   bin:
     _mocha: bin/_mocha
     mocha: bin/mocha.js
-  checksum: 10c0/e6150cba85345aaabbc5b2e7341b1e6706b878f5a9782960cad57fd4cc458730a76d08c5f1a3e05d3ebb49cad93b455764bb00727bd148dcaf0c6dd4fa665b3d
+  checksum: 10c0/95b3eeb52eaf253167d335d1c1a46659f6f282dc112a74fd0ac46380637ae3ee52894319e00a46412a1e5a6e3056128153dc87c1fe36565c748b9fbe8d705ad0
   languageName: node
   linkType: hard
 
@@ -6577,11 +6577,11 @@ __metadata:
   linkType: hard
 
 "semver@npm:^7.3.5, semver@npm:^7.5.3, semver@npm:^7.5.4, semver@npm:^7.6.3":
-  version: 7.8.0
-  resolution: "semver@npm:7.8.0"
+  version: 7.8.1
+  resolution: "semver@npm:7.8.1"
   bin:
     semver: bin/semver.js
-  checksum: 10c0/8f096ca9b80ffd47b308d03f9ce8c873e27e2983f36023c559cdc92c51e8433fc23ebbfe57ec9623fc155636a6961ee989501099841ae4bb1babc8d2b3f048cd
+  checksum: 10c0/92d6871d6347e1f99d0ba396a70f2545ccf2a032cda3d378fa0699edf7506b5c6d266aed55c8b88e72bd91a30d2351e4f39db479375374430fcdc4b58f4e3c1a
   languageName: node
   linkType: hard
 
