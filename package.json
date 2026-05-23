@@ -1,6 +1,6 @@
 {
   "name": "loopback",
-  "version": "3.36.2",
+  "version": "3.37.0",
   "description": "LoopBack: Open Source Framework for Node.js",
   "copyright.owner": "IBM Corp.",
   "license": "MIT",
@@ -35,7 +35,7 @@
     "node": ">=24"
   },
   "scripts": {
-    "lint": "grunt eslint",
+    "lint": "eslint .",
     "coverage": "c8 report",
     "report-coverage": "c8 report --reporter=lcov && cat ./coverage/lcov.info | coveralls",
     "test": "c8 mocha test/**/*.js --exit --timeout 5000 --color --reporter spec",
@@ -112,13 +112,6 @@
     "eslint-plugin-n": "^18.0.1",
     "eslint-plugin-security": "^4.0.0",
     "express-session": "^1.19.0",
-    "grunt": "^1.6.2",
-    "grunt-browserify": "^6.0.0",
-    "grunt-cli": "^1.5.0",
-    "grunt-contrib-uglify": "^5.2.2",
-    "grunt-contrib-watch": "^1.1.0",
-    "grunt-eslint": "^26.0.0",
-    "grunt-mocha-test": "^0.13.3",
     "is-docker": "2.2.1",
     "loopback-boot": "^3.3.1",
     "loopback-context": "3.5.2",
@@ -127,8 +120,7 @@
     "sinon-chai": "3.7.0",
     "strong-error-handler": "^5.0.31",
     "strong-task-emitter": "^0.0.8",
-    "supertest": "^7.2.2",
-    "which": "^7.0.0"
+    "supertest": "^7.2.2"
   },
   "packageManager": "yarn@4.15.0"
 }
