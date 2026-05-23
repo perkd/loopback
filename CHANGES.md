@@ -1,3 +1,79 @@
+2026-05-23, Version 3.37.0
+============================
+
+ * feat: count method `where` parameter now explicitly sourced from query string - added `http: {source: 'query'}` to both Model and PersistedModel count definitions (Young)
+
+ * refactor: move shared method configuration from global `modelRemoted` event handler to per-model refresh triggered during `app.model()` - ensures configuration is applied immediately on model attachment (Young)
+
+ * fix: prevent duplicate model registry entries by only registering app-only models (datasource-attached models are registered by juggler's attach flow) (Young)
+
+ * perf: skip `setImmediate` queue for models without relations during registration - new `hasDeclaredRelations()` helper avoids unnecessary async operations (Young)
+
+ * perf: inline `hasDescendants` check in `configureModel` to simplify model registration path (Young)
+
+ * chore: remove Grunt and Karma test infrastructure - deleted `Gruntfile.js` and `test/karma.conf.js`, replaced `grunt eslint` with direct ESLint execution, removed grunt-related devDependencies (Young)
+
+ * test: contract test for multitenant Model dispatch - pins `Model.getDataSource()` override reading external context to resolve distinct pool DataSources per tenant via `app.connectionManager.getExistingConnection(tenant)`; covers concurrent resolution, per-dispatch context reads, and fallback to original datasource (Young)
+
+ * test: tenant datasource re-resolution after pool eviction - `disconnectPool()` added to fake connection manager, contract test verifies fallback and re-resolution when pool is re-established (Young)
+
+ * test: added multitenant test npm script (Young)
+
+ * docs: benchmark notes (Young)
+
+
+2026-05-23, Version 3.36.2
+============================
+
+ * chore: updated dependencies (Young)
+
+
+2026-05-22, Version 3.36.1
+============================
+
+ * chore: updated dependencies (Young)
+
+
+2026-05-21, Version 3.36.0
+============================
+
+ * refactor: simplify model registry API - four wrappers in `lib/loopback.js` (`getModelsForOwner`, `getModelNamesForOwner`, `hasModelForOwner`, `getModelForOwner`) now always use the explicit `*WithType` API, removing conditional logic that previously mixed explicit and simplified paths based on owner type (Young)
+
+ * chore: updated dependencies (Young)
+
+
+2026-05-21, Version 3.35.6
+============================
+
+ * refactor: improve `_sanitizePathsForExpress()` in `lib/server-app.js` - simplified array/single-path handling via a `sanitizePath()` helper, added `encodeURI()` so generated regex matches percent-encoded paths in `req.url`, cleaner early-exit when no sanitization is needed (Young)
+
+ * chore: updated dependencies (Young)
+
+
+2025-07-12, Version 3.35.5
+============================
+
+ * fix: `AccessToken.resolve()` - early-return `undefined` for empty or invalid IDs instead of throwing; return `undefined` when token is not found; create proper 401 `INVALID_TOKEN` Error object; rethrow database errors correctly (Young)
+
+ * test: access token resolve() test updates (Young)
+
+
+2025-07-09, Version 3.35.4
+============================
+
+ * refactor: update `require('assert')` to `require('node:assert')` across 31 files for Node.js protocol-import consistency (Young)
+
+ * docs: multitenant-context-package documentation (Young)
+
+ * test: test suite updates (Young)
+
+
+2025-07-08, Version 3.35.3
+============================
+
+ * refactor: extract path sanitization logic from `middlewareFromConfig` into a dedicated `_sanitizePathsForExpress()` helper in `lib/server-app.js` for Express v5 compatibility (Young)
+
+
 2025-07-07, Version 3.35.2
 ============================
 
