@@ -977,6 +977,22 @@ describe('app', function() {
           done();
         });
     });
+
+    it('uses localhost in generated url for all-interface hosts', async function() {
+      const app = loopback();
+      app.set('host', '0.0.0.0');
+      app.set('port', 0);
+
+      const server = app.listen();
+      await new Promise(resolve => server.once('listening', resolve));
+
+      try {
+        const expectedUrl = 'http://localhost:' + app.get('port') + '/';
+        expect(app.get('url')).to.equal(expectedUrl);
+      } finally {
+        await new Promise(resolve => server.close(resolve));
+      }
+    });
   });
 
   describe.onServer('enableAuth', function() {
@@ -1011,11 +1027,190 @@ describe('app', function() {
 
       // Fix AccessToken's "belongsTo user" relation to use our new Customer model
       const AccessToken = app.registry.getModel('AccessToken');
-      AccessToken.settings.relations.user.model = 'Customer';
+      const originalUserModel = AccessToken.settings.relations.user.model;
+      try {
+        AccessToken.settings.relations.user.model = 'Customer';
 
-      app.enableAuth({dataSource: 'db'});
+        app.enableAuth({dataSource: 'db'});
 
-      expect(Object.keys(app.models)).to.not.include('User');
+        expect(Object.keys(app.models)).to.not.include('User');
+      } finally {
+        AccessToken.settings.relations.user.model = originalUserModel;
+      }
+    });
+
+    it('warns when a User-like model references an unattached AccessToken-like model', function() {
+      const app = loopback({localRegistry: true, loadBuiltinModels: true});
+      const warn = sinon.stub(console, 'warn');
+
+      try {
+        app.dataSource('db', {connector: 'memory'});
+
+        const Customer = app.registry.createModel({
+          name: 'Customer',
+          base: 'User',
+        });
+        app.model(Customer, {dataSource: 'db'});
+        Customer.relations = {};
+        Customer.settings.relations = {
+          accessTokens: {
+            model: 'CustomAccessToken',
+          },
+        };
+
+        app._verifyAuthModelRelations();
+
+        const matchingCall = warn.args.find(args => {
+          return args[0].includes('hasMany AccessToken-like models') &&
+            args[1] === 'Customer' &&
+            args[2] === 'CustomAccessToken';
+        });
+
+        expect(matchingCall).to.not.equal(undefined);
+      } finally {
+        warn.restore();
+      }
+    });
+
+    it('warns when a User-like model has no accessTokens relation configured', function() {
+      const app = loopback({localRegistry: true, loadBuiltinModels: true});
+      const warn = sinon.stub(console, 'warn');
+
+      try {
+        app.dataSource('db', {connector: 'memory'});
+
+        const Customer = app.registry.createModel({
+          name: 'Customer',
+          base: 'User',
+        });
+        app.model(Customer, {dataSource: 'db'});
+        Customer.relations = {};
+        Customer.settings.relations = {};
+
+        app._verifyAuthModelRelations();
+
+        const matchingCall = warn.args.find(args => {
+          return args[0].includes('does not have "hasMany AccessToken-like models" relation') &&
+            args[1] === 'Customer';
+        });
+
+        expect(matchingCall).to.not.equal(undefined);
+      } finally {
+        warn.restore();
+      }
+    });
+
+    it('defers auth relation verification until an unattached model is attached', function() {
+      const app = loopback({localRegistry: true, loadBuiltinModels: true});
+      const Customer = app.registry.createModel({
+        name: 'DeferredCustomer',
+        base: 'User',
+      });
+      const on = sinon.spy(Customer, 'on');
+
+      try {
+        app.model(Customer, {dataSource: null});
+        Customer.relations = {};
+        Customer.settings.relations = {};
+
+        app._verifyAuthModelRelations();
+      } finally {
+        on.restore();
+      }
+
+      expect(on.calledWith('attached')).to.equal(true);
+    });
+
+    it('warns when an AccessToken-like model references an unattached User-like model', function() {
+      const app = loopback({localRegistry: true, loadBuiltinModels: true});
+      const warn = sinon.stub(console, 'warn');
+
+      try {
+        app.dataSource('db', {connector: 'memory'});
+
+        const CustomToken = app.registry.createModel({
+          name: 'CustomToken',
+          base: 'AccessToken',
+        });
+        app.model(CustomToken, {dataSource: 'db'});
+        CustomToken.relations = {};
+        CustomToken.settings.relations = {
+          user: {
+            model: 'Customer',
+          },
+        };
+
+        app._verifyAuthModelRelations();
+
+        const matchingCall = warn.args.find(args => {
+          return args[0].includes('belongsTo User-like models') &&
+            args[1] === 'CustomToken' &&
+            args[2] === 'Customer';
+        });
+
+        expect(matchingCall).to.not.equal(undefined);
+      } finally {
+        warn.restore();
+      }
+    });
+
+    it('warns when an AccessToken-like model has no user relation configured', function() {
+      const app = loopback({localRegistry: true, loadBuiltinModels: true});
+      const warn = sinon.stub(console, 'warn');
+
+      try {
+        app.dataSource('db', {connector: 'memory'});
+
+        const CustomToken = app.registry.createModel({
+          name: 'CustomToken',
+          base: 'AccessToken',
+        });
+        app.model(CustomToken, {dataSource: 'db'});
+        CustomToken.relations = {};
+        CustomToken.settings.relations = {};
+
+        app._verifyAuthModelRelations();
+
+        const matchingCall = warn.args.find(args => {
+          return args[0].includes('does not have "belongsTo User-like model" relation') &&
+            args[1] === 'CustomToken';
+        });
+
+        expect(matchingCall).to.not.equal(undefined);
+      } finally {
+        warn.restore();
+      }
+    });
+
+    it('warns about polymorphic access token relations on User-like models', function() {
+      const app = loopback({localRegistry: true, loadBuiltinModels: true});
+      const warn = sinon.stub(console, 'warn');
+
+      try {
+        app.dataSource('db', {connector: 'memory'});
+
+        const Customer = app.registry.createModel({
+          name: 'Customer',
+          base: 'User',
+        });
+        app.model(Customer, {dataSource: 'db'});
+        Customer.relations = {
+          accessTokens: {
+            polymorphic: true,
+          },
+        };
+
+        app._verifyAuthModelRelations();
+
+        const matchingCall = warn.args.find(args => {
+          return args[0].includes('multiple user models setup') &&
+            args[1].includes('built-in role resolver $owner');
+        });
+
+        expect(matchingCall).to.not.equal(undefined);
+      } finally {
+        warn.restore();
+      }
     });
   });
 
@@ -1102,6 +1297,12 @@ describe('app', function() {
   it('exposes loopback as a property', function() {
     const app = loopback();
     expect(app.loopback).to.equal(loopback);
+  });
+
+  it('throws a migration error for `app.boot()`', function() {
+    expect(function() {
+      app.boot();
+    }).to.throw(/loopback-boot/);
   });
 
   function setupUserModels(app, options, done) {
@@ -1244,23 +1445,36 @@ function executeMiddlewareHandlers(app, urlPath, done) {
     })
   })
 
+  function finish(afterClose) {
+    server.close(function(closeErr) {
+      if (closeErr && closeErr.code !== 'ERR_SERVER_NOT_RUNNING') {
+        return afterClose(closeErr)
+      }
+      return afterClose()
+    })
+  }
+
   if (typeof done === 'function') {
     request(server)
       .get(urlPath)
       .end(function(err, res) {
-        server.close()
-        if (handlerError) return done(handlerError)
-        return done(err, res)
+        finish(function(closeErr) {
+          if (closeErr) return done(closeErr)
+          if (handlerError) return done(handlerError)
+          return done(err, res)
+        })
       })
   } else {
     return new Promise(function(resolve, reject) {
       request(server)
         .get(urlPath)
         .end(function(err, res) {
-          server.close()
-          if (handlerError) return reject(handlerError)
-          if (err) return reject(err)
-          resolve(res)
+          finish(function(closeErr) {
+            if (closeErr) return reject(closeErr)
+            if (handlerError) return reject(handlerError)
+            if (err) return reject(err)
+            resolve(res)
+          })
         })
     })
   }

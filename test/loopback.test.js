@@ -5,10 +5,12 @@
 
 'use strict';
 const assert = require('node:assert');
+const fs = require('node:fs');
 const it = require('./util/it');
 const describe = require('./util/describe');
 const loopback = require('../');
 const expect = require('./helpers/expect');
+const sinon = require('sinon');
 
 // Capture the original built-in models before other tests have a chance to modify them.
 const originalUser = loopback.User
@@ -171,6 +173,114 @@ describe('loopback', function() {
       assert.equal(Product.stats.http.path, '/info');
       assert.equal(Product.stats.http.verb, 'get');
       assert.equal(Product.stats.shared, true);
+    });
+  });
+
+  describe('Express compatibility helpers', function() {
+    it.onServer('restores req.param precedence and default handling', function() {
+      const req = {
+        params: {id: 'from-params'},
+        body: {id: 'from-body'},
+        query: {id: 'from-query'},
+      };
+
+      expect(loopback.request.param.call(req, 'id')).to.equal('from-params');
+
+      delete req.params.id;
+      expect(loopback.request.param.call(req, 'id')).to.equal('from-body');
+
+      delete req.body.id;
+      expect(loopback.request.param.call(req, 'id')).to.equal('from-query');
+      expect(loopback.request.param.call(req, 'missing', 'fallback')).to.equal('fallback');
+    });
+  });
+
+  describe('Deprecated context helpers', function() {
+    it('throws a migration error for `loopback.getCurrentContext()`', function() {
+      expect(function() {
+        loopback.getCurrentContext();
+      }).to.throw(/loopback\.getCurrentContext\(\)/);
+    });
+
+    it('throws a migration error for `loopback.runInContext()`', function() {
+      expect(function() {
+        loopback.runInContext(function() {});
+      }).to.throw(/loopback\.runInContext\(\)/);
+    });
+
+    it('throws a migration error for `loopback.createContext()`', function() {
+      expect(function() {
+        loopback.createContext('request');
+      }).to.throw(/loopback\.createContext\(\)/);
+    });
+  });
+
+  describe('loopback.template(file)', function() {
+    let sandbox;
+
+    beforeEach(function() {
+      sandbox = sinon.createSandbox();
+      delete loopback._templates;
+    });
+
+    afterEach(function() {
+      sandbox.restore();
+      delete loopback._templates;
+    });
+
+    it('caches template file contents after the first read', function() {
+      sandbox.stub(fs, 'readFileSync').returns('Hello <%= name %>');
+
+      const renderA = loopback.template('/tmp/example.ejs');
+      const renderB = loopback.template('/tmp/example.ejs');
+
+      expect(fs.readFileSync.calledOnce).to.equal(true);
+      expect(renderA({name: 'Ada'})).to.equal('Hello Ada');
+      expect(renderB({name: 'Grace'})).to.equal('Hello Grace');
+    });
+  });
+
+  describe('Middleware exports', function() {
+    it.onServer('creates the default favicon middleware', function() {
+      const middleware = loopback.favicon();
+      expect(middleware).to.be.a('function');
+    });
+
+    it('creates a 404 middleware via `loopback.urlNotFound()`', function() {
+      const middleware = loopback.urlNotFound();
+      const req = {method: 'GET', url: '/missing'};
+
+      middleware(req, {}, function(err) {
+        expect(err).to.be.an.instanceOf(Error);
+        expect(err.message).to.equal('Cannot GET /missing');
+        expect(err.status).to.equal(404);
+      });
+    });
+
+    it('throws a migration error for removed `loopback.context()` middleware', function() {
+      expect(function() {
+        loopback.context();
+      }).to.throw(/loopback#context/);
+    });
+  });
+
+  describe('loopback.checkModelRegistrySupport()', function() {
+    it('exposes owner-aware registry aliases and metadata', function() {
+      const support = loopback.checkModelRegistrySupport();
+      const {ModelRegistry} = require('loopback-datasource-juggler');
+      const app = loopback({localRegistry: true, loadBuiltinModels: true});
+      app.dataSource('db', {connector: 'memory'});
+
+      const TestModel = app.registry.createModel('AliasCoverageModel');
+      app.model(TestModel, {dataSource: 'db'});
+
+      expect(support.available).to.equal(true);
+      expect(support.recommendation).to.contain('Centralized model registry is available');
+      expect(support.methods).to.include('ModelRegistry.getModelsForOwner(owner)');
+      expect(ModelRegistry.getModelsForOwner(app, 'app').some(model => model === TestModel)).to.equal(true);
+      expect(ModelRegistry.getModelNamesForOwner(app, 'app')).to.include('AliasCoverageModel');
+      expect(ModelRegistry.hasModelForOwner(app, 'AliasCoverageModel', 'app')).to.equal(true);
+      expect(ModelRegistry.getModelForOwner(app, 'AliasCoverageModel', 'app')).to.equal(TestModel);
     });
   });
 
