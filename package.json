@@ -42,6 +42,7 @@
     "test:compatibility": "mocha test/express-compatibility.test.js --timeout 15000 --color --reporter spec",
     "test:performance": "mocha test/middleware-performance.test.js --timeout 15000 --color --reporter spec",
     "test:concurrency": "mocha test/middleware-concurrency.test.js --timeout 20000 --color --reporter spec",
+    "test:multitenant": "mocha test/multitenant-dispatch.test.js --timeout 5000 --color --reporter spec",
     "test:middleware": "npm run test:compatibility && npm run test:performance && npm run test:concurrency",
     "update": "ncu -u -x inflection -x is-docker -x chai -x sinon-chai -x dirty-chai",
     "reinstall": "rm -rf node_modules/ && rm yarn.lock && yarn install"
