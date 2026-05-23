@@ -22,14 +22,15 @@ const sinon = require('sinon');
 chai.use(require('sinon-chai'));
 
 _beforeEach.withApp = function(app) {
-  if (app.models.User) {
-    // Speed up the password hashing algorithm
-    app.models.User.settings.saltWorkFactor = 4;
-  }
-
   beforeEach(function(done) {
-    this.app = app;
-    const _request = this.request = request(app);
+    const isAppFactory = typeof app === 'function' && typeof app.handle !== 'function';
+    const resolvedApp = isAppFactory ? app.call(this) : app;
+    this.app = resolvedApp;
+    if (resolvedApp.models.User) {
+      // Speed up the password hashing algorithm
+      resolvedApp.models.User.settings.saltWorkFactor = 4;
+    }
+    const _request = this.request = request(resolvedApp);
     this.post = _request.post;
     this.get = _request.get;
     this.put = _request.put;
@@ -37,8 +38,8 @@ _beforeEach.withApp = function(app) {
     this.patch = _request.patch;
     this.head = _request.head;
 
-    if (app.booting) {
-      return app.once('booted', done);
+    if (resolvedApp.booting) {
+      return resolvedApp.once('booted', done);
     }
 
     done();
@@ -71,7 +72,13 @@ _beforeEach.givenModel = function(modelName, attrs, optionalHandler) {
     const app = this.app;
     const model = app.models[modelName];
 
-    app.set('remoting', {errorHandler: {debug: true, log: false}});
+    const remoting = app.get('remoting') || {};
+    app.set('remoting', Object.assign({}, remoting, {
+      errorHandler: Object.assign({}, remoting.errorHandler, {
+        debug: true,
+        log: false,
+      }),
+    }));
     assert(model, 'cannot get model of name ' + modelName + ' from app.models');
     assert(model.dataSource, 'cannot test model ' + modelName +
         ' without attached dataSource');
@@ -99,7 +106,15 @@ _beforeEach.givenModel = function(modelName, attrs, optionalHandler) {
   }
 
   afterEach(function(done) {
-    this[modelKey].destroy(done);
+    if (!this[modelKey] || typeof this[modelKey].destroy !== 'function') {
+      return done();
+    }
+    this[modelKey].destroy(function(err) {
+      if (err && err.statusCode !== 404 && err.code !== 'MODEL_NOT_FOUND') {
+        return done(err);
+      }
+      done();
+    });
   });
 };
 
@@ -138,6 +153,10 @@ _beforeEach.givenLoggedInUser = function(credentials, optionalHandler) {
         done()
       })
       .catch(function(err) {
+        if (err && err.statusCode === 404) {
+          test.loggedInAccessToken = undefined
+          return done()
+        }
         done(err)
       })
   })
@@ -182,6 +201,7 @@ _describe.whenCalledRemotely = function(verb, url, data, cb) {
       this.http = this.request[methodForVerb](this.url);
       delete this.url;
       this.http.set('Accept', 'application/json');
+      this.http.set('Connection', 'close');
       if (this.loggedInAccessToken) {
         this.http.set('authorization', this.loggedInAccessToken.id);
       }
@@ -201,9 +221,10 @@ _describe.whenCalledRemotely = function(verb, url, data, cb) {
       this.http.end(function(err) {
         test.req = test.http.req;
         test.res = test.http.response;
+        test.err = err;
         delete test.url;
 
-        cb();
+        cb(err);
       });
     });
 
@@ -235,13 +256,14 @@ _describe.whenCalledAnonymously = function(verb, url, data, cb) {
 
 _describe.whenCalledUnauthenticated = function(verb, url, data, cb) {
   describe('when called with unauthenticated token', function() {
-    _beforeEach.givenAnAnonymousToken();
+    _beforeEach.givenAnUnauthenticatedToken();
     _describe.whenCalledRemotely(verb, url, data, cb);
   });
 };
 
 _it.shouldBeAllowed = function() {
   it('should be allowed', function() {
+    if (this.err) throw this.err;
     assert(this.req);
     assert(this.res);
     // expect success - status 2xx or 3xx
@@ -251,6 +273,7 @@ _it.shouldBeAllowed = function() {
 
 _it.shouldBeDenied = function() {
   it('should not be allowed', function() {
+    if (this.err) throw this.err;
     assert(this.res);
     const expectedStatus = this.aclErrorStatus ||
       this.app && this.app.get('aclErrorStatus') ||
@@ -261,6 +284,7 @@ _it.shouldBeDenied = function() {
 
 _it.shouldNotBeFound = function() {
   it('should not be found', function() {
+    if (this.err) throw this.err;
     assert(this.res);
     assert.equal(this.res.statusCode, 404);
   });

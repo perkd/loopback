@@ -12,11 +12,14 @@ const expect = require('./helpers/expect')
 const { ACL, PersistedModel, AccessToken, Memory } = loopback
 
 describe('Model / PersistedModel', function() {
-  const dataSource = loopback.createDataSource({
+  const isolatedApp = loopback({localRegistry: true, loadBuiltinModels: true});
+  const LocalPersistedModel = isolatedApp.registry.getModel('PersistedModel');
+  const LocalAccessToken = isolatedApp.registry.getModel('AccessToken');
+  const dataSource = isolatedApp.dataSource('db', {
     connector: Memory,
   });
   
-  const User = PersistedModel.extend('User', {
+  const User = LocalPersistedModel.extend('User', {
     first: String,
     last: String,
     age: Number,
@@ -28,8 +31,8 @@ describe('Model / PersistedModel', function() {
   User.attachTo(dataSource);
 
   // Attach AccessToken to the datasource before setting up the relation
-  AccessToken.attachTo(dataSource);
-  User.hasMany(AccessToken, { as: 'accessTokens', foreignKey: 'userId' })
+  LocalAccessToken.attachTo(dataSource);
+  User.hasMany(LocalAccessToken, { as: 'accessTokens', foreignKey: 'userId' })
 
   describe('Model.create([data])', function () {
     it('should create an instance of Model with given data and save to the attached data source', async function () {
@@ -74,7 +77,7 @@ describe('Model / PersistedModel', function() {
   describe('Model.validatesUniquenessOf(property)', function() {
     it('should ensure that the property value is unique', async function() {
       // (You may add a more detailed test here.)
-      const ValidatedUser = PersistedModel.extend('ValidatedUser', {
+      const ValidatedUser = LocalPersistedModel.extend('ValidatedUser', {
         first: String,
         last: String,
         age: Number,
@@ -115,7 +118,10 @@ describe.onServer('Remote Methods', function() {
 
   beforeEach(function() {
     app = loopback({localRegistry: true, loadBuiltinModels: true});
-    app.set('remoting', {errorHandler: {debug: true, log: false}});
+    app.set('remoting', {
+      json: {strict: false},
+      errorHandler: {debug: true, log: false},
+    });
 
     User = app.registry.createModel('user', {
       id: {id: true, type: String, defaultFn: 'guid'},
@@ -719,8 +725,9 @@ describe.onServer('Remote Methods', function() {
 
   describe('PersistedModel remote methods', function() {
     it('includes all aliases', function() {
-      const app = loopback();
-      const model = PersistedModel.extend('PersistedModelForAliases');
+      const app = loopback({localRegistry: true, loadBuiltinModels: true});
+      const LocalPersistedModel = app.registry.getModel('PersistedModel');
+      const model = LocalPersistedModel.extend('PersistedModelForAliases');
       app.dataSource('db', {connector: 'memory'});
       app.model(model, {dataSource: 'db'});
 
@@ -768,8 +775,9 @@ describe.onServer('Remote Methods', function() {
     });
 
     it('emits a `remoteMethodDisabled` event', function() {
-      const app = loopback();
-      const model = PersistedModel.extend('TestModelForDisablingRemoteMethod');
+      const app = loopback({localRegistry: true, loadBuiltinModels: true});
+      const LocalPersistedModel = app.registry.getModel('PersistedModel');
+      const model = LocalPersistedModel.extend('TestModelForDisablingRemoteMethod');
       app.dataSource('db', {connector: 'memory'});
       app.model(model, {dataSource: 'db'});
 
@@ -782,8 +790,9 @@ describe.onServer('Remote Methods', function() {
     })
 
     it('emits a `remoteMethodDisabled` event from disableRemoteMethodByName', function() {
-      const app = loopback();
-      const model = PersistedModel.extend('TestModelForDisablingRemoteMethod');
+      const app = loopback({localRegistry: true, loadBuiltinModels: true});
+      const LocalPersistedModel = app.registry.getModel('PersistedModel');
+      const model = LocalPersistedModel.extend('TestModelForDisablingRemoteMethod');
       app.dataSource('db', {connector: 'memory'});
       app.model(model, {dataSource: 'db'});
 
@@ -796,7 +805,7 @@ describe.onServer('Remote Methods', function() {
     });
 
     it('emits a `remoteMethodAdded` event', function() {
-      const app = loopback();
+      const app = loopback({localRegistry: true, loadBuiltinModels: true});
       app.dataSource('db', {connector: 'memory'});
 
       const User = app.registry.getModel('User');
@@ -815,8 +824,9 @@ describe.onServer('Remote Methods', function() {
   });
 
   it('emits a `remoteMethodAdded` event from remoteMethod', function() {
-    const app = loopback();
-    const model = PersistedModel.extend('TestModelForAddingRemoteMethod');
+    const app = loopback({localRegistry: true, loadBuiltinModels: true});
+    const LocalPersistedModel = app.registry.getModel('PersistedModel');
+    const model = LocalPersistedModel.extend('TestModelForAddingRemoteMethod');
     app.dataSource('db', {connector: 'memory'});
     app.model(model, {dataSource: 'db'});
 
@@ -835,8 +845,8 @@ describe.onServer('Remote Methods', function() {
   describe('Model.getApp(cb)', function() {   // FIXME: promise?
     let app, TestModel;
     beforeEach(function setup() {
-      app = loopback();
-      TestModel = loopback.createModel('TestModelForGetApp'); // unique name
+      app = loopback({localRegistry: true, loadBuiltinModels: true});
+      TestModel = app.registry.createModel('TestModelForGetApp'); // unique name
       app.dataSource('db', {connector: 'memory'});
     });
 
@@ -999,7 +1009,7 @@ describe.onServer('Remote Methods', function() {
 
   describe('Create Model with remote methods from JSON description', function() {
     it('does not add isStatic properties to the method settings', function() {
-      const app = loopback();
+      const app = loopback({localRegistry: true, loadBuiltinModels: true});
       const Foo = app.registry.createModel({
         name: 'Foo',
         methods: {

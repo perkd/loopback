@@ -602,25 +602,25 @@ describe('app', function() {
   describe.onServer('.defineMiddlewarePhases(nameOrArray)', function() {
     let app;
     beforeEach(function() {
-      app = loopback();
+      app = loopback({localRegistry: true, loadBuiltinModels: true});
     });
 
-    it('adds the phase just before `routes` by default', function(done) {
+    it('adds the phase just before `routes` by default', async function() {
       app.defineMiddlewarePhases('custom');
-      verifyMiddlewarePhases(['custom', 'routes'], done);
+      await verifyMiddlewarePhases(['custom', 'routes']);
     });
 
-    it('merges phases adding to the start of the list', function(done) {
+    it('merges phases adding to the start of the list', async function() {
       app.defineMiddlewarePhases(['first', 'routes', 'subapps']);
-      verifyMiddlewarePhases([
+      await verifyMiddlewarePhases([
         'first',
         'initial', // this was the original first phase
         'routes',
         'subapps',
-      ], done);
+      ]);
     });
 
-    it('merges phases preserving the order', function(done) {
+    it('merges phases preserving the order', async function() {
       app.defineMiddlewarePhases([
         'initial',
         'postinit', 'preauth', // add
@@ -636,7 +636,7 @@ describe('app', function() {
         'subapps', // new
         'files', 'final',
         'last', // new
-      ], done);
+      ]);
     });
 
     it('throws helpful error on ordering conflict', function() {
@@ -645,7 +645,7 @@ describe('app', function() {
         .to.throw(/Ordering conflict.*first.*second/);
     });
 
-    function verifyMiddlewarePhases(names, done) {
+    async function verifyMiddlewarePhases(names) {
       const steps = [];
       names.forEach(function(it) {
         app.middleware(it, function(req, res, next) {
@@ -655,27 +655,23 @@ describe('app', function() {
         });
       });
 
-      executeMiddlewareHandlers(app, function(err) {
-        if (err) return done(err);
-
-        expect(steps).to.eql(names);
-
-        done();
-      });
+      await executeMiddlewareHandlers(app);
+      expect(steps).to.eql(names);
     }
   });
 
   describe('app.model(Model)', function() {
-    let app, db, MyTestModel;
+    let app, db, MyTestModel, LocalPersistedModel;
     beforeEach(function() {
-      app = loopback();
+      app = loopback({localRegistry: true, loadBuiltinModels: true});
       app.set('remoting', {errorHandler: {debug: true, log: false}});
       db = loopback.createDataSource({connector: loopback.Memory});
       MyTestModel = app.registry.createModel('MyTestModel');
+      LocalPersistedModel = app.registry.getModel('PersistedModel');
     });
 
     it('Expose a `Model` to remote clients', function() {
-      const Color = PersistedModel.extend('color', {name: String});
+      const Color = LocalPersistedModel.extend('color', {name: String});
       app.model(Color);
       Color.attachTo(db);
 
@@ -683,14 +679,14 @@ describe('app', function() {
     });
 
     it('uses singular name as app.remoteObjects() key', function() {
-      const Color = PersistedModel.extend('color', {name: String});
+      const Color = LocalPersistedModel.extend('color', {name: String});
       app.model(Color);
       Color.attachTo(db);
       expect(app.remoteObjects()).to.eql({color: Color});
     });
 
     it('uses singular name as shared class name', function() {
-      const Color = PersistedModel.extend('color', {name: String});
+      const Color = LocalPersistedModel.extend('color', {name: String});
       app.model(Color);
       Color.attachTo(db);
       const classes = app.remotes().classes().map(function(c) { return c.name; });
@@ -707,7 +703,7 @@ describe('app', function() {
     });
 
     it('emits a `modelRemoted` event', function() {
-      const Color = PersistedModel.extend('color', {name: String});
+      const Color = LocalPersistedModel.extend('color', {name: String});
       Color.shared = true;
       let remotedClass;
       app.on('modelRemoted', function(sharedClass) {
@@ -719,7 +715,7 @@ describe('app', function() {
     });
 
     it('emits a `remoteMethodDisabled` event', function() {
-      const Color = PersistedModel.extend('color', {name: String});
+      const Color = LocalPersistedModel.extend('color', {name: String});
       Color.shared = true;
       let remoteMethodDisabledClass, disabledRemoteMethod;
       app.on('remoteMethodDisabled', function(sharedClass, methodName) {
@@ -866,7 +862,7 @@ describe('app', function() {
       const Color = app.registry.createModel('Color');
       app.model(Color, {dataSource: 'db'});
       expect(app.models.Color).to.equal(Color);
-      const anotherApp = loopback();
+      const anotherApp = loopback({localRegistry: true, loadBuiltinModels: true});
       expect(anotherApp.models.Color).to.equal(undefined);
     });
   });
@@ -875,7 +871,7 @@ describe('app', function() {
     it('is unique per app instance', function() {
       app.dataSource('ds', {connector: 'memory'});
       expect(app.datasources.ds).to.not.equal(undefined);
-      const anotherApp = loopback();
+      const anotherApp = loopback({localRegistry: true, loadBuiltinModels: true});
       expect(anotherApp.datasources.ds).to.equal(undefined);
     });
   });
@@ -906,7 +902,7 @@ describe('app', function() {
 
   describe.onServer('listen()', function() {
     it('starts http server', function(done) {
-      const app = loopback();
+      const app = loopback({localRegistry: true, loadBuiltinModels: true});
       app.set('port', 0);
       app.get('/', function(req, res) { res.status(200).send('OK'); });
 
@@ -920,7 +916,7 @@ describe('app', function() {
     });
 
     it('updates port on `listening` event', function(done) {
-      const app = loopback();
+      const app = loopback({localRegistry: true, loadBuiltinModels: true});
       app.set('port', 0);
 
       app.listen(function() {
@@ -931,7 +927,7 @@ describe('app', function() {
     });
 
     it('updates `url` on `listening` event', function(done) {
-      const app = loopback();
+      const app = loopback({localRegistry: true, loadBuiltinModels: true});
       app.set('port', 0);
       app.set('host', undefined);
 
@@ -944,7 +940,7 @@ describe('app', function() {
     });
 
     it('forwards to http.Server.listen on more than one arg', function(done) {
-      const app = loopback();
+      const app = loopback({localRegistry: true, loadBuiltinModels: true});
       app.set('port', 1);
       app.listen(0, '127.0.0.1', function() {
         expect(app.get('port'), 'port').to.not.equal(0).and.not.equal(1);
@@ -955,7 +951,7 @@ describe('app', function() {
     });
 
     it('forwards to http.Server.listen when the single arg is not a function', function(done) {
-      const app = loopback();
+      const app = loopback({localRegistry: true, loadBuiltinModels: true});
       app.set('port', 1);
       app.listen(0).on('listening', function() {
         expect(app.get('port'), 'port') .to.not.equal(0).and.not.equal(1);
@@ -965,7 +961,7 @@ describe('app', function() {
     });
 
     it('uses app config when no parameter is supplied', function(done) {
-      const app = loopback();
+      const app = loopback({localRegistry: true, loadBuiltinModels: true});
       // Http listens on all interfaces by default
       // Custom host serves as an indicator whether
       // the value was used by app.listen
@@ -979,7 +975,7 @@ describe('app', function() {
     });
 
     it('uses localhost in generated url for all-interface hosts', async function() {
-      const app = loopback();
+      const app = loopback({localRegistry: true, loadBuiltinModels: true});
       app.set('host', '0.0.0.0');
       app.set('port', 0);
 
@@ -1216,7 +1212,7 @@ describe('app', function() {
 
   describe.onServer('app.get(\'/\', loopback.status())', function() {
     it('should return the status of the application', function(done) {
-      const app = loopback();
+      const app = loopback({localRegistry: true, loadBuiltinModels: true});
       app.get('/', loopback.status());
       request(app)
         .get('/')
@@ -1241,7 +1237,7 @@ describe('app', function() {
   describe('app.connectors', function() {
     it('is unique per app instance', function() {
       app.connectors.foo = 'bar';
-      const anotherApp = loopback();
+      const anotherApp = loopback({localRegistry: true, loadBuiltinModels: true});
       expect(anotherApp.connectors.foo).to.equal(undefined);
     });
 
@@ -1284,8 +1280,8 @@ describe('app', function() {
     });
 
     it('is unique per app instance', function() {
-      const app1 = loopback();
-      const app2 = loopback();
+      const app1 = loopback({localRegistry: true, loadBuiltinModels: true});
+      const app2 = loopback({localRegistry: true, loadBuiltinModels: true});
 
       expect(app1.settings).to.not.equal(app2.settings);
 
@@ -1295,7 +1291,7 @@ describe('app', function() {
   });
 
   it('exposes loopback as a property', function() {
-    const app = loopback();
+    const app = loopback({localRegistry: true, loadBuiltinModels: true});
     expect(app.loopback).to.equal(loopback);
   });
 
@@ -1331,7 +1327,7 @@ describe('app', function() {
   describe('Model-level normalizeHttpPath option', function() {
     let app;
     beforeEach(function() {
-      app = loopback();
+      app = loopback({localRegistry: true, loadBuiltinModels: true});
     });
 
     it.onServer('honours Model-level setting of `false`', function(done) {
@@ -1367,7 +1363,7 @@ describe('app', function() {
   describe('app-level normalizeHttpPath option', function() {
     let app;
     beforeEach(function() {
-      app = loopback();
+      app = loopback({localRegistry: true, loadBuiltinModels: true});
     });
 
     it.onServer('honours app-level setting of `false`', function(done) {
@@ -1402,7 +1398,7 @@ describe('app', function() {
   describe('Model-level and app-level normalizeHttpPath options', function() {
     let app;
     beforeEach(function() {
-      app = loopback();
+      app = loopback({localRegistry: true, loadBuiltinModels: true});
     });
 
     it.onServer('prioritizes Model-level setting over the app-level one', function(done) {
@@ -1443,39 +1439,57 @@ function executeMiddlewareHandlers(app, urlPath, done) {
         res.end()
       }
     })
-  })
+  });
 
-  function finish(afterClose) {
-    server.close(function(closeErr) {
-      if (closeErr && closeErr.code !== 'ERR_SERVER_NOT_RUNNING') {
-        return afterClose(closeErr)
-      }
-      return afterClose()
-    })
+  function run(callback) {
+    server.listen(0, '127.0.0.1', function() {
+      const address = server.address();
+      const req = http.request({
+        host: '127.0.0.1',
+        port: address.port,
+        path: urlPath,
+        method: 'GET',
+        agent: false,
+      }, function(res) {
+        let body = '';
+        res.setEncoding('utf8');
+        res.on('data', function(chunk) {
+          body += chunk;
+        });
+        res.on('end', function() {
+          server.close(function(closeErr) {
+            if (closeErr && closeErr.code !== 'ERR_SERVER_NOT_RUNNING') {
+              return callback(closeErr);
+            }
+
+            res.text = body;
+            if (handlerError) return callback(handlerError);
+            callback(null, res);
+          });
+        });
+      });
+
+      req.on('error', function(err) {
+        server.close(function(closeErr) {
+          if (closeErr && closeErr.code !== 'ERR_SERVER_NOT_RUNNING') {
+            return callback(closeErr);
+          }
+          callback(err);
+        });
+      });
+
+      req.end();
+    });
   }
 
   if (typeof done === 'function') {
-    request(server)
-      .get(urlPath)
-      .end(function(err, res) {
-        finish(function(closeErr) {
-          if (closeErr) return done(closeErr)
-          if (handlerError) return done(handlerError)
-          return done(err, res)
-        })
-      })
-  } else {
-    return new Promise(function(resolve, reject) {
-      request(server)
-        .get(urlPath)
-        .end(function(err, res) {
-          finish(function(closeErr) {
-            if (closeErr) return reject(closeErr)
-            if (handlerError) return reject(handlerError)
-            if (err) return reject(err)
-            resolve(res)
-          })
-        })
-    })
+    return run(done);
   }
+
+  return new Promise(function(resolve, reject) {
+    run(function(err, res) {
+      if (err) return reject(err);
+      resolve(res);
+    });
+  });
 }

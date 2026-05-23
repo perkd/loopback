@@ -50,7 +50,10 @@ describe('loopback.token(options)', function() {
     });
     app.model(TestModel, {dataSource: 'db'});
 
-    await createTestingToken.bind(this)()
+    this.token = await Token.create({
+      id: '0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef',
+      userId: '123',
+    })
   })
 
   it('defaults to built-in AccessToken model', async function() {
@@ -137,28 +140,20 @@ describe('loopback.token(options)', function() {
   });
 
   it('does not search default keys when searchDefaultTokenKeys is false',
-    function(done) {
+    async function() {
       const tokenId = this.token.id;
       const app = createTestApp(
         this.token,
         {token: {searchDefaultTokenKeys: false}},
-        done,
       );
       const agent = request.agent(app);
 
-      // Set the token cookie
-      agent.get('/token').expect(200).end(function(err, res) {
-        if (err) return done(err);
+      await agent.get('/token').expect(200);
 
-        // Make a request that sets the token in all places searched by default
-        agent.get('/check-access?access_token=' + tokenId)
-          .set('X-Access-Token', tokenId)
-          .set('authorization', tokenId)
-        // Expect 401 because there is no (non-default) place configured where
-        // the middleware should load the token from
-          .expect(401)
-          .end(done);
-      });
+      await agent.get('/check-access?access_token=' + tokenId)
+        .set('X-Access-Token', tokenId)
+        .set('authorization', tokenId)
+        .expect(401);
     });
 
   it('populates req.token from an authorization header with bearer token with base64', async function() {
@@ -437,7 +432,7 @@ describe('loopback.token(options)', function() {
 
     it('overwrites existing token when enableDoublecheck ' +
       'and overwriteExistingToken options are truthy',
-    function(done) {
+    async function() {
       const token = this.token;
       const tokenStub = {id: 'stub id'};
       app.use(function(req, res, next) {
@@ -454,20 +449,15 @@ describe('loopback.token(options)', function() {
         res.send(req.accessToken);
       });
 
-      request(app).get('/')
+      const res = await request(app).get('/')
         .set('Authorization', token.id)
-        .expect(200)
-        .end(function(err, res) {
-          if (err) return done(err);
+        .expect(200);
 
-          expect(res.body).to.eql({
-            id: token.id,
-            ttl: token.ttl,
-            userId: token.userId,
-            created: token.created.toJSON(),
-          });
-
-          done();
+      expect(res.body).to.eql({
+        id: token.id,
+        ttl: token.ttl,
+        userId: token.userId,
+        created: token.created.toJSON(),
         });
     });
   });
@@ -684,6 +674,7 @@ describe('AccessToken', function() {
 
 describe('app.enableAuth()', function() {
   let app;
+  let originalAccessTokensModel;
   beforeEach(function setupAuthWithModels() {
     app = loopback({localRegistry: true, loadBuiltinModels: true});
     app.dataSource('db', {connector: 'memory'});
@@ -698,9 +689,14 @@ describe('app.enableAuth()', function() {
 
     // Fix User's "hasMany accessTokens" relation to use our new MyToken model
     const User = app.registry.getModel('User');
+    originalAccessTokensModel = User.settings.relations.accessTokens.model;
     User.settings.relations.accessTokens.model = 'MyToken';
 
     app.enableAuth({dataSource: 'db'});
+  });
+  afterEach(function restoreUserAccessTokenRelation() {
+    const User = app.registry.getModel('User');
+    User.settings.relations.accessTokens.model = originalAccessTokensModel;
   });
   beforeEach(createTestingToken)
 
@@ -823,10 +819,35 @@ function createTestApp(testToken, settings = {}) {
 
   const app = loopback({localRegistry: true, loadBuiltinModels: true});
   app.dataSource('db', {connector: 'memory'});
+  app.set('remoting', {errorHandler: {debug: true, log: false}});
+
+  Object.keys(appSettings).forEach(function(key) {
+    app.set(key, appSettings[key]);
+  });
+
+  const modelOptions = {
+    acls: [
+      {
+        principalType: 'ROLE',
+        principalId: '$everyone',
+        accessType: ACL.ALL,
+        permission: ACL.DENY,
+        property: 'deleteById',
+      },
+    ],
+  };
+
+  Object.keys(modelSettings).forEach(function(key) {
+    modelOptions[key] = modelSettings[key];
+  });
+
+  const TestModel = app.registry.createModel('test', {}, modelOptions);
+  app.model(TestModel, {dataSource: 'db'});
+
+  app.enableAuth({dataSource: 'db'});
 
   app.use(cookieParser('secret'));
   app.use(loopback.token(tokenSettings));
-  app.set('remoting', {errorHandler: {debug: true, log: false}});
   app.get('/token', function(req, res) {
     res.cookie('authorization', testToken.id, {signed: true});
     res.cookie('access_token', testToken.id, {signed: true});
@@ -859,30 +880,6 @@ function createTestApp(testToken, settings = {}) {
     res.status(200).send(result);
   });
   app.use(loopback.rest());
-  app.enableAuth({dataSource: 'db'});
-
-  Object.keys(appSettings).forEach(function(key) {
-    app.set(key, appSettings[key]);
-  });
-
-  const modelOptions = {
-    acls: [
-      {
-        principalType: 'ROLE',
-        principalId: '$everyone',
-        accessType: ACL.ALL,
-        permission: ACL.DENY,
-        property: 'deleteById',
-      },
-    ],
-  };
-
-  Object.keys(modelSettings).forEach(function(key) {
-    modelOptions[key] = modelSettings[key];
-  });
-
-  const TestModel = app.registry.createModel('test', {}, modelOptions);
-  app.model(TestModel, {dataSource: 'db'});
   return app
 }
 

@@ -867,6 +867,7 @@ describe('User', function () {
     it('login a user over REST when email verification is required', async function () {
       const response = await request(app)
         .post('/test-users/login')
+        .set('Connection', 'close')
         .expect('Content-Type', /json/)
         .expect(200)
         .send(validCredentialsEmailVerified)
@@ -880,6 +881,7 @@ describe('User', function () {
       'for email verification error message', async function () {
       const response = await request(app)
         .post('/test-users/login')
+        .set('Connection', 'close')
         .expect('Content-Type', /json/)
         .expect(401)
         .send({ email: validCredentialsEmail })
@@ -899,6 +901,7 @@ describe('User', function () {
 
       const response = await request(app)
         .post('/test-users/login')
+        .set('Connection', 'close')
         .expect('Content-Type', /json/)
         .expect(401)
         .send(validCredentials)

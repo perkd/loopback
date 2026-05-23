@@ -33,45 +33,36 @@ describe('remoting - integration', function() {
       assert(handler);
     });
 
-    it('should accept request that has entity below 1kb', function(done) {
+    it('should accept request that has entity below 1kb', async function() {
       // Build an object that is smaller than 1kb
       let name = '';
       for (let i = 0; i < 256; i++) {
         name += '11';
       }
-      this.http = this.post('/api/stores');
-      this.http.send({
+      const res = await this.post('/api/stores')
+        .send({
         'name': name,
-      });
-      this.http.end(function(err) {
-        if (err) return done(err);
-        this.req = this.http.req;
-        this.res = this.http.res;
-        assert.equal(this.res.statusCode, 200);
-
-        done();
-      }.bind(this));
+      })
+        .expect(200);
+      this.req = res.req;
+      this.res = res;
+      assert.equal(this.res.statusCode, 200);
     });
 
-    it('should reject request that has entity beyond 1kb', function(done) {
+    it('should reject request that has entity beyond 1kb', async function() {
       // Build an object that is larger than 1kb
       let name = '';
       for (let i = 0; i < 2048; i++) {
         name += '11111111111';
       }
-      this.http = this.post('/api/stores');
-      this.http.send({
+      const res = await this.post('/api/stores')
+        .send({
         'name': name,
-      });
-      this.http.end(function(err) {
-        if (err) return done(err);
-        this.req = this.http.req;
-        this.res = this.http.res;
-        // Request is rejected with 413
-        assert.equal(this.res.statusCode, 413);
-
-        done();
-      }.bind(this));
+      })
+        .expect(413);
+      this.req = res.req;
+      this.res = res;
+      assert.equal(this.res.statusCode, 413);
     });
   });
 

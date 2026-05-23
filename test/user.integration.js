@@ -70,7 +70,7 @@ describe('users - integration', function() {
       let hookEnabled = true;
       User.beforeRemote('replaceOrCreate', (ctx, unused, next) => {
         // don't affect subsequent tests!
-        if (!hookEnabled) return;
+        if (!hookEnabled) return next();
         hookEnabled = false;
 
         // Delete the user *AFTER* the PUT request was authorized

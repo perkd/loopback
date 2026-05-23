@@ -10,16 +10,17 @@ const request = require('supertest');
 
 describe('hidden properties', function() {
   beforeEach(function(done) {
-    const app = this.app = loopback();
-    const Product = this.Product = loopback.PersistedModel.extend(
+    const app = this.app = loopback({localRegistry: true, loadBuiltinModels: true});
+    const ds = this.ds = app.dataSource('db', {connector: 'memory'});
+    const Product = this.Product = app.registry.getModel('PersistedModel').extend(
       'product',
       {},
       {hidden: ['secret']},
     );
-    Product.attachTo(loopback.memory());
+    Product.attachTo(ds);
 
-    const Category = this.Category = loopback.PersistedModel.extend('category');
-    Category.attachTo(loopback.memory());
+    const Category = this.Category = app.registry.getModel('PersistedModel').extend('category');
+    Category.attachTo(ds);
     Category.hasMany(Product);
 
     app.model(Product);

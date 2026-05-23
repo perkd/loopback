@@ -172,17 +172,11 @@ describe('relations - integration', function() {
         };
       })
 
-      beforeEach(function(done) {
-        this.http = this.post(this.url, this.newWidget);
-        this.http.send(this.newWidget);
-        this.http.end(function(err) {
-          if (err) return done(err);
-
-          this.req = this.http.req;
-          this.res = this.http.response;
-
-          done();
-        }.bind(this));
+      beforeEach(async function() {
+        this.res = await this.post(this.url)
+          .send(this.newWidget)
+          .expect(200);
+        this.req = this.res.req;
       })
 
       it('should succeed with statusCode 200', function() {
@@ -448,7 +442,7 @@ describe('relations - integration', function() {
     });
 
     describe('DELETE /physicians/:id/patients/rel/:fk', function() {
-      before(async function() {
+      beforeEach(async function() {
         const root = await setup(true)
         this.url = root.relUrl
         this.patient = root.patient
@@ -503,7 +497,7 @@ describe('relations - integration', function() {
     });
 
     describe('DELETE /physicians/:id/patients/:fk', function() {
-      before(async function() {
+      beforeEach(async function() {
         const root = await setup(true)
         this.url = '/api/physicians/' + root.physician.id +
           '/patients/' + root.patient.id
@@ -690,6 +684,9 @@ describe('relations - integration', function() {
 
     it('returns the updated embedded model', async function() {
       const url = '/api/groups/' + this.group.id + '/cover';
+      await this.put(url)
+        .send({url: 'http://changed.url'})
+        .expect(200)
       const res = await this.get(url)
 
       expect(res.body).to.be.eql({url: 'http://changed.url'})
@@ -724,14 +721,14 @@ describe('relations - integration', function() {
       todoList.embedsMany(todoItem, {as: 'items'});
     });
 
-    before(async function createTodoList() {
+    beforeEach(async function createTodoList() {
       this.todoList = await app.models.todoList.create({name: 'List A'})
       this.todoList.items.build({content: 'Todo 1'})
       this.todoList.items.build({content: 'Todo 2'})
       await this.todoList.save()
     })
 
-    after(async function() {
+    afterEach(async function() {
       await this.app.models.todoList.destroyAll()
     })
 
@@ -779,6 +776,9 @@ describe('relations - integration', function() {
 
     it('includes the created embedded model', async function() {
       const url = '/api/todo-lists/' + this.todoList.id + '/items';
+      await this.post(url)
+        .send({content: 'Todo 3'})
+        .expect(200)
       const res = await this.get(url).expect(200)
 
       expect(res.body).to.be.eql([
@@ -789,6 +789,9 @@ describe('relations - integration', function() {
     })
 
     it('returns an embedded model by (internal) id', async function() {
+      await this.post('/api/todo-lists/' + this.todoList.id + '/items')
+        .send({content: 'Todo 3'})
+        .expect(200)
       const url = '/api/todo-lists/' + this.todoList.id + '/items/3';
       const res = await this.get(url).expect(200)
 
@@ -801,6 +804,10 @@ describe('relations - integration', function() {
     })
 
     it('returns the embedded models - verify', async function() {
+      await this.post('/api/todo-lists/' + this.todoList.id + '/items')
+        .send({content: 'Todo 3'})
+        .expect(200)
+      await this.del('/api/todo-lists/' + this.todoList.id + '/items/2').expect(204)
       const url = '/api/todo-lists/' + this.todoList.id + '/items';
       const res = await this.get(url).expect(200)
 
@@ -811,6 +818,7 @@ describe('relations - integration', function() {
     })
 
     it('returns a 404 response when embedded model is not found', async function() {
+      await this.del('/api/todo-lists/' + this.todoList.id + '/items/2').expect(204)
       const url = '/api/todo-lists/' + this.todoList.id + '/items/2'
       const res = await this.get(url).expect(404)
 
@@ -820,11 +828,15 @@ describe('relations - integration', function() {
     })
 
     it('checks if an embedded model exists - ok', async function() {
+      await this.post('/api/todo-lists/' + this.todoList.id + '/items')
+        .send({content: 'Todo 3'})
+        .expect(200)
       const url = '/api/todo-lists/' + this.todoList.id + '/items/3'
       await this.head(url).expect(200)
     })
 
     it('checks if an embedded model exists - fail', async function() {
+      await this.del('/api/todo-lists/' + this.todoList.id + '/items/2').expect(204)
       const url = '/api/todo-lists/' + this.todoList.id + '/items/2'
       await this.head(url).expect(404)
     })
@@ -858,19 +870,19 @@ describe('relations - integration', function() {
       })
     })
 
-    before(async function createRecipe() {
+    beforeEach(async function createRecipe() {
       this.recipe = await app.models.recipe.create({name: 'Recipe'})
       const ing = await this.recipe.ingredients.create({name: 'Chocolate'})
       this.ingredient1 = ing.id
       await this.recipe.picture.create({name: 'Photo 1'})
     })
 
-    before(async function createIngredient() {
+    beforeEach(async function createIngredient() {
       const ing = await app.models.ingredient.create({name: 'Sugar'})
       this.ingredient2 = ing.id
     })
 
-    after(async function() {
+    afterEach(async function() {
       await this.app.models.recipe.destroyAll()
       await this.app.models.ingredient.destroyAll()
       await this.app.models.photo.destroyAll()
@@ -895,6 +907,8 @@ describe('relations - integration', function() {
     })
 
     it('has created models', async function() {
+      const created = await this.recipe.ingredients.create({name: 'Butter'})
+      this.ingredient3 = created.id
       const url = '/api/ingredients';
       const res = await this.get(url).expect(200)
 
@@ -906,6 +920,8 @@ describe('relations - integration', function() {
     })
 
     it('returns the referenced models', async function() {
+      const created = await this.recipe.ingredients.create({name: 'Butter'})
+      this.ingredient3 = created.id
       const url = '/api/recipes/' + this.recipe.id + '/ingredients';
       const res = await this.get(url).expect(200)
 
@@ -916,6 +932,8 @@ describe('relations - integration', function() {
     })
 
     it('filters the referenced models', async function() {
+      const created = await this.recipe.ingredients.create({name: 'Butter'})
+      this.ingredient3 = created.id
       let url = '/api/recipes/' + this.recipe.id + '/ingredients';
       url += '?filter[where][name]=Butter';
       const res = await this.get(url).expect(200)
@@ -926,6 +944,8 @@ describe('relations - integration', function() {
     })
 
     it('includes the referenced models', async function() {
+      const created = await this.recipe.ingredients.create({name: 'Butter'})
+      this.ingredient3 = created.id
       let url = '/api/recipes/findOne?filter[where][id]=' + this.recipe.id;
       url += '&filter[include]=ingredients';
       const res = await this.get(url).expect(200)
@@ -941,6 +961,8 @@ describe('relations - integration', function() {
     })
 
     it('returns a referenced model by id', async function() {
+      const created = await this.recipe.ingredients.create({name: 'Butter'})
+      this.ingredient3 = created.id
       let url = '/api/recipes/' + this.recipe.id + '/ingredients/';
       url += this.ingredient3;
       const res = await this.get(url).expect(200)
@@ -949,6 +971,8 @@ describe('relations - integration', function() {
     })
 
     it('keeps an array of ids - verify', async function() {
+      const created = await this.recipe.ingredients.create({name: 'Butter'})
+      this.ingredient3 = created.id
       const url = '/api/recipes/' + this.recipe.id;
       const res = await this.get(url).expect(200)
       const expected = [this.ingredient1, this.ingredient3];
@@ -958,6 +982,8 @@ describe('relations - integration', function() {
     })
 
     it('destroys a referenced model', async function() {
+      const created = await this.recipe.ingredients.create({name: 'Butter'})
+      this.ingredient3 = created.id
       let url = '/api/recipes/' + this.recipe.id + '/ingredients/';
       url += this.ingredient3;
 
@@ -965,6 +991,11 @@ describe('relations - integration', function() {
     })
 
     it('has destroyed a referenced model', async function() {
+      const created = await this.recipe.ingredients.create({name: 'Butter'})
+      this.ingredient3 = created.id
+      let deleteUrl = '/api/recipes/' + this.recipe.id + '/ingredients/';
+      deleteUrl += this.ingredient3;
+      await this.del(deleteUrl).expect(204)
       const url = '/api/ingredients';
       const res = await this.get(url).expect(200)
 
@@ -975,6 +1006,11 @@ describe('relations - integration', function() {
     })
 
     it('returns the referenced models without the deleted one', async function() {
+      const created = await this.recipe.ingredients.create({name: 'Butter'})
+      this.ingredient3 = created.id
+      let deleteUrl = '/api/recipes/' + this.recipe.id + '/ingredients/';
+      deleteUrl += this.ingredient3;
+      await this.del(deleteUrl).expect(204)
       const url = '/api/recipes/' + this.recipe.id + '/ingredients';
       const res = await this.get(url).expect(200)
 
@@ -992,6 +1028,9 @@ describe('relations - integration', function() {
     })
 
     it('returns the referenced models - verify', async function() {
+      let linkUrl = '/api/recipes/' + this.recipe.id + '/ingredients';
+      linkUrl += '/rel/' + this.ingredient2;
+      await this.put(linkUrl).expect(200)
       const url = '/api/recipes/' + this.recipe.id + '/ingredients';
       const res = await this.get(url).expect(200)
 
@@ -1008,6 +1047,12 @@ describe('relations - integration', function() {
     })
 
     it('returns the referenced models without the unlinked one', async function() {
+      let linkUrl = '/api/recipes/' + this.recipe.id + '/ingredients';
+      linkUrl += '/rel/' + this.ingredient2;
+      await this.put(linkUrl).expect(200)
+      let unlinkUrl = '/api/recipes/' + this.recipe.id + '/ingredients';
+      unlinkUrl += '/rel/' + this.ingredient1;
+      await this.del(unlinkUrl).expect(204)
       const url = '/api/recipes/' + this.recipe.id + '/ingredients';
       const res = await this.get(url).expect(200)
 
@@ -1017,6 +1062,12 @@ describe('relations - integration', function() {
     })
 
     it('has not destroyed an unlinked model', async function() {
+      let linkUrl = '/api/recipes/' + this.recipe.id + '/ingredients';
+      linkUrl += '/rel/' + this.ingredient2;
+      await this.put(linkUrl).expect(200)
+      let unlinkUrl = '/api/recipes/' + this.recipe.id + '/ingredients';
+      unlinkUrl += '/rel/' + this.ingredient1;
+      await this.del(unlinkUrl).expect(204)
       const url = '/api/ingredients';
       const res = await this.get(url).expect(200)
 
@@ -1041,6 +1092,11 @@ describe('relations - integration', function() {
     })
 
     it('checks if an referenced model exists - fail', async function() {
+      const created = await this.recipe.ingredients.create({name: 'Butter'})
+      this.ingredient3 = created.id
+      let deleteUrl = '/api/recipes/' + this.recipe.id + '/ingredients/';
+      deleteUrl += this.ingredient3;
+      await this.del(deleteUrl).expect(204)
       let url = '/api/recipes/' + this.recipe.id + '/ingredients/';
       url += this.ingredient3;
 
@@ -1193,12 +1249,15 @@ describe('relations - integration', function() {
     })
 
     it('enables nested relationship routes - hasMany find', async function() {
-      const url = '/api/books/' + this.book.id + '/pages/' + this.page.id + '/notes'
+      const book = await app.models.Book.create({name: 'Book hasMany find'})
+      const page = await book.pages.create({name: 'Page hasMany find'})
+      await page.notes.create({text: 'Page Note hasMany find'})
+      const url = '/api/books/' + book.id + '/pages/' + page.id + '/notes'
       const res = await this.get(url).expect(200)
 
       expect(res.body).to.be.an('array')
       expect(res.body).to.have.length(1)
-      expect(res.body[0].text).to.equal('Page Note 1')
+      expect(res.body[0].text).to.equal('Page Note hasMany find')
     })
 
     it('enables nested relationship routes - hasMany findById', async function() {
@@ -1255,11 +1314,11 @@ describe('relations - integration', function() {
   describe('hasOne', function() {
     let cust;
 
-    before(async function createCustomer() {
+    beforeEach(async function createCustomer() {
       cust = await app.models.customer.create({name: 'John'})
     })
 
-    after(async function() {
+    afterEach(async function() {
       await app.models.customer.destroyAll()
       await app.models.profile.destroyAll()
     })
@@ -1275,6 +1334,10 @@ describe('relations - integration', function() {
     })
 
     it('should find the referenced model', async function() {
+      await this.post('/api/customers/' + cust.id + '/profile')
+        .send({points: 10})
+        .expect(200)
+
       const url = '/api/customers/' + cust.id + '/profile';
       const res = await this.get(url).expect(200)
 
@@ -1282,16 +1345,22 @@ describe('relations - integration', function() {
       expect(res.body.customerId).to.be.eql(cust.id)
     })
 
-    it('should not create the referenced model twice', function(done) {
+    it('should not create the referenced model twice', async function() {
       const url = '/api/customers/' + cust.id + '/profile';
-      this.post(url)
+      await this.post(url)
+        .send({points: 10})
+        .expect(200)
+
+      await this.post(url)
         .send({points: 20})
-        .expect(500, function(err, res) {
-          done(err);
-        });
-    });
+        .expect(500)
+    })
 
     it('should update the referenced model', async function() {
+      await this.post('/api/customers/' + cust.id + '/profile')
+        .send({points: 10})
+        .expect(200)
+
       const url = '/api/customers/' + cust.id + '/profile';
       const res = await this.put(url)
         .send({points: 100})
@@ -1302,12 +1371,21 @@ describe('relations - integration', function() {
     })
 
     it('should delete the referenced model', async function() {
+      await this.post('/api/customers/' + cust.id + '/profile')
+        .send({points: 10})
+        .expect(200)
+
       const url = '/api/customers/' + cust.id + '/profile';
       await this.del(url).expect(204)
     })
 
     it('should not find the referenced model', async function() {
       const url = '/api/customers/' + cust.id + '/profile'
+      await this.post(url)
+        .send({points: 10})
+        .expect(200)
+      await this.del(url).expect(204)
+
       const res = await this.get(url).expect(404)
       expect(res.body.error.code).to.be.equal('MODEL_NOT_FOUND')
     })

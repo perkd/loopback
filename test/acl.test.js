@@ -9,10 +9,7 @@ const expect = require('./helpers/expect');
 const loopback = require('../');
 const request = require('supertest');
 const supertest = require('supertest');
-const { ACL, Scope, Role, RoleMapping, User } = loopback
-
-// Speed up the password hashing algorithm for tests
-User.settings.saltWorkFactor = 4;
+const { ACL, Scope, Role, RoleMapping } = loopback
 
 let ds = null;
 let testModel;
@@ -788,8 +785,9 @@ describe('authorized roles propagation in RemotingContext', function() {
 });
 
 function setupTestModels() {
-  // Create a fresh datasource for each test to avoid shared state
-  ds = this.ds = loopback.createDataSource({connector: loopback.Memory})
+  // Create a fresh app/registry per test to avoid mutating global built-ins.
+  this.app = loopback({localRegistry: true, loadBuiltinModels: true});
+  ds = this.ds = this.app.dataSource('db', {connector: loopback.Memory})
 
   // Create the test model
   testModel = this.testModel = loopback.PersistedModel.extend('testModel')
@@ -797,12 +795,13 @@ function setupTestModels() {
   // Attach all models to the datasource
   testModel.attachTo(ds)
   
-  // Use the global models but attach them to our test datasource
-  this.ACL = loopback.ACL
-  this.Scope = loopback.Scope
-  this.Role = loopback.Role
-  this.RoleMapping = loopback.RoleMapping
-  this.User = loopback.User
+  // Use built-in models from the app-local registry.
+  this.ACL = this.app.registry.getModel('ACL')
+  this.Scope = this.app.registry.getModel('Scope')
+  this.Role = this.app.registry.getModel('Role')
+  this.RoleMapping = this.app.registry.getModel('RoleMapping')
+  this.User = this.app.registry.getModel('User')
+  this.User.settings.saltWorkFactor = 4
   
   // Attach all built-in models to our test datasource
   this.ACL.attachTo(ds)

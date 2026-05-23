@@ -8,14 +8,23 @@ const loopback = require('../');
 const lt = require('./helpers/loopback-testing-helper');
 const path = require('path');
 const ACCESS_CONTROL_APP = path.join(__dirname, 'fixtures', 'access-control');
-const app = require(path.join(ACCESS_CONTROL_APP, 'server/server.js'));
 const assert = require('node:assert');
 const USER = {email: 'test@test.test', password: 'test'};
 const CURRENT_USER = {email: 'current@test.test', password: 'test'};
 const debug = require('debug')('loopback:test:access-control.integration');
 
+function loadFreshApp() {
+  Object.keys(require.cache).forEach(function(cachePath) {
+    if (cachePath.startsWith(ACCESS_CONTROL_APP + path.sep)) {
+      delete require.cache[cachePath];
+    }
+  });
+  const serverPath = path.join(ACCESS_CONTROL_APP, 'server/server.js');
+  return require(serverPath);
+}
+
 describe('access control - integration', function() {
-  lt.beforeEach.withApp(app);
+  lt.beforeEach.withApp(loadFreshApp);
 
   /*
   describe('accessToken', function() {
@@ -88,9 +97,9 @@ describe('access control - integration', function() {
       lt.it.shouldNotBeFound();
     });
 
-    lt.it.shouldBeDeniedWhenCalledAnonymously('PUT', urlForUser);
-    lt.it.shouldBeDeniedWhenCalledUnauthenticated('PUT', urlForUser);
-    lt.it.shouldBeDeniedWhenCalledByUser(CURRENT_USER, 'PUT', urlForUser);
+    lt.it.shouldBeDeniedWhenCalledAnonymously('PATCH', urlForUser);
+    lt.it.shouldBeDeniedWhenCalledUnauthenticated('PATCH', urlForUser);
+    lt.it.shouldBeDeniedWhenCalledByUser(CURRENT_USER, 'PATCH', urlForUser);
 
     lt.it.shouldBeDeniedWhenCalledAnonymously('PUT', urlForUser);
     lt.it.shouldBeDeniedWhenCalledUnauthenticated('PUT', urlForUser);
@@ -103,8 +112,23 @@ describe('access control - integration', function() {
       lt.describe.whenCalledRemotely('DELETE', '/api/users/:id', function() {
         lt.it.shouldBeAllowed();
       });
-      lt.describe.whenCalledRemotely('GET', '/api/users/:id', function() {
-        lt.it.shouldBeAllowed();
+      describe('GET /api/users/:id', function() {
+        beforeEach(async function() {
+          const res = await this.get('/api/users/' + this.user.id + '?ok')
+            .set('Accept', 'application/json')
+            .set('Connection', 'close')
+            .set('authorization', this.loggedInAccessToken.id)
+            .expect(200);
+          this.req = res.req;
+          this.res = res;
+        });
+
+        it('should be allowed', function() {
+          assert(this.req);
+          assert(this.res);
+          assert.equal(this.res.statusCode, 200);
+        });
+
         it('should not include a password', function() {
           debug('GET /api/users/:id response: %s\nheaders: %j\nbody string: %s',
             this.res.statusCode,
@@ -154,43 +178,33 @@ describe('access control - integration', function() {
     // define dynamic role that would only grant access when the authenticated user's email is equal to
     // SPECIAL_USER's email
 
-    before(function() {
-      const roleModel = app.registry.getModel('Role');
-      const userModel = app.registry.getModel('user');
+    beforeEach(function() {
+      const roleModel = this.app.registry.getModel('Role');
+      const userModel = this.app.registry.getModel('user');
 
       roleModel.registerResolver('$dynamic-role', function(role, context, callback) {
-        // Handle both Promise and callback patterns
         const promise = new Promise(function(resolve) {
           if (!(context && context.accessToken && context.accessToken.userId)) {
-            resolve(false)
-            return
+            resolve(false);
+            return;
           }
-          
-          const accessToken = context.accessToken
-          
-          // Use findById without callback, since it's now Promise-based
-          userModel.findById(accessToken.userId)
+
+          userModel.findById(context.accessToken.userId)
             .then(function(user) {
-              if (user && user.email === SPECIAL_USER.email) {
-                resolve(true)
-              } else {
-                resolve(false)
-              }
+              resolve(!!(user && user.email === SPECIAL_USER.email));
             })
-            .catch(function(err) {
-              resolve(false)
-            })
-        })
-        
-        // If callback is provided, use it with the promise result
+            .catch(function() {
+              resolve(false);
+            });
+        });
+
         if (callback && typeof callback === 'function') {
           promise.then(function(result) {
-            callback(null, result)
-          })
+            callback(null, result);
+          });
         }
-        
-        // Always return the promise for Promise-based usage
-        return promise
+
+        return promise;
       });
     });
 
@@ -228,14 +242,14 @@ describe('access control - integration', function() {
 
   describe('/accounts with replaceOnPUT true', function() {
     let count = 0;
-    before(function() {
-      const roleModel = loopback.getModelByType(loopback.Role);
+    beforeEach(function() {
+      const roleModel = this.app.registry.getModel('Role');
       roleModel.registerResolver('$dummy', function(role, context, callback) {
         process.nextTick(function() {
           if (context.remotingContext) {
             count++;
           }
-          if (callback) callback(null, false); // Always true
+          if (callback) callback(null, false);
         });
       });
     });
@@ -271,10 +285,11 @@ describe('access control - integration', function() {
       beforeEach(function(done) {
         const self = this;
         // Create an account under the given user
-        app.models.accountWithReplaceOnPUTtrue.create({
+        self.app.models.accountWithReplaceOnPUTtrue.create({
           userId: self.user.id,
           balance: 100,
         }, function(err, act) {
+          if (err) return done(err);
           actId = act.id;
           self.url = '/api/accounts-replacing/' + actId;
           done();
@@ -335,10 +350,11 @@ describe('access control - integration', function() {
       beforeEach(function(done) {
         const self = this;
         // Create an account under the given user
-        app.models.accountWithReplaceOnPUTfalse.create({
+        self.app.models.accountWithReplaceOnPUTfalse.create({
           userId: self.user.id,
           balance: 100,
         }, function(err, act) {
+          if (err) return done(err);
           actId = act.id;
           self.url = '/api/accounts-updating/' + actId;
           done();

@@ -358,7 +358,7 @@ describe('OptionsFromRemotingContext', function() {
   });
 
   function setupAppAndRequest() {
-    app = loopback({localRegistry: true});
+    app = loopback({localRegistry: true, loadBuiltinModels: true});
     app.dataSource('db', {connector: 'memory'});
 
     Product = app.registry.createModel(
