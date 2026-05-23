@@ -62,15 +62,20 @@ function rest() {
       return handlers[0](req, res, next);
     }
 
-    // Use an async IIFE with a simple for...of loop to process handlers sequentially
-    (async () => {
-      for (const handler of handlers) {
-        await new Promise((resolve, reject) => {
-          handler(req, res, (err) => err ? reject(err) : resolve());
-        });
+    let index = 0;
+    const runNextHandler = (err) => {
+      if (err) return next(err);
+
+      const handler = handlers[index++];
+      if (!handler) return next();
+
+      try {
+        handler(req, res, runNextHandler);
+      } catch (error) {
+        next(error);
       }
-    })()
-      .then(() => next())
-      .catch(next);
+    };
+
+    runNextHandler();
   };
 }

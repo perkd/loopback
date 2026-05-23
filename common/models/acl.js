@@ -389,10 +389,6 @@ module.exports = function(ACL) {
     // resolved is an instance of AccessRequest
     let resolved = this.resolvePermission(acls, req)
 
-    if (resolved && resolved.permission === ACL.DENY) {
-      return resolved
-    }
-
     // Find dynamic ACLs
     const dynACLs = await this.find({
       where: {
