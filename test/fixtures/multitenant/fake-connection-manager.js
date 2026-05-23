@@ -38,6 +38,18 @@ class FakeConnectionManager {
     return promise;
   }
 
+  async disconnectPool(tenant) {
+    const pool = this._pools.get(tenant);
+    if (!pool) return;
+
+    // Mirror production PoolManager semantics: remove first so future
+    // resolutions must go back through ensureConnection().
+    this._pools.delete(tenant);
+    if (pool && typeof pool.disconnect === 'function') {
+      await pool.disconnect();
+    }
+  }
+
   async shutdown() {
     for (const pool of this._pools.values()) {
       if (pool && typeof pool.disconnect === 'function') {

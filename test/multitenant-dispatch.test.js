@@ -100,6 +100,27 @@ describe('Multitenant dispatch (contract)', function() {
     assert.notStrictEqual(dsA1, dsB);
   });
 
+  it('re-resolves a tenant datasource after eviction', async function() {
+    await app.connectionManager.ensureConnection('tenant-a');
+
+    const dsBefore = await Context.runAsTenant('tenant-a', () => TenantModel.getDataSource());
+    assert.strictEqual(dsBefore, pools.get('tenant-a'));
+
+    await app.connectionManager.disconnectPool('tenant-a');
+    const missingAfterEviction = await Context.runAsTenant('tenant-a', () => TenantModel.getDataSource());
+    assert.strictEqual(
+      missingAfterEviction,
+      originalDataSource,
+      'without an active tenant pool, dispatch should not cache the evicted datasource',
+    );
+
+    await app.connectionManager.ensureConnection('tenant-a');
+    const dsAfter = await Context.runAsTenant('tenant-a', () => TenantModel.getDataSource());
+
+    assert.strictEqual(dsAfter, pools.get('tenant-a'));
+    assert.notStrictEqual(dsAfter, dsBefore, 'tenant datasource should be freshly resolved after eviction');
+  });
+
   it('falls back to the original datasource when no tenant is set', function() {
     const ds = TenantModel.getDataSource();
     assert.strictEqual(ds, originalDataSource);
