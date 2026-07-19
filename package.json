@@ -1,11 +1,11 @@
 {
-  "name": "loopback",
-  "version": "3.37.1",
+  "name": "@perkd/loopback",
+  "version": "4.0.0",
   "description": "LoopBack: Open Source Framework for Node.js",
   "copyright.owner": "IBM Corp.",
   "license": "MIT",
   "author": "IBM Corp.",
-  "homepage": "http://loopback.io",
+  "homepage": "https://github.com/perkd/loopback#readme",
   "keywords": [
     "web",
     "restful",
@@ -49,7 +49,7 @@
   },
   "repository": {
     "type": "git",
-    "url": "https://github.com/strongloop/loopback"
+    "url": "git+ssh://git@github.com/perkd/loopback.git"
   },
   "browser": {
     "./lib/server-app.js": "./lib/browser-express.js",
@@ -82,8 +82,8 @@
     "fast-json-stable-stringify": "^2.1.0",
     "inflection": "2.0.1",
     "isemail": "^3.2.0",
-    "loopback-connector-remote": "github:perkd/loopback-connector-remote#semver:^3.5.1",
-    "loopback-datasource-juggler": "github:perkd/loopback-datasource-juggler#semver:^6.0.0",
+    "loopback-connector-remote": "npm:@perkd/loopback-connector-remote@^4.0.0",
+    "loopback-datasource-juggler": "npm:@perkd/loopback-datasource-juggler@^7.0.0",
     "loopback-filters": "^1.1.1",
     "loopback-phase": "3.4.0",
     "nodemailer": "^8.0.7",
@@ -92,7 +92,7 @@
     "serve-favicon": "^2.5.1",
     "stable": "^0.1.8",
     "strong-globalize": "^6.0.6",
-    "strong-remoting": "github:perkd/strong-remoting#semver:^3.21.0",
+    "strong-remoting": "npm:@perkd/strong-remoting@^4.0.0",
     "uid2": "1.0.0",
     "underscore.string": "^3.3.6"
   },
@@ -122,5 +122,22 @@
     "strong-task-emitter": "^0.0.8",
     "supertest": "^7.2.2"
   },
-  "packageManager": "yarn@4.15.0"
+  "packageManager": "yarn@4.17.0",
+  "bugs": {
+    "url": "https://github.com/perkd/loopback/issues"
+  },
+  "publishConfig": {
+    "registry": "https://npm.pkg.github.com",
+    "access": "restricted"
+  },
+  "files": [
+    "index.js",
+    "lib",
+    "common",
+    "server",
+    "client",
+    "intl",
+    "README.md",
+    "CHANGES.md"
+  ]
 }

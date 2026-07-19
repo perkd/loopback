@@ -1,3 +1,13 @@
+# @perkd/loopback
+
+Formerly published as `loopback` (perkd fork of LoopBack 3).
+
+Published to GitHub Packages. Consumers typically alias:
+
+```bash
+yarn add loopback@npm:@perkd/loopback@^4.0.0
+```
+
 # LoopBack
 
 [![Gitter](https://badges.gitter.im/Join%20Chat.svg)](https://gitter.im/strongloop/loopback?utm_source=badge&utm_medium=badge&utm_campaign=pr-badge&utm_content=badge)
