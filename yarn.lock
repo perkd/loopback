@@ -247,9 +247,9 @@ __metadata:
     is-docker: "npm:2.2.1"
     isemail: "npm:^3.2.0"
     loopback-boot: "npm:^3.3.1"
-    loopback-connector-remote: "npm:@perkd/loopback-connector-remote@^4.0.0"
+    loopback-connector-remote: "npm:@perkd/loopback-connector-remote@^3.6.0"
     loopback-context: "npm:3.5.2"
-    loopback-datasource-juggler: "npm:@perkd/loopback-datasource-juggler@^7.0.0"
+    loopback-datasource-juggler: "npm:@perkd/loopback-datasource-juggler@^6.1.0"
     loopback-filters: "npm:^1.1.1"
     loopback-phase: "npm:3.4.0"
     mocha: "npm:^11.7.6"
@@ -262,7 +262,7 @@ __metadata:
     stable: "npm:^0.1.8"
     strong-error-handler: "npm:^5.0.31"
     strong-globalize: "npm:^6.0.6"
-    strong-remoting: "npm:@perkd/strong-remoting@^4.0.0"
+    strong-remoting: "npm:@perkd/strong-remoting@^3.22.0"
     strong-task-emitter: "npm:^0.0.8"
     supertest: "npm:^7.2.2"
     uid2: "npm:1.0.0"
@@ -4145,13 +4145,13 @@ __metadata:
   languageName: node
   linkType: hard
 
-"loopback-connector-remote@npm:@perkd/loopback-connector-remote@^4.0.0":
-  version: 4.0.0
-  resolution: "@perkd/loopback-connector-remote@npm:4.0.0::__archiveUrl=https%3A%2F%2Fnpm.pkg.github.com%2Fdownload%2F%40perkd%2Floopback-connector-remote%2F4.0.0%2F6c52ac4195593471988c71c4e9ef23359ea41236"
+"loopback-connector-remote@npm:@perkd/loopback-connector-remote@^3.6.0":
+  version: 3.6.0
+  resolution: "@perkd/loopback-connector-remote@npm:3.6.0::__archiveUrl=https%3A%2F%2Fnpm.pkg.github.com%2Fdownload%2F%40perkd%2Floopback-connector-remote%2F3.6.0%2F8b85eb02194e7571d7853e96b2393a90cc64aa9c"
   dependencies:
-    loopback-datasource-juggler: "npm:@perkd/loopback-datasource-juggler@^7.0.0"
-    strong-remoting: "npm:@perkd/strong-remoting@^4.0.0"
-  checksum: 10c0/9897a8a94c3a2973c2cec0e7a28e0f17498370a3be362e53dda2f73041f624fece3747d7296c79bb407aa92b19752f757ae3c09e11b436f665bb09772e986f8d
+    loopback-datasource-juggler: "npm:@perkd/loopback-datasource-juggler@^6.1.0"
+    strong-remoting: "npm:@perkd/strong-remoting@^3.22.0"
+  checksum: 10c0/bd660ef9306213275804d73d19e92886b90c0f901c69f59f9c6a7e20bce3230666fc23d34d2b08ca7bcf6ffad78849847d535d1c9f860fdeaca67eb5e5787266
   languageName: node
   linkType: hard
 
@@ -4178,9 +4178,9 @@ __metadata:
   languageName: node
   linkType: hard
 
-"loopback-datasource-juggler@npm:@perkd/loopback-datasource-juggler@^7.0.0":
-  version: 7.0.0
-  resolution: "@perkd/loopback-datasource-juggler@npm:7.0.0::__archiveUrl=https%3A%2F%2Fnpm.pkg.github.com%2Fdownload%2F%40perkd%2Floopback-datasource-juggler%2F7.0.0%2Fc15e4bda3ab54a06f9f279d358bdcb510d705912"
+"loopback-datasource-juggler@npm:@perkd/loopback-datasource-juggler@^6.1.0":
+  version: 6.1.0
+  resolution: "@perkd/loopback-datasource-juggler@npm:6.1.0::__archiveUrl=https%3A%2F%2Fnpm.pkg.github.com%2Fdownload%2F%40perkd%2Floopback-datasource-juggler%2F6.1.0%2Fd3b5a2bf0b752f30a2452fdc638793dfb8f139e7"
   dependencies:
     async: "npm:^3.2.6"
     change-case: "npm:5.4.4"
@@ -4194,7 +4194,7 @@ __metadata:
     qs: "npm:^6.15.3"
     strong-globalize: "npm:^6.0.6"
     uuid: "npm:11.1.0"
-  checksum: 10c0/3b1f4d5b988897ba36be2bf62fc360e88100b46903e06d07c8e28b3493066e7a70792bcc810f1ad4a6ff7e304c9d6ffca6d330546296ce6205c33acd5442944e
+  checksum: 10c0/28390885041e585a347fd1c6b12d62afbb7bd17cbd9be9e76875362b54f3d4b7f21c9169e2419df3fd5592946cf669553e340f8700bb035cbc39a97ebc0bdb0a
   languageName: node
   linkType: hard
 
@@ -6120,9 +6120,9 @@ __metadata:
   languageName: node
   linkType: hard
 
-"strong-remoting@npm:@perkd/strong-remoting@^4.0.0":
-  version: 4.0.0
-  resolution: "@perkd/strong-remoting@npm:4.0.0::__archiveUrl=https%3A%2F%2Fnpm.pkg.github.com%2Fdownload%2F%40perkd%2Fstrong-remoting%2F4.0.0%2F182a0769489a23483caf29bc14bd023c45dae79a"
+"strong-remoting@npm:@perkd/strong-remoting@^3.22.0":
+  version: 3.22.0
+  resolution: "@perkd/strong-remoting@npm:3.22.0::__archiveUrl=https%3A%2F%2Fnpm.pkg.github.com%2Fdownload%2F%40perkd%2Fstrong-remoting%2F3.22.0%2F09734d5c6cfc739b3ca0971ce407160047dccd35"
   dependencies:
     axios: "npm:^1.16.1"
     better-sse: "npm:^0.16.1"
@@ -6141,7 +6141,7 @@ __metadata:
     strong-error-handler: "npm:3.5.0"
     strong-globalize: "npm:6.0.6"
     traverse: "npm:^0.6.11"
-  checksum: 10c0/aa8c397904d7125a9432d3b62472c0636564c4db2ff977d47f0d472a4231af24e230322bf9c89d13cc861505811d1128349c688764c6a1b7387337782ea2c927
+  checksum: 10c0/e619ca6d1d33d271469e614127d09821c7789c662d6f22a1ad3f7babf51e37716a6838b7621d036c3ce638268441ca517384489208fdd6d7dec2a428a8355e53
   languageName: node
   linkType: hard
 
