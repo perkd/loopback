@@ -1,6 +1,6 @@
 {
   "name": "@perkd/loopback",
-  "version": "3.38.0",
+  "version": "3.38.1",
   "description": "LoopBack: Open Source Framework for Node.js",
   "copyright.owner": "IBM Corp.",
   "license": "MIT",
@@ -138,6 +138,7 @@
     "client",
     "intl",
     "README.md",
-    "CHANGES.md"
+    "CHANGES.md",
+    "favicon.ico"
   ]
 }
