@@ -5,7 +5,7 @@
     "lib/**/*.js"
   ],
   "exclude": [
-    "test/**",
+    "tests/**",
     "coverage/**",
     "node_modules/**"
   ],
